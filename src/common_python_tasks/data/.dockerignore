@@ -1,0 +1,10 @@
+*
+!dist/*.whl
+!pyproject.toml
+!poetry.lock
+!README.md
+!LICENSE
+
+!src
+
+!.git

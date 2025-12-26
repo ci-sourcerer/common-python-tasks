@@ -1,0 +1,61 @@
+[project]
+name = "common-python-tasks"
+description = "Opinionated Poe the Poet tasks for Python package development."
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Joseph Asbury", email = "ci_sourcerer@yahoo.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Build Tools",
+]
+dependencies = [
+    "autoflake (>=2.3.1,<3.0.0)",
+    "black (>=25.11.0,<26.0.0)",
+    "dunamai (>=1.25.0,<2.0.0)",
+    "flake8 (>=7.3.0,<8.0.0)",
+    "isort (>=7.0.0,<8.0.0)",
+    "poethepoet-tasks (>=0.3.0,<0.4.0)",
+    "pytest-cov (>=7.0.0,<8.0.0)",
+    "pytest (>=9.0.1,<10.0.0)",
+    "tomlkit (>=0.13.3,<0.14.0)",
+]
+dynamic = ["version"]
+
+[project.urls]
+homepage = "http://github.com/ci-sourcerer/common-python-tasks"
+issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
+source = "http://github.com/ci-sourcerer/common-python-tasks"
+
+[tool.poe]
+include_script = "common_python_tasks:tasks(exclude_tags=[])"
+
+[tool.poetry.requires-plugins]
+poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
+poetry-plugin-export = { version = ">=1.9.0,<2.0.0" }
+
+[tool.poetry]
+packages = [{ include = "common_python_tasks", from = "src" }]
+include = ["src/common_python_tasks/data/*"]
+# This is set by poetry-dynamic-versioning
+version = "0.0.0"
+
+[dependency-groups]
+debug = ["debugpy (>=1.8.16,<2.0.0)"]
+
+[build-system]
+requires = ["poetry-core>=2.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+style = "pep440"
+dirty = true

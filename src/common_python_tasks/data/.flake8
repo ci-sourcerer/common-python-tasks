@@ -1,0 +1,9 @@
+[flake8]
+extend-ignore = E501,E203,W503
+max-line-length = 88
+select = B,C,E,F,W,T4,B9
+exclude =
+    .poetry
+    .venv
+    .dist
+    build

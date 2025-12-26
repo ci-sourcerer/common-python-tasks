@@ -1,0 +1,8 @@
+[run]
+omit =
+    tests/*
+    */vendor/*
+    */__main__.py
+[paths]
+source =
+    src/*

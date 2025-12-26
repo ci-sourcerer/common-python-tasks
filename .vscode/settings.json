@@ -1,0 +1,31 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:poetry",
+    "python-envs.defaultPackageManager": "ms-python.python:poetry",
+    "python-envs.pythonProjects": [
+        {
+            "path": ".",
+            "packageManager": "ms-python.python:pip",
+            "envManager": "ms-python.python:venv"
+        }
+    ],
+    "files.exclude": {
+        "**/.venv": true,
+        "**/__pycache__": true,
+        "**/.poetry": true,
+        "**/.pytest_cache": true,
+        "**/.git": true,
+        "**/.gitconfig.global": true,
+        "**/.gitconfig.local": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true
+    },
+    "search.exclude": {
+        "**/dist/*": true,
+        "**/build/*": true,
+        "**/out": true,
+        "**/*.log": true,
+    }
+}

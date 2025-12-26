@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1
+
+ARG PYTHON_VERSION=3
+
+FROM python:${PYTHON_VERSION} AS builder
+
+ENV PYTHON_VERSION=${PYTHON_VERSION}
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+ARG POETRY_VERSION
+
+# Install Poetry and required Poetry plugins
+RUN --mount=type=cache,target=/root/.cache/pip pip install "poetry==$POETRY_VERSION" "poetry-dynamic-versioning[plugin]" poetry-plugin-export tomlkit
+
+# Build package
+WORKDIR /tmp/build
+COPY . /tmp/build/
+
+# Try to export debug requirements but don't fail the build if the group doesn't exist
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if python -c "import tomlkit; t = tomlkit.load(open('pyproject.toml')); exit(0 if ('dependency-groups' in t and 'debug' in t['dependency-groups'] and t['dependency-groups']['debug']) else 1)"; then \
+        poetry export --only debug --without-hashes -f requirements.txt --output requirements-debug.txt; \
+    fi
+
+RUN --mount=type=cache,target=/root/.cache/pypoetry poetry build --format=wheel
+
+FROM python:${PYTHON_VERSION}-slim AS runtime
+
+WORKDIR /
+
+# Grab package from builder image
+COPY --from=builder /tmp/build/dist/*.whl /tmp/
+
+# Install package
+RUN --mount=type=cache,target=/root/.cache/pip pip install /tmp/*.whl
+RUN rm -rf /tmp/*.whl \
+    && rm -rf /root/.cache/pip
+# Create symlinks for the package
+ARG PACKAGE_NAME
+ENV PACKAGE_NAME=${PACKAGE_NAME}
+RUN ln -s "$(python -c "import os; from importlib import resources; print(resources.files(os.environ['PACKAGE_NAME']))")" "/_$PACKAGE_NAME" \
+    && ln -s "/_$PACKAGE_NAME" "/pkg" \
+    && rm -rf "/_$PACKAGE_NAME/__pycache__"
+
+ENTRYPOINT ["/pkg/entrypoint.sh"]
+
+ARG AUTHORS
+ARG GIT_COMMIT
+LABEL org.opencontainers.image.authors=${AUTHORS}
+LABEL git.commit=${GIT_COMMIT}
+
+# Set custom entrypoint if provided
+# This entrypoint is deliberately not configurable via environment variables in order to
+# ensure that the container always uses the entrypoint selected at build time. If the
+# current package does not provide a console script, the entrypoint will default to python
+ARG CUSTOM_ENTRYPOINT
+RUN if [ -z "${CUSTOM_ENTRYPOINT}" ]; then cliScriptName=$(python -c "import os; from importlib import metadata as m; print(next((e.name for e in m.entry_points().select(group='console_scripts') if e.name==os.environ['PACKAGE_NAME'].replace('-','_')), ''))"); else cliScriptName=$CUSTOM_ENTRYPOINT; fi \
+    && echo "#!/bin/sh\n\n${cliScriptName:-python \"\$@\"" >/pkg/entrypoint.sh \
+    && chmod +x /pkg/entrypoint.sh
+
+# Optional debug stage: only installs debug deps if they were exported. This stage will not
+# be built by default (the final stage below is the runtime image), and it will safely do
+# nothing if there are no debug requirements
+FROM runtime AS debug
+
+COPY --from=builder /tmp/build /tmp/build
+
+RUN --mount=type=cache,target=/root/.cache/pip if [ -f /tmp/build/requirements-debug.txt ] && [ -s /tmp/build/requirements-debug.txt ]; then pip install -r /tmp/build/requirements-debug.txt; fi
+RUN rm -rf /tmp/build /root/.cache/pip
+
+# Final (default) image: explicitly use runtime as the final target so debug is not used unless requested
+FROM runtime AS final
+
+RUN rm -rf /tmp/build /root/.cache/pip
