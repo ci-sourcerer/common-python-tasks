@@ -57,7 +57,7 @@ LABEL git.commit=${GIT_COMMIT}
 # current package does not provide a console script, the entrypoint will default to python
 ARG CUSTOM_ENTRYPOINT
 RUN if [ -z "${CUSTOM_ENTRYPOINT}" ]; then cliScriptName=$(python -c "import os; from importlib import metadata as m; print(next((e.name for e in m.entry_points().select(group='console_scripts') if e.name==os.environ['PACKAGE_NAME'].replace('-','_')), ''))"); else cliScriptName=$CUSTOM_ENTRYPOINT; fi \
-    && echo "#!/bin/sh\n\n${cliScriptName:-python \"\$@\"" >/pkg/entrypoint.sh \
+    && echo "#!/bin/sh\n\n${cliScriptName:-python} \"\$@\"" >/pkg/entrypoint.sh \
     && chmod +x /pkg/entrypoint.sh
 
 # Optional debug stage: only installs debug deps if they were exported. This stage will not
