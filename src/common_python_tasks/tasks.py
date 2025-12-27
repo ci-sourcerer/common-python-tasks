@@ -44,6 +44,18 @@ LOGGER.setLevel(
 )
 
 
+def _env_truthy(env_var: str) -> bool:
+    return os.getenv(env_var, "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+        "enabled",
+        "y",
+        "t",
+    }
+
+
 def _get_authors() -> List[Tuple[str, str]]:
     import tomllib
 
@@ -106,7 +118,7 @@ def _load_data_file(file_name: str) -> Tuple[str, str]:
         data_files = files("common_python_tasks") / "data"
         data_file = data_files / file_name
         return (str(data_file), data_file.read_text())
-    except (FileNotFoundError, TypeError) as e:
+    except FileNotFoundError as e:
         LOGGER.error("Data file not found: %s (%s)", file_name, e)
         sys.exit(1)
 
@@ -202,11 +214,6 @@ def _get_package_name(use_underscores: bool = False) -> str:
 
 @lru_cache()
 def _read_pyproject_toml() -> dict:
-    """Read and cache the pyproject.toml file.
-
-    Returns:
-        Parsed pyproject.toml as a dictionary.
-    """
     import tomllib
 
     return tomllib.loads(Path("pyproject.toml").read_text())
@@ -272,17 +279,11 @@ tasks = TaskCollection(
     ]
 )
 
-tasks.add(
-    "_black",
-    task_config={
-        "cmd": "black --quiet .",
-    },
-    tags=[
-        "common",
-        "format",
-        "internal",
-    ],
-)
+
+@tasks.script(task_name="_black", tags=["common", "format", "internal"])
+def black() -> None:
+    """Run black formatting."""
+    _run_command(["black", "--quiet", "."])
 
 
 @tasks.script(task_name="_isort", tags=["format", "internal"])
@@ -306,25 +307,25 @@ def isort() -> None:
     )
 
 
-tasks.add(
-    "_autoflake",
-    task_config={
-        "cmd": "autoflake --quiet --remove-all-unused-imports --recursive -i .",
-    },
-    tags=[
-        "format",
-        "internal",
-    ],
-)
+@tasks.script(task_name="_autoflake", tags=["format", "internal"])
+def autoflake() -> None:
+    """Run autoflake to remove unused imports."""
+    _run_command(
+        [
+            "autoflake",
+            "--quiet",
+            "--remove-all-unused-imports",
+            "--recursive",
+            "-i",
+            ".",
+        ]
+    )
 
-tasks.add(
-    "_black_check",
-    task_config={"cmd": "black --quiet --diff . --check"},
-    tags=[
-        "lint",
-        "internal",
-    ],
-)
+
+@tasks.script(task_name="_black_check", tags=["lint", "internal"])
+def black_check() -> None:
+    """Run black in check mode."""
+    _run_command(["black", "--quiet", "--diff", ".", "--check"])
 
 
 @tasks.script(task_name="_isort_check", tags=["lint"])
@@ -349,16 +350,19 @@ def isort_check() -> None:
     )
 
 
-tasks.add(
-    "_autoflake_check",
-    task_config={
-        "cmd": "autoflake --quiet --remove-all-unused-imports --recursive -cd ."
-    },
-    tags=[
-        "lint",
-        "internal",
-    ],
-)
+@tasks.script(task_name="_autoflake_check", tags=["lint", "internal"])
+def autoflake_check() -> None:
+    """Run autoflake in check mode."""
+    _run_command(
+        [
+            "autoflake",
+            "--quiet",
+            "--remove-all-unused-imports",
+            "--recursive",
+            "-cd",
+            ".",
+        ]
+    )
 
 
 @tasks.script(task_name="_flake8_check", tags=["lint"])
@@ -376,7 +380,9 @@ def flake8_check() -> None:
 
 @tasks.script(tags=["test"])
 def test() -> None:
-    """Run the test suite with coverage."""
+    """Run the test suite with coverage (unless DISABLE_COVERAGE is set)."""
+    disable_coverage = _env_truthy("DISABLE_COVERAGE")
+
     coverage_config_path = get_config_path(
         "COVERAGE_RCFILE",
         ".coveragerc",
@@ -390,6 +396,21 @@ def test() -> None:
         "pytest.ini",
         tool_name="pytest",
     )
+
+    if not disable_coverage:
+        coverage_args = [
+            "--cov=" + _get_package_name(use_underscores=True),
+            "--cov-report=term-missing",
+            "--cov-report=xml:coverage.xml",
+        ] + (
+            [
+                "--cov-config=" + coverage_config_path,
+            ]
+            if coverage_config_path
+            else []
+        )
+    else:
+        coverage_args = []
 
     exit_code = _run_command(
         (
@@ -405,18 +426,7 @@ def test() -> None:
                 if pytest_config_path
                 else []
             )
-            + [
-                "--cov=" + _get_package_name(use_underscores=True),
-                "--cov-report=term-missing",
-                "--cov-report=xml:coverage.xml",
-            ]
-            + (
-                [
-                    "--cov-config=" + coverage_config_path,
-                ]
-                if coverage_config_path
-                else []
-            )
+            + coverage_args
         ),
         acceptable_returncodes={0, 5},
     ).returncode
@@ -426,50 +436,67 @@ def test() -> None:
         sys.exit(5)
 
 
-tasks.add(
-    "clean",
-    task_config={
-        "shell": "rm -rf .pytest_cache dist ./**/__pycache__ ./**/*.pyc .mypy_cache .coverage coverage.xml",
-        "help": "Clean up temporary files and directories.",
-    },
-    tags=[
-        "common",
-        "clean",
-    ],
-)
+@tasks.script(task_name="clean", tags=["common", "clean"])
+def clean() -> None:
+    """Clean up temporary files and directories."""
+    import shutil
 
-tasks.add(
-    "format",
-    task_config={
-        "sequence": ["_autoflake", "_black", "_isort"],
-        "help": "Format Python code with autoflake8, black, and isort.",
-    },
-    tags=[
-        "format",
-    ],
-)
+    roots = [
+        Path(".pytest_cache"),
+        Path("dist"),
+        Path(".mypy_cache"),
+    ]
+    for p in roots:
+        try:
+            if p.exists():
+                shutil.rmtree(p)
+        except Exception:
+            pass
 
-tasks.add(
-    "lint",
-    task_config={
-        "sequence": [
-            "_autoflake_check",
-            "_black_check",
-            "_isort_check",
-            "_flake8_check",
-        ],
-        "help": "Lint Python code with autoflake8, black, isort, and flake8.",
-    },
-    tags=[
-        "lint",
-    ],
-)
+    # Remove __pycache__ dirs
+    for d in Path(".").rglob("__pycache__"):
+        try:
+            shutil.rmtree(d)
+        except Exception:
+            pass
+
+    # Remove *.pyc files
+    for f in Path(".").rglob("*.pyc"):
+        try:
+            f.unlink()
+        except Exception:
+            pass
+
+    # Remove coverage files
+    for f in [Path(".coverage"), Path("coverage.xml")]:
+        try:
+            if f.exists():
+                f.unlink()
+        except Exception:
+            pass
+
+
+@tasks.script(task_name="format", tags=["format"])
+def format_all() -> None:
+    """Format Python code with autoflake, black, and isort."""
+    autoflake()
+    black()
+    isort()
+
+
+@tasks.script(task_name="lint", tags=["lint"])
+def lint_all() -> None:
+    """Lint Python code with autoflake, black, isort, and flake8."""
+    autoflake_check()
+    black_check()
+    isort_check()
+    flake8_check()
 
 
 def _build_image(
-    containerfile_path: Path | None,
-    containerfile_text: str | None,
-    context_path: Path,
+    containerfile_path: Path | None = None,
+    containerfile_text: str | None = None,
+    context_path: Path | None = None,
     debug: bool = False,
     python_version: str | None = None,
     no_cache: bool = False,
@@ -477,6 +504,9 @@ def _build_image(
     all_archs: bool = False,
 ) -> None:
     import platform
+
+    if context_path is None:
+        context_path = Path(".")
 
     temp_file_path: str | None = None
     if containerfile_path is None:
@@ -659,17 +689,56 @@ def push_image(debug: bool = False) -> None:
         _run_command(["docker", "push", full_tag])
 
 
-tasks.add(
-    "publish-package",
-    task_config={
-        "cmd": "poetry publish",
-        "help": "Publish the package to the PyPI server.",
-    },
-    tags=[
-        "common",
-        "packaging",
-    ],
-)
+@tasks.script(task_name="publish-package", tags=["common", "packaging"])
+def publish_package() -> None:
+    """Publish the package to the PyPI server."""
+    _run_command(["poetry", "publish"])
+
+
+@tasks.script(task_name="build-package", tags=["common", "packaging", "build"])
+def build_package() -> None:
+    """Build the package (wheel and sdist)."""
+    _run_command(["poetry", "build"])
+
+
+@tasks.script(tags=["packaging", "release"])
+def release(
+    component: str = "patch",
+    *,
+    stage: str | None = None,
+    skip_publish: bool = False,
+    skip_image: bool = False,
+) -> None:
+    """Perform a full release: bump version, build, publish package, and push image.
+
+    Args:
+        component: The version component to bump: "major", "minor", or "patch". Defaults to "patch".
+        stage: Optional pre-release stage to apply: "alpha", "beta", or "rc". Defaults to None.
+        skip_publish: Skip publishing the package. Defaults to False.
+        skip_image: Skip building and pushing the container image. Defaults to False.
+    """
+    # Step 1: Bump version
+    LOGGER.info("Step 1/4: Bumping version...")
+    bump_version(component, stage=stage)
+
+    # Step 2: Build package
+    LOGGER.info("Step 2/4: Building package...")
+    _run_command(["poetry", "build"])
+
+    # Step 3: Publish package
+    if skip_publish:
+        LOGGER.info("Step 3/4: Skipping package publish (--skip-publish)")
+    else:
+        LOGGER.info("Step 3/4: Publishing package...")
+        _run_command(["poetry", "publish"])
+
+    # Step 4: Build and push image
+    if skip_image:
+        LOGGER.info("Step 4/4: Skipping image build/push (--skip-image)")
+    else:
+        LOGGER.info("Step 4/4: Building and pushing container image...")
+        build_image()
+        push_image()
 
 
 @tasks.script(tags=["common", "packaging"])
