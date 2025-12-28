@@ -1,12 +1,13 @@
 import logging
 import os
+from collections.abc import Callable, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import subprocess
-    from typing_extensions import Literal
+    from typing import Literal
 
 from poethepoet_tasks import TaskCollection
 
@@ -54,7 +55,7 @@ def _env_truthy(env_var: str) -> bool:
     }
 
 
-@lru_cache()
+@lru_cache
 def _is_package_installed(package_name: str) -> bool:
     """Check if a Python package is installed in the current environment."""
     from importlib.util import find_spec
@@ -80,7 +81,7 @@ def _require_package(package_name: str) -> None:
 
 
 def _run_available_tools(
-    tools: List[Tuple[Callable, str]], none_available_message: str
+    tools: list[tuple[Callable, str]], none_available_message: str
 ) -> None:
     ran_any = False
     for fn, package in tools:
@@ -91,12 +92,12 @@ def _run_available_tools(
         _fatal(none_available_message)
 
 
-def _get_authors() -> List[Tuple[str, str]]:
+def _get_authors() -> list[tuple[str, str]]:
     import tomllib
 
     pyproject_data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 
-    def _parse_author(author: Dict[str, str]) -> Tuple[str, str]:
+    def _parse_author(author: dict[str, str]) -> tuple[str, str]:
         return (author.get("name") or "").strip(), (
             author.get("email") or ""
         ).strip().strip("<>")
@@ -150,7 +151,7 @@ def _run_command(
     return out
 
 
-def _load_data_file(file_name: str) -> Tuple[str, str]:
+def _load_data_file(file_name: str) -> tuple[str, str]:
     from importlib.resources import files
 
     try:
@@ -161,7 +162,7 @@ def _load_data_file(file_name: str) -> Tuple[str, str]:
         _fatal(f"Data file not found: {file_name} ({e})")
 
 
-def _get_dirty_files(ignore: List[str] = None) -> List[str]:
+def _get_dirty_files(ignore: list[str] | None = None) -> list[str]:
     if ignore is None:
         ignore = []
 
@@ -178,7 +179,8 @@ def _get_dirty_files(ignore: List[str] = None) -> List[str]:
     ]
 
 
-def _get_version(files_to_ignore_as_dirty: List[str] = None) -> str:
+
+def _get_version(files_to_ignore_as_dirty: list[str] | None = None) -> str:
     from dunamai import Style, Version
 
     if files_to_ignore_as_dirty is None:
@@ -193,7 +195,7 @@ def _get_version(files_to_ignore_as_dirty: List[str] = None) -> str:
     )
 
 
-def _get_image_tag(files_to_ignore_as_dirty: List[str] = None) -> str:
+def _get_image_tag(files_to_ignore_as_dirty: list[str] | None = None) -> str:
     if files_to_ignore_as_dirty is None:
         files_to_ignore_as_dirty = []
 
@@ -250,8 +252,8 @@ def _get_package_name(use_underscores: bool = False) -> str:
     return name
 
 
-@lru_cache()
-def _read_pyproject_toml() -> Dict[str, Any]:
+@lru_cache
+def _read_pyproject_toml() -> dict[str, Any]:
     import tomllib
 
     return tomllib.loads(Path("pyproject.toml").read_text())
