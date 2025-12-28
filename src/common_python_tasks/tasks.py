@@ -1,13 +1,11 @@
 import logging
 import os
-import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
 
 if TYPE_CHECKING:
     import subprocess
-    from typing import Sequence, List, Tuple
     from typing_extensions import Literal
 
 from poethepoet_tasks import TaskCollection
@@ -56,12 +54,49 @@ def _env_truthy(env_var: str) -> bool:
     }
 
 
+@lru_cache()
+def _is_package_installed(package_name: str) -> bool:
+    """Check if a Python package is installed in the current environment."""
+    from importlib.util import find_spec
+
+    # Handle packages where import name differs from package name
+    import_name = package_name.replace("-", "_")
+    is_installed = find_spec(import_name) is not None
+    if not is_installed:
+        LOGGER.debug("%s is not installed, skipping", package_name)
+    return is_installed
+
+
+def _fatal(message: str, exit_code: int = 1) -> None:
+    import sys
+
+    LOGGER.error(message)
+    sys.exit(exit_code)
+
+
+def _require_package(package_name: str) -> None:
+    if not _is_package_installed(package_name):
+        _fatal(f"{package_name} is not installed")
+
+
+def _run_available_tools(
+    tools: List[Tuple[Callable, str]], none_available_message: str
+) -> None:
+    ran_any = False
+    for fn, package in tools:
+        if _is_package_installed(package):
+            fn()
+            ran_any = True
+    if not ran_any:
+        _fatal(none_available_message)
+
+
 def _get_authors() -> List[Tuple[str, str]]:
     import tomllib
 
     pyproject_data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 
-    def _parse_author(author: dict[str, str]) -> tuple[str, str]:
+    def _parse_author(author: Dict[str, str]) -> tuple[str, str]:
         return (author.get("name") or "").strip(), (
             author.get("email") or ""
         ).strip().strip("<>")
@@ -79,11 +114,12 @@ def _run_command(
     acceptable_returncodes: Sequence[int] | None = None,
 ) -> "subprocess.CompletedProcess":
     import subprocess
+    from shlex import quote
 
     if acceptable_returncodes is None:
         acceptable_returncodes = {0}
 
-    command_display = " ".join(command)
+    command_display = " ".join([quote(arg) for arg in command])
     LOGGER.debug("Running command: %s", command_display)
     out = subprocess.run(
         command,
@@ -107,6 +143,9 @@ def _run_command(
             command_display,
             details,
         )
+
+        import sys
+
         sys.exit(out.returncode)
     return out
 
@@ -119,11 +158,10 @@ def _load_data_file(file_name: str) -> Tuple[str, str]:
         data_file = data_files / file_name
         return (str(data_file), data_file.read_text())
     except FileNotFoundError as e:
-        LOGGER.error("Data file not found: %s (%s)", file_name, e)
-        sys.exit(1)
+        _fatal(f"Data file not found: {file_name} ({e})")
 
 
-def _get_dirty_files(ignore: list[str] = None) -> list[str]:
+def _get_dirty_files(ignore: List[str] = None) -> List[str]:
     if ignore is None:
         ignore = []
 
@@ -140,7 +178,7 @@ def _get_dirty_files(ignore: list[str] = None) -> list[str]:
     ]
 
 
-def _get_version(files_to_ignore_as_dirty: list[str] = None) -> str:
+def _get_version(files_to_ignore_as_dirty: List[str] = None) -> str:
     from dunamai import Style, Version
 
     if files_to_ignore_as_dirty is None:
@@ -155,7 +193,7 @@ def _get_version(files_to_ignore_as_dirty: list[str] = None) -> str:
     )
 
 
-def _get_image_tag(files_to_ignore_as_dirty: list[str] = None) -> str:
+def _get_image_tag(files_to_ignore_as_dirty: List[str] = None) -> str:
     if files_to_ignore_as_dirty is None:
         files_to_ignore_as_dirty = []
 
@@ -213,7 +251,7 @@ def _get_package_name(use_underscores: bool = False) -> str:
 
 
 @lru_cache()
-def _read_pyproject_toml() -> dict:
+def _read_pyproject_toml() -> Dict[str, Any]:
     import tomllib
 
     return tomllib.loads(Path("pyproject.toml").read_text())
@@ -225,7 +263,7 @@ def get_config_path(
     data_config_filename: str,
     *,
     tool_name: str | None = None,
-) -> str | None:
+) -> Path | None:
     """Get the path to a configuration file.
 
     Checks for configuration in the following order:
@@ -253,17 +291,18 @@ def get_config_path(
 
     # Check environment variable
     if os.getenv(env_var_name):
-        config_path = os.getenv(env_var_name)
+        config_path = Path(os.getenv(env_var_name))
         LOGGER.debug("Using config from %s: %s", env_var_name, config_path)
         return config_path
 
     # Check for local config file
-    if Path(local_config_filename).exists():
-        LOGGER.debug("Using local config file: %s", local_config_filename)
-        return local_config_filename
+    local_config_path = Path(local_config_filename)
+    if local_config_path.exists():
+        LOGGER.debug("Using local config file: %s", local_config_path)
+        return local_config_path
 
     # Fall back to bundled data file
-    config_path = _load_data_file(data_config_filename)[0]
+    config_path = Path(_load_data_file(data_config_filename)[0])
     LOGGER.debug("Using bundled config file: %s", config_path)
     return config_path
 
@@ -280,15 +319,17 @@ tasks = TaskCollection(
 )
 
 
-@tasks.script(task_name="_black", tags=["common", "format", "internal"])
+@tasks.script(task_name="_black", tags=["format", "internal"])
 def black() -> None:
     """Run black formatting."""
+    _require_package("black")
     _run_command(["black", "--quiet", "."])
 
 
 @tasks.script(task_name="_isort", tags=["format", "internal"])
 def isort() -> None:
     """Run isort formatting."""
+    _require_package("isort")
     isort_config_path = get_config_path(
         "ISORT_CONFIG",
         ".isort.cfg",
@@ -303,13 +344,14 @@ def isort() -> None:
             ".",
             "--settings-path",
         ]
-        + ([isort_config_path] if isort_config_path else [])
+        + ([str(isort_config_path)] if isort_config_path else [])
     )
 
 
 @tasks.script(task_name="_autoflake", tags=["format", "internal"])
 def autoflake() -> None:
     """Run autoflake to remove unused imports."""
+    _require_package("autoflake")
     _run_command(
         [
             "autoflake",
@@ -325,12 +367,14 @@ def autoflake() -> None:
 @tasks.script(task_name="_black_check", tags=["lint", "internal"])
 def black_check() -> None:
     """Run black in check mode."""
+    _require_package("black")
     _run_command(["black", "--quiet", "--diff", ".", "--check"])
 
 
 @tasks.script(task_name="_isort_check", tags=["lint"])
 def isort_check() -> None:
     """Run isort linting."""
+    _require_package("isort")
     isort_config_path = get_config_path(
         "ISORT_CONFIG",
         ".isort.cfg",
@@ -346,13 +390,14 @@ def isort_check() -> None:
             "--check-only",
             "--settings-path",
         ]
-        + ([isort_config_path] if isort_config_path else [])
+        + ([str(isort_config_path)] if isort_config_path else [])
     )
 
 
 @tasks.script(task_name="_autoflake_check", tags=["lint", "internal"])
 def autoflake_check() -> None:
     """Run autoflake in check mode."""
+    _require_package("autoflake")
     _run_command(
         [
             "autoflake",
@@ -368,6 +413,7 @@ def autoflake_check() -> None:
 @tasks.script(task_name="_flake8_check", tags=["lint"])
 def flake8_check() -> None:
     """Run flake8 linting."""
+    _require_package("flake8")
 
     flake8_config_path = get_config_path(
         "FLAKE8_CONFIG",
@@ -375,14 +421,12 @@ def flake8_check() -> None:
         ".flake8",
     )
 
-    _run_command(["flake8", ".", "--config", flake8_config_path])
+    _run_command(["flake8", ".", "--config", str(flake8_config_path)])
 
 
 @tasks.script(tags=["test"])
 def test() -> None:
-    """Run the test suite with coverage (unless DISABLE_COVERAGE is set)."""
-    disable_coverage = _env_truthy("DISABLE_COVERAGE")
-
+    """Run the test suite with coverage (if pytest-cov is installed)."""
     coverage_config_path = get_config_path(
         "COVERAGE_RCFILE",
         ".coveragerc",
@@ -397,14 +441,14 @@ def test() -> None:
         tool_name="pytest",
     )
 
-    if not disable_coverage:
+    if _is_package_installed("pytest_cov"):
         coverage_args = [
             "--cov=" + _get_package_name(use_underscores=True),
             "--cov-report=term-missing",
             "--cov-report=xml:coverage.xml",
         ] + (
             [
-                "--cov-config=" + coverage_config_path,
+                "--cov-config=" + str(coverage_config_path),
             ]
             if coverage_config_path
             else []
@@ -421,7 +465,7 @@ def test() -> None:
             + (
                 [
                     "-c",
-                    pytest_config_path,
+                    str(pytest_config_path),
                 ]
                 if pytest_config_path
                 else []
@@ -433,64 +477,55 @@ def test() -> None:
 
     if exit_code == 5:
         LOGGER.warning("No tests were collected.")
+
+        import sys
+
         sys.exit(5)
 
 
-@tasks.script(task_name="clean", tags=["common", "clean"])
+@tasks.script(task_name="clean", tags=["clean"])
 def clean() -> None:
     """Clean up temporary files and directories."""
     import shutil
 
-    roots = [
-        Path(".pytest_cache"),
-        Path("dist"),
-        Path(".mypy_cache"),
-    ]
-    for p in roots:
-        try:
-            if p.exists():
-                shutil.rmtree(p)
-        except Exception:
-            pass
-
-    # Remove __pycache__ dirs
-    for d in Path(".").rglob("__pycache__"):
-        try:
-            shutil.rmtree(d)
-        except Exception:
-            pass
-
-    # Remove *.pyc files
-    for f in Path(".").rglob("*.pyc"):
-        try:
-            f.unlink()
-        except Exception:
-            pass
-
-    # Remove coverage files
-    for f in [Path(".coverage"), Path("coverage.xml")]:
-        try:
-            if f.exists():
-                f.unlink()
-        except Exception:
-            pass
+    for item in [
+        *[Path(p) for p in [".pytest_cache", "dist", ".mypy_cache"]],
+        *Path(".").rglob("__pycache__"),
+        *Path(".").rglob("*.pyc"),
+        Path(".coverage"),
+        Path("coverage.xml"),
+    ]:
+        if item.is_dir():
+            shutil.rmtree(item, ignore_errors=True)
+        else:
+            item.unlink(missing_ok=True)
 
 
 @tasks.script(task_name="format", tags=["format"])
 def format_all() -> None:
     """Format Python code with autoflake, black, and isort."""
-    autoflake()
-    black()
-    isort()
+    _run_available_tools(
+        [
+            (autoflake, "autoflake"),
+            (black, "black"),
+            (isort, "isort"),
+        ],
+        "No formatting tools are installed. Install one or more of: autoflake, black, isort",
+    )
 
 
 @tasks.script(task_name="lint", tags=["lint"])
 def lint_all() -> None:
     """Lint Python code with autoflake, black, isort, and flake8."""
-    autoflake_check()
-    black_check()
-    isort_check()
-    flake8_check()
+    _run_available_tools(
+        [
+            (autoflake_check, "autoflake"),
+            (black_check, "black"),
+            (isort_check, "isort"),
+            (flake8_check, "flake8"),
+        ],
+        "No linting tools are installed. Install one or more of: autoflake, black, isort, flake8",
+    )
 
 
 def _build_image(
@@ -498,10 +533,9 @@ def _build_image(
     containerfile_text: str | None = None,
     context_path: Path | None = None,
     debug: bool = False,
-    python_version: str | None = None,
     no_cache: bool = False,
     plain: bool = False,
-    all_archs: bool = False,
+    single_arch: bool = False,
 ) -> None:
     import platform
 
@@ -511,10 +545,7 @@ def _build_image(
     temp_file_path: str | None = None
     if containerfile_path is None:
         if containerfile_text is None:
-            LOGGER.error(
-                "Either containerfile_path or containerfile_text must be provided."
-            )
-            sys.exit(1)
+            _fatal("Either containerfile_path or containerfile_text must be provided.")
         import tempfile
 
         tf = tempfile.NamedTemporaryFile(
@@ -540,7 +571,7 @@ def _build_image(
 
     delete_temp_file = False
     try:
-        archs = ["linux/amd64", "linux/arm64"] if all_archs else None
+        archs = ["linux/amd64", "linux/arm64"] if not single_arch else None
         files_to_ignore = [".dockerignore"] if temp_dockerignore_created else []
         version_string = _get_image_tag(files_to_ignore_as_dirty=files_to_ignore)
 
@@ -556,16 +587,12 @@ def _build_image(
 
         version_tag = f"{version_string}{suffix}"
         commit_tag = f"{_run_command(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True).stdout.strip()}{'-dirty' if _get_dirty_files(ignore=files_to_ignore) else ''}{suffix}"
-        if python_version is None:
-            python_version = platform.python_version()
-
-        poetry_version = os.getenv("POETRY_VERSION")
-        if poetry_version is None:
-            poetry_version = (
-                _run_command(["poetry", "--version"], capture_output=True)
-                .stdout.strip()
-                .split()[-1]
-            )[0:-1]
+        python_version = platform.python_version()
+        poetry_version = (
+            _run_command(["poetry", "--version"], capture_output=True)
+            .stdout.strip()
+            .split()[-1]
+        )[0:-1]
 
         build_args = {
             k: v
@@ -632,34 +659,40 @@ def _build_image(
                 pass
 
 
-@tasks.script(tags=["containers", "build", "cli"])
+@tasks.script(tags=["containers", "build"])
 def build_image(
     debug: bool = False,
-    python_version: str | None = None,
     no_cache: bool = False,
     plain: bool = False,
-    all_archs: bool = False,
+    single_arch: bool = False,
 ) -> None:
     """Build the container image for this project using the Containerfile template.
 
     Args:
         debug: Build the debug image.
-        python_version: Specify the Python version.
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
-        all_archs: Build images for all architectures.
+        single_arch: Build images for a single architecture.
     """
-
     _build_image(
         None,
         _load_data_file("Containerfile")[1],
         Path("."),
         debug=debug,
-        python_version=python_version,
         no_cache=no_cache,
         plain=plain,
-        all_archs=all_archs,
+        single_arch=single_arch,
     )
+
+
+@tasks.script(tags=["containers"])
+def run_container(tag: str = "latest") -> None:
+    """Run the Docker image as a container for this project.
+
+    Args:
+        tag: Image tag to run. Defaults to "latest".
+    """
+    _run_command(["docker", "run", "--rm", "-i", "-t", f"{_get_package_name()}:{tag}"])
 
 
 @tasks.script(tags=["containers", "packaging", "release"])
@@ -689,59 +722,19 @@ def push_image(debug: bool = False) -> None:
         _run_command(["docker", "push", full_tag])
 
 
-@tasks.script(task_name="publish-package", tags=["common", "packaging"])
+@tasks.script(task_name="publish-package", tags=["packaging"])
 def publish_package() -> None:
     """Publish the package to the PyPI server."""
     _run_command(["poetry", "publish"])
 
 
-@tasks.script(task_name="build-package", tags=["common", "packaging", "build"])
+@tasks.script(task_name="build-package", tags=["packaging", "build"])
 def build_package() -> None:
     """Build the package (wheel and sdist)."""
     _run_command(["poetry", "build"])
 
 
-@tasks.script(tags=["packaging", "release"])
-def release(
-    component: str = "patch",
-    *,
-    stage: str | None = None,
-    skip_publish: bool = False,
-    skip_image: bool = False,
-) -> None:
-    """Perform a full release: bump version, build, publish package, and push image.
-
-    Args:
-        component: The version component to bump: "major", "minor", or "patch". Defaults to "patch".
-        stage: Optional pre-release stage to apply: "alpha", "beta", or "rc". Defaults to None.
-        skip_publish: Skip publishing the package. Defaults to False.
-        skip_image: Skip building and pushing the container image. Defaults to False.
-    """
-    # Step 1: Bump version
-    LOGGER.info("Step 1/4: Bumping version...")
-    bump_version(component, stage=stage)
-
-    # Step 2: Build package
-    LOGGER.info("Step 2/4: Building package...")
-    _run_command(["poetry", "build"])
-
-    # Step 3: Publish package
-    if skip_publish:
-        LOGGER.info("Step 3/4: Skipping package publish (--skip-publish)")
-    else:
-        LOGGER.info("Step 3/4: Publishing package...")
-        _run_command(["poetry", "publish"])
-
-    # Step 4: Build and push image
-    if skip_image:
-        LOGGER.info("Step 4/4: Skipping image build/push (--skip-image)")
-    else:
-        LOGGER.info("Step 4/4: Building and pushing container image...")
-        build_image()
-        push_image()
-
-
-@tasks.script(tags=["common", "packaging"])
+@tasks.script(tags=["packaging"])
 def bump_version(
     component: str = "patch",
     *,
@@ -762,10 +755,9 @@ def bump_version(
     if _run_command(
         ["git", "status", "--porcelain"], capture_output=True
     ).stdout.strip():
-        LOGGER.error(
+        _fatal(
             "Repository has uncommitted changes. Please commit or stash changes before bumping version."
         )
-        sys.exit(1)
 
     # Try to get the latest tag; default to v0.0.0 if none exist
     last_tag_result = _run_command(
@@ -782,19 +774,15 @@ def bump_version(
     # Normalize last tag by stripping leading 'v' if present
     normalized_last_tag = last_tag[1:] if last_tag.startswith("v") else last_tag
     if current_version == normalized_last_tag and last_tag != "v0.0.0":
-        LOGGER.error(
+        _fatal(
             "There have been no changes since the last version tag; cannot bump version as it would not change."
         )
-        sys.exit(1)
 
     possible_components = ("major", "minor", "patch")
     if component not in possible_components:
-        LOGGER.error(
-            'Invalid component "%s". Must be one of: %s',
-            component,
-            ", ".join(possible_components),
+        _fatal(
+            f'Invalid component "{component}". Must be one of: {"\n".join(possible_components)}'
         )
-        sys.exit(1)
     component_index: "Literal[0, 1, 2]" = possible_components.index(component)
 
     prerelease_options = {
@@ -807,12 +795,7 @@ def bump_version(
     normalized_stage = None
     if stage is not None:
         if stage not in prerelease_options:
-            LOGGER.error(
-                'Invalid stage "%s". Must be one of: %s',
-                stage,
-                ", ".join(("alpha", "beta", "rc")),
-            )
-            sys.exit(1)
+            _fatal(f'Invalid stage "{stage}". Must be one of: alpha, beta, rc')
         normalized_stage = prerelease_options[stage]
 
     # Bump version using dunamai
@@ -834,3 +817,53 @@ def bump_version(
     serialized = new_version.serialize(style=Style.Pep440)
     LOGGER.info("Bumping version to %s", serialized)
     _run_command(["git", "tag", f"v{serialized}"])
+
+
+def _build(
+    has_containers: bool,
+    debug: bool = False,
+    no_cache: bool = False,
+    plain: bool = False,
+    single_arch: bool = False,
+) -> None:
+    build_package()
+    if has_containers:
+        build_image(
+            debug=debug,
+            no_cache=no_cache,
+            plain=plain,
+            single_arch=single_arch,
+        )
+
+
+@tasks.script(
+    task_name="build",
+    tags=["packaging", "containers"],
+)
+def build_with_containers(
+    debug: bool = False,
+    no_cache: bool = False,
+    plain: bool = False,
+    single_arch: bool = False,
+) -> None:
+    """Build the project and its containers.
+
+    Args:
+        debug: Build the debug image.
+        no_cache: Do not use cache when building the image.
+        plain: Do not pretty-print output.
+        single_arch: Build images for a single architecture.
+    """
+    _build(
+        True,
+        debug=debug,
+        no_cache=no_cache,
+        plain=plain,
+        single_arch=single_arch,
+    )
+
+
+@tasks.script(task_name="build", tags=["packaging"])
+def build_without_containers() -> None:
+    """Build the project."""
+    _build(False)

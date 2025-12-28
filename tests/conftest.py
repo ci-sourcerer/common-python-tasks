@@ -94,7 +94,6 @@ authors = [
 """
     (project_dir / "pyproject.toml").write_text(pyproject_content)
 
-    # Change to project directory
     monkeypatch.chdir(project_dir)
 
     return project_dir

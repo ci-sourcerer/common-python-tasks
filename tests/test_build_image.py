@@ -20,21 +20,17 @@ class TestDockerignoreHandling:
         """Test that built-in .dockerignore is used when none exists."""
         from common_python_tasks.tasks import _build_image
 
-        # Ensure no .dockerignore exists
         dockerignore_path = temp_project_dir / ".dockerignore"
         assert not dockerignore_path.exists()
 
-        # Build image
         _build_image(
             containerfile_path=None,
             containerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
-        # Verify .dockerignore was loaded
         mock_load_data_file.assert_any_call(".dockerignore")
 
-        # Verify .dockerignore was cleaned up after build
         assert not dockerignore_path.exists()
 
     def test_preserves_existing_dockerignore(
@@ -48,19 +44,16 @@ class TestDockerignoreHandling:
         """Test that existing .dockerignore is not modified."""
         from common_python_tasks.tasks import _build_image
 
-        # Create existing .dockerignore
         dockerignore_path = temp_project_dir / ".dockerignore"
         original_content = "# Custom dockerignore\n*.log\n"
         dockerignore_path.write_text(original_content)
 
-        # Build image
         _build_image(
             containerfile_path=None,
             containerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
-        # Verify existing .dockerignore is preserved with original content
         assert dockerignore_path.exists()
         assert dockerignore_path.read_text() == original_content
 
@@ -79,14 +72,12 @@ class TestDockerignoreHandling:
         dockerignore_path = temp_project_dir / ".dockerignore"
         assert not dockerignore_path.exists()
 
-        # Track .dockerignore state during build
         dockerignore_existed_during_build = False
 
         original_run_command = mock_run_command.side_effect
 
         def tracking_side_effect(command, *args, **kwargs):
             nonlocal dockerignore_existed_during_build
-            # Check if .dockerignore exists when docker build is called
             if "docker" in command and "build" in command:
                 dockerignore_existed_during_build = dockerignore_path.exists()
             return original_run_command(command, *args, **kwargs)
@@ -99,10 +90,8 @@ class TestDockerignoreHandling:
             context_path=temp_project_dir,
         )
 
-        # Verify .dockerignore existed during build
         assert dockerignore_existed_during_build
 
-        # Verify .dockerignore was cleaned up after build
         assert not dockerignore_path.exists()
 
     def test_temporary_dockerignore_cleanup_on_error(
@@ -119,19 +108,16 @@ class TestDockerignoreHandling:
 
         dockerignore_path = temp_project_dir / ".dockerignore"
 
-        # Make docker build fail
         def failing_side_effect(command, *args, **kwargs):
             result = MagicMock(spec=subprocess.CompletedProcess)
             if "docker" in command and "build" in command:
                 result.returncode = 1
                 result.stdout = ""
                 result.stderr = "Build failed"
-                # Raise SystemExit as _run_command does on failure
                 import sys
 
                 sys.exit(1)
             result.returncode = 0
-            # Provide proper return values for non-docker commands
             if "git" in command and "status" in command and "--porcelain" in command:
                 result.stdout = ""
             elif "git" in command and "rev-parse" in command:
@@ -144,7 +130,6 @@ class TestDockerignoreHandling:
 
         mock_run_command.side_effect = failing_side_effect
 
-        # Build should fail
         with pytest.raises(SystemExit):
             _build_image(
                 containerfile_path=None,
@@ -152,7 +137,6 @@ class TestDockerignoreHandling:
                 context_path=temp_project_dir,
             )
 
-        # Verify .dockerignore was cleaned up despite error
         assert not dockerignore_path.exists()
 
     def test_dockerignore_content_from_builtin(
@@ -170,7 +154,6 @@ class TestDockerignoreHandling:
         dockerignore_path = temp_project_dir / ".dockerignore"
         expected_content = "*\n!dist/*.whl\n!pyproject.toml\n"
 
-        # Track content during build
         actual_content = None
         original_run_command = mock_run_command.side_effect
 
@@ -189,5 +172,90 @@ class TestDockerignoreHandling:
             context_path=temp_project_dir,
         )
 
-        # Verify content matches built-in .dockerignore
         assert actual_content == expected_content
+
+
+class TestBuildImageLatestTag:
+    """Tests for latest tag behavior in build_image."""
+
+    def test_latest_tag_when_no_future_tags(
+        self,
+        temp_project_dir,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_image_tag,
+        mock_get_authors,
+        mock_get_package_name,
+    ):
+        """Test that 'latest' tag is used when no tags are later in history."""
+        from common_python_tasks.tasks import _build_image
+
+        build_command = None
+        original_side_effect = mock_run_command.side_effect
+
+        def tracking_side_effect(command, *args, **kwargs):
+            nonlocal build_command
+            result = original_side_effect(command, *args, **kwargs)
+            if command == ["git", "tag"]:
+                result.stdout = "v1.0.0"
+            elif command[:3] == ["git", "merge-base", "--is-ancestor"]:
+                result.returncode = 0
+            elif "docker" in command and "build" in command:
+                build_command = command
+            return result
+
+        mock_run_command.side_effect = tracking_side_effect
+
+        _build_image(
+            containerfile_path=None,
+            containerfile_text="FROM python:3.11\n",
+            context_path=temp_project_dir,
+        )
+
+        assert build_command is not None
+        assert any("latest" in str(arg) for arg in build_command)
+
+    def test_no_latest_tag_when_future_tags_exist(
+        self,
+        temp_project_dir,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_image_tag,
+        mock_get_authors,
+        mock_get_package_name,
+    ):
+        """Test that 'latest' tag is NOT used when tags are later in history."""
+        from common_python_tasks.tasks import _build_image
+
+        build_command = None
+        original_side_effect = mock_run_command.side_effect
+
+        def tracking_side_effect(command, *args, **kwargs):
+            nonlocal build_command
+            result = original_side_effect(command, *args, **kwargs)
+            if command == ["git", "tag"]:
+                result.stdout = "v1.0.0\nv2.0.0"
+            elif command[:3] == ["git", "merge-base", "--is-ancestor"]:
+                if command[-1] == "v2.0.0":
+                    result.returncode = 1
+                else:
+                    result.returncode = 0
+            elif "docker" in command and "build" in command:
+                build_command = command
+            return result
+
+        mock_run_command.side_effect = tracking_side_effect
+
+        _build_image(
+            containerfile_path=None,
+            containerfile_text="FROM python:3.11\n",
+            context_path=temp_project_dir,
+        )
+
+        assert build_command is not None
+        tag_args = [
+            build_command[i + 1]
+            for i, arg in enumerate(build_command)
+            if arg == "-t" and i + 1 < len(build_command)
+        ]
+        assert not any("latest" in tag for tag in tag_args)
