@@ -120,7 +120,7 @@ The following environment variable enables debugging output.
 
 You can include or exclude tasks by tags in your `pyproject.toml`
 
-#### Minimal setup (format & lint only)
+#### Minimal setup
 
 ```toml
 [project]
@@ -132,7 +132,7 @@ dependencies = ["common-python-tasks==0.0.1"]
 include_script = "common_python_tasks:tasks(include_tags=['format', 'lint'])"
 ```
 
-Available tasks: `format`, `lint`, `clean`.
+Available tasks: `format`, `lint`.
 
 #### Container-based project
 
