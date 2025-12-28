@@ -96,7 +96,7 @@ def _get_authors() -> List[Tuple[str, str]]:
 
     pyproject_data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 
-    def _parse_author(author: Dict[str, str]) -> tuple[str, str]:
+    def _parse_author(author: Dict[str, str]) -> Tuple[str, str]:
         return (author.get("name") or "").strip(), (
             author.get("email") or ""
         ).strip().strip("<>")
