@@ -179,7 +179,6 @@ def _get_dirty_files(ignore: list[str] | None = None) -> list[str]:
     ]
 
 
-
 def _get_version(files_to_ignore_as_dirty: list[str] | None = None) -> str:
     from dunamai import Style, Version
 
