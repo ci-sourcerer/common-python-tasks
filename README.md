@@ -6,7 +6,7 @@ This package is a collection of (very) opinionated [Poe the Poet Python tasks](h
 
 ### Automated setup
 
-The easiest way to add `common-python-tasks` to a new project is to use the automated installation script:
+You can add `common-python-tasks` to a new project by using the handy automated installation script.
 
 ```shell
 curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | TAGS_TO_INCLUDE="format lint test" sh
@@ -22,7 +22,7 @@ This will complete the following steps.
 
 ### Manual setup
 
-1. Add `common-python-tasks` to your `pyproject.toml`
+1. Add `common-python-tasks` to your `pyproject.toml` and configure Poe the Poet to include the desired tasks
 
     ```toml
     [project]
@@ -255,8 +255,8 @@ The standard Python Containerfile incorporates several intentional design choice
 - Safe entrypoint selection means the default entrypoint resolves the console script matching the package name while `CUSTOM_ENTRYPOINT` allows overriding at build time while keeping runtime behavior predictable
 - Minimal final image uses the slim Python base, cleans wheel artifacts and caches, and sets `runtime` as the explicit final target so the debug stage is opt-in
 
-## Project Notes
+## Notes
 
 - This project dogfoods itself - it uses `common-python-tasks` for its own development
-- Contributions welcome! Open an issue/discussion to discuss changes before submitting a PR. I do not claim to have all the answers, and you can help determine the future of low-code solutions for Python
+- Contributions welcome! Open an issue/discussion to discuss changes before submitting a PR. I do not claim to have all the answers, and you can help determine the future of low-code solutions for Python. I am very interested in your feedback as I don't want to work in a vacuum
 - Alpha status: expect breaking changes between minor versions until 1.0.0
