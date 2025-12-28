@@ -56,13 +56,16 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 
 | Task | Description | Tags |
 | - | - | - |
-| `build-image` | Build a container image using the bundled Containerfile template | containers, build, cli |
-| `bump-version` | Bump project version and create a git tag | common, packaging |
-| `clean` | Remove build, cache, and coverage artifacts | common, clean |
-| `format` | Run Autoflake, Black, and isort formatting | common, format |
-| `lint` | Run Autoflake, Black, isort checks, and flake8 linting | lint |
-| `publish-package` | Publish the package to PyPI via Poetry | common, packaging, release |
-| `push-image` | Push Docker images to the configured registry | containers, packaging, release |
+| `build` | Build the project; also builds container images when the `containers` tag is included | packaging, containers |
+| `build-image` | Build a container image using the bundled Containerfile template | containers, build |
+| `build-package` | Build the package (wheel and sdist) | packaging, build |
+| `bump-version` | Bump project version and create a git tag | packaging |
+| `clean` | Remove build, cache, and coverage artifacts | clean |
+| `format` | Format code with autoflake, black, and isort | format |
+| `lint` | Run autoflake, black, isort checks, and flake8 linting | lint |
+| `publish-package` | Publish the package to PyPI via Poetry | packaging |
+| `push-image` | Push container images to the configured registry | containers, packaging, release |
+| `run-container` | Run the built container image with the selected tag | containers |
 | `test` | Run tests with pytest and generate coverage reports | test |
 
 ## How it works
@@ -242,7 +245,7 @@ Make sure your `pyproject.toml` contains the following.
 
 ### Containerfile (see [src/common_python_tasks/data/Containerfile](src/common_python_tasks/data/Containerfile))
 
-The Containerfile incorporates several intentional design choices.
+The standard Python Containerfile incorporates several intentional design choices.
 
 - Multi-stage build: the build stage installs Poetry and builds a wheel while the runtime stage installs only the wheel to keep the final image slim and reproducible
 - Cache-aware installs mean pip and Poetry cache mounts speed up iterative builds without bloating the final image
