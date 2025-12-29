@@ -327,50 +327,206 @@ class TestBumpVersion:
         return []
 
     @pytest.fixture
-    def mock_run_command_no_tags(self, tag_calls):
-        """Mock _run_command to simulate a repo with no tags and clean status."""
-        with patch("common_python_tasks.tasks._run_command") as mock:
+    def mock_clean_repo_no_tags(self, tag_calls):
+        """Mock clean repository with no existing tags."""
+        with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
+            with patch("common_python_tasks.tasks._run_command") as mock_run:
+                mock_dirty.return_value = []  # Clean repo
+                
+                def side_effect(command, *args, **kwargs):
+                    result = MagicMock()
+                    if command[:4] == ["git", "describe", "--tags", "--abbrev=0"]:
+                        result.returncode = 128
+                        result.stdout = ""
+                    elif len(command) >= 3 and command[0] == "git" and command[1] == "tag":
+                        result.returncode = 0
+                        tag_calls.append(command[-1])
+                        result.stdout = ""
+                    else:
+                        result.returncode = 0
+                        result.stdout = ""
+                    return result
 
-            def side_effect(command, *args, **kwargs):
-                result = MagicMock()
-                if command[:3] == ["git", "status", "--porcelain"]:
-                    result.returncode = 0
-                    result.stdout = ""
-                elif command[:4] == ["git", "describe", "--tags", "--abbrev=0"]:
-                    result.returncode = 128
-                    result.stdout = ""
-                elif len(command) >= 3 and command[0] == "git" and command[1] == "tag":
-                    result.returncode = 0
-                    tag_calls.append(command[-1])
-                    result.stdout = ""
-                else:
-                    result.returncode = 0
-                    result.stdout = ""
-                return result
+                mock_run.side_effect = side_effect
+                yield mock_run
 
-            mock.side_effect = side_effect
-            yield mock
+    @pytest.fixture
+    def mock_clean_repo_with_tag(self, tag_calls):
+        """Mock clean repository with existing v1.2.3 tag."""
+        with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
+            with patch("common_python_tasks.tasks._run_command") as mock_run:
+                mock_dirty.return_value = []  # Clean repo
+                
+                def side_effect(command, *args, **kwargs):
+                    result = MagicMock()
+                    if command[:4] == ["git", "describe", "--tags", "--abbrev=0"]:
+                        result.returncode = 0
+                        result.stdout = "v1.2.3"
+                    elif len(command) >= 3 and command[0] == "git" and command[1] == "tag":
+                        result.returncode = 0
+                        tag_calls.append(command[-1])
+                        result.stdout = ""
+                    else:
+                        result.returncode = 0
+                        result.stdout = ""
+                    return result
 
-    def test_bump_major_no_tags(self, mock_run_command_no_tags, tag_calls):
+                mock_run.side_effect = side_effect
+                yield mock_run
+
+    def test_bump_major_no_tags(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
 
         bump_version("major")
         assert tag_calls[-1] == "v1.0.0"
 
-    def test_bump_minor_no_tags(self, mock_run_command_no_tags, tag_calls):
+    def test_bump_minor_no_tags(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
 
         bump_version("minor")
         assert tag_calls[-1] == "v0.1.0"
 
-    def test_bump_patch_no_tags(self, mock_run_command_no_tags, tag_calls):
+    def test_bump_patch_no_tags(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
 
         bump_version("patch")
         assert tag_calls[-1] == "v0.0.1"
 
-    def test_bump_patch_alpha_no_tags(self, mock_run_command_no_tags, tag_calls):
+    def test_bump_major_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        bump_version("major")
+        assert tag_calls[-1] == "v2.0.0"
+
+    def test_bump_minor_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        bump_version("minor")
+        assert tag_calls[-1] == "v1.3.0"
+
+    def test_bump_patch_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        bump_version("patch")
+        assert tag_calls[-1] == "v1.2.4"
+
+    def test_bump_with_alpha_stage(self, mock_clean_repo_with_tag, tag_calls):
         from common_python_tasks.tasks import bump_version
 
         bump_version("patch", stage="alpha")
+        assert tag_calls[-1] == "v1.2.4a1"
+
+    def test_bump_with_beta_stage(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        bump_version("minor", stage="beta")
+        assert tag_calls[-1] == "v1.3.0b1"
+
+    def test_bump_with_rc_stage(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        bump_version("major", stage="rc")
+        assert tag_calls[-1] == "v2.0.0rc1"
+
+    def test_bump_with_short_stage_names(self, mock_clean_repo_no_tags, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        # Test short stage names
+        bump_version("patch", stage="a")
         assert tag_calls[-1] == "v0.0.1a1"
+        
+        tag_calls.clear()
+        bump_version("patch", stage="b")
+        assert tag_calls[-1] == "v0.0.1b1"
+
+    def test_dry_run_no_tags(self, mock_clean_repo_no_tags, tag_calls):
+        from common_python_tasks.tasks import bump_version
+        
+        with patch("common_python_tasks.tasks.LOGGER") as mock_logger:
+            bump_version("patch", dry_run=True)
+            mock_logger.info.assert_called_with("Dry run: would bump version to %s", "0.0.1")
+            assert len(tag_calls) == 0  # No tag should be created in dry run
+
+    def test_dry_run_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.tasks import bump_version
+        
+        with patch("common_python_tasks.tasks.LOGGER") as mock_logger:
+            bump_version("minor", stage="alpha", dry_run=True)
+            mock_logger.info.assert_called_with("Dry run: would bump version to %s", "1.3.0a1")
+            assert len(tag_calls) == 0  # No tag should be created in dry run
+
+    def test_invalid_component_fails(self):
+        from common_python_tasks.tasks import bump_version
+        
+        with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
+            mock_dirty.return_value = []
+            with patch("common_python_tasks.tasks.LOGGER"):
+                with pytest.raises(SystemExit) as exc_info:
+                    bump_version("invalid")
+                assert exc_info.value.code == 1
+
+    def test_invalid_stage_fails(self):
+        from common_python_tasks.tasks import bump_version
+        
+        with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
+            mock_dirty.return_value = []
+            with patch("common_python_tasks.tasks.LOGGER"):
+                with pytest.raises(SystemExit) as exc_info:
+                    bump_version("patch", stage="invalid")
+                assert exc_info.value.code == 1
+
+    def test_dirty_repo_fails(self):
+        from common_python_tasks.tasks import bump_version
+        
+        with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
+            mock_dirty.return_value = ["modified_file.py"]
+            with patch("common_python_tasks.tasks.LOGGER"):
+                with pytest.raises(SystemExit) as exc_info:
+                    bump_version("patch")
+                assert exc_info.value.code == 1
+
+    def test_case_insensitive_component(self, mock_clean_repo_no_tags, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        bump_version("MAJOR")
+        assert tag_calls[-1] == "v1.0.0"
+        
+        tag_calls.clear()
+        bump_version("Minor")
+        assert tag_calls[-1] == "v0.1.0"
+
+    def test_case_insensitive_stage(self, mock_clean_repo_no_tags, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        bump_version("patch", stage="ALPHA")
+        assert tag_calls[-1] == "v0.0.1a1"
+        
+        tag_calls.clear()
+        bump_version("patch", stage="Beta")
+        assert tag_calls[-1] == "v0.0.1b1"
+
+    def test_tag_without_v_prefix(self, tag_calls):
+        """Test bumping from a tag that doesn't have 'v' prefix."""
+        from common_python_tasks.tasks import bump_version
+        
+        with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
+            with patch("common_python_tasks.tasks._run_command") as mock_run:
+                mock_dirty.return_value = []  # Clean repo
+                
+                def side_effect(command, *args, **kwargs):
+                    result = MagicMock()
+                    if command[:4] == ["git", "describe", "--tags", "--abbrev=0"]:
+                        result.returncode = 0
+                        result.stdout = "1.2.3"  # No 'v' prefix
+                    elif len(command) >= 3 and command[0] == "git" and command[1] == "tag":
+                        result.returncode = 0
+                        tag_calls.append(command[-1])
+                        result.stdout = ""
+                    else:
+                        result.returncode = 0
+                        result.stdout = ""
+                    return result
+
+                mock_run.side_effect = side_effect
+                bump_version("patch")
+                assert tag_calls[-1] == "v1.2.4"
