@@ -754,18 +754,14 @@ def bump_version(
     component = component.lower()
     stage = stage.lower() if stage is not None else None
 
-    # Validate component
     valid_components = {"major": 0, "minor": 1, "patch": 2}
     if component not in valid_components:
         _fatal(f'Invalid component "{component}". Must be one of: major, minor, patch')
     bump_index: "Literal[0, 1, 2]" = valid_components[component]
 
-    # Validate stage if provided
-    valid_stages = {"alpha", "a", "beta", "b", "rc"}
-    if stage is not None and stage not in valid_stages:
+    if stage is not None and stage not in {"alpha", "a", "beta", "b", "rc"}:
         _fatal(f'Invalid stage "{stage}". Must be one of: alpha, beta, rc')
 
-    # Check for uncommitted changes
     if _get_dirty_files():
         _fatal(
             "Repository has uncommitted changes. "
@@ -780,21 +776,16 @@ def bump_version(
     )
 
     if tag_result.returncode == 0 and tag_result.stdout.strip():
-        last_tag = tag_result.stdout.strip()
-        version_str = last_tag.lstrip("v")
+        version_str = tag_result.stdout.strip().lstrip("v")
     else:
         version_str = "0.0.0"
 
-    # Parse the base version and bump it
-    current = Version.parse(version_str)
-    bumped = current.bump(bump_index)
+    bumped = Version.parse(version_str).bump(bump_index)
 
     # Apply pre-release stage if specified
     if stage is not None:
         # Normalize stage name
-        stage_map = {"a": "alpha", "b": "beta"}
-        normalized_stage = stage_map.get(stage, stage)
-        bumped.stage = normalized_stage
+        bumped.stage = {"a": "alpha", "b": "beta"}.get(stage, stage)
         bumped.revision = 1
 
     # Format the new version string
