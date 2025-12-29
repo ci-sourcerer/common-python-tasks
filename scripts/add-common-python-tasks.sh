@@ -21,9 +21,11 @@ fi
 
 script=$([ -n "$TAGS_TO_INCLUDE" ] && python -c "import sys; tags = sys.argv[1].split(); print('common_python_tasks:tasks(include_tags='+repr(tags)+')')" "$TAGS_TO_INCLUDE" || echo "common_python_tasks:tasks()")
 cat >>pyproject.toml <<EOF
+
 [tool.poe]
 include_script = "$script"
+
 EOF
 
-printf "Common Python tasks added to project.\n\n\033[1mAvailable tasks:\033[0m\n"
+printf "\n\033[1;32mCommon Python tasks added to project.\033[0m\n\n\033[1mAvailable tasks:\033[0m\n"
 poe --help --ansi | awk '/Configured tasks:/ {flag=1; next} flag'
