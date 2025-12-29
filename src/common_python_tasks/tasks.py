@@ -745,83 +745,67 @@ def bump_version(
     """Bump the project version.
 
     Args:
-        component: The version component to bump: "major", "minor", or "patch".".
+        component: The version component to bump: "major", "minor", or "patch".
         stage: Optional pre-release stage to apply: "alpha", "beta", or "rc".
+        dry_run: If True, print what would happen without making changes.
     """
-    from dunamai import Style, Version
+    from dunamai import Version
 
     component = component.lower()
     stage = stage.lower() if stage is not None else None
 
-    # Check if repository is dirty
-    if _run_command(
-        ["git", "status", "--porcelain"], capture_output=True
-    ).stdout.strip():
+    # Validate component
+    valid_components = {"major": 0, "minor": 1, "patch": 2}
+    if component not in valid_components:
+        _fatal(f'Invalid component "{component}". Must be one of: major, minor, patch')
+    bump_index: "Literal[0, 1, 2]" = valid_components[component]
+
+    # Validate stage if provided
+    valid_stages = {"alpha", "a", "beta", "b", "rc"}
+    if stage is not None and stage not in valid_stages:
+        _fatal(f'Invalid stage "{stage}". Must be one of: alpha, beta, rc')
+
+    # Check for uncommitted changes
+    if _get_dirty_files():
         _fatal(
-            "Repository has uncommitted changes. Please commit or stash changes before bumping version."
+            "Repository has uncommitted changes. "
+            "Please commit or stash changes before bumping version."
         )
 
-    # Try to get the latest tag; default to v0.0.0 if none exist
-    last_tag_result = _run_command(
+    # Get the latest version tag
+    tag_result = _run_command(
         ["git", "describe", "--tags", "--abbrev=0"],
         capture_output=True,
         acceptable_returncodes={0, 128},
     )
-    last_tag = (
-        last_tag_result.stdout.strip() if last_tag_result.returncode == 0 else "v0.0.0"
-    )
 
-    # Check if current version equals the last tag, refuse to bump if so
-    current_version = _get_version()
-    # Normalize last tag by stripping leading 'v' if present
-    normalized_last_tag = last_tag[1:] if last_tag.startswith("v") else last_tag
-    if current_version == normalized_last_tag and last_tag != "v0.0.0":
-        _fatal(
-            "There have been no changes since the last version tag; cannot bump version as it would not change."
-        )
+    if tag_result.returncode == 0 and tag_result.stdout.strip():
+        last_tag = tag_result.stdout.strip()
+        version_str = last_tag.lstrip("v")
+    else:
+        version_str = "0.0.0"
 
-    possible_components = ("major", "minor", "patch")
-    if component not in possible_components:
-        _fatal(
-            f'Invalid component "{component}". Must be one of: {"\n".join(possible_components)}'
-        )
-    component_index: "Literal[0, 1, 2]" = possible_components.index(component)
+    # Parse the base version and bump it
+    current = Version.parse(version_str)
+    bumped = current.bump(bump_index)
 
-    prerelease_options = {
-        "a": "alpha",
-        "alpha": "alpha",
-        "b": "beta",
-        "beta": "beta",
-        "rc": "rc",
-    }
-    normalized_stage = None
+    # Apply pre-release stage if specified
     if stage is not None:
-        if stage not in prerelease_options:
-            _fatal(f'Invalid stage "{stage}". Must be one of: alpha, beta, rc')
-        normalized_stage = prerelease_options[stage]
+        # Normalize stage name
+        stage_map = {"a": "alpha", "b": "beta"}
+        normalized_stage = stage_map.get(stage, stage)
+        bumped.stage = normalized_stage
+        bumped.revision = 1
 
-    # Bump version using dunamai
-    if last_tag == "v0.0.0":
-        # No real tags yet; bump from 0.0.0
-        base_version = Version.parse("0.0.0")
-        new_version = base_version.bump(component_index)
+    # Format the new version string
+    new_version = bumped.serialize()
+
+    if dry_run:
+        LOGGER.info("Dry run: would bump version to %s", new_version)
     else:
-        new_version = Version.from_git().bump(component_index)
-
-    if normalized_stage is not None:
-        if new_version.stage != normalized_stage:
-            new_version.stage = normalized_stage
-            new_version.revision = 1
-        elif new_version.revision is None:
-            new_version.revision = 1
-
-    # Serialize without dirty flag for clean release tags
-    serialized = new_version.serialize(style=Style.Pep440)
-    if not dry_run:
-        LOGGER.info("Bumping version to %s", serialized)
-        _run_command(["git", "tag", f"v{serialized}"])
-    else:
-        LOGGER.info("Dry run: would bump version to %s", serialized)
+        new_tag = f"v{new_version}"
+        LOGGER.info("Bumping version to %s", new_version)
+        _run_command(["git", "tag", new_tag])
 
 
 def _build(
