@@ -8,15 +8,15 @@ set -e
 pkg="common-python-tasks"
 searchOutput=$(poetry search "$pkg")
 if [ "$searchOutput" = "No matching packages were found." ]; then
-	printf 'Package %s not found\n' "$pkg" >&2
-	exit 1
+    printf 'Package %s not found\n' "$pkg" >&2
+    exit 1
 fi
-ver=$(printf "%s" "$searchOutput" | awk -v p="$pkg" '$1==p{print $2; exit}')
+ver=$(printf "%s" "$searchOutput" | awk -v p="$pkg" '$1==p{print $2}' | tail -n1)
 if [ -n "$ver" ]; then
-	poetry add --group dev "$pkg==$ver" || exit 1
+    poetry add --group dev "$pkg==$ver" || exit 1
 else
-	printf 'Error parsing version for %s\n' "$pkg" >&2
-	exit 1
+    printf 'Error parsing version for %s\n' "$pkg" >&2
+    exit 1
 fi
 
 script=$([ -n "$TAGS_TO_INCLUDE" ] && python -c "import sys; tags = sys.argv[1].split(); print('common_python_tasks:tasks(include_tags='+repr(tags)+')')" "$TAGS_TO_INCLUDE" || echo "common_python_tasks:tasks()")
