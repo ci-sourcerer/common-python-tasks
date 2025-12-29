@@ -9,7 +9,7 @@ This package is a collection of (very) opinionated [Poe the Poet Python tasks](h
 You can add `common-python-tasks` to a new project by using the handy automated installation script.
 
 ```shell
-curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | TAGS_TO_INCLUDE="format lint test" sh
+curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d | TAGS_TO_INCLUDE="format lint test" sh
 ```
 
 This will complete the following steps.
