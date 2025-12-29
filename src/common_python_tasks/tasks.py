@@ -740,6 +740,7 @@ def bump_version(
     component: str = "patch",
     *,
     stage: str | None = None,
+    dry_run: bool = False,
 ) -> None:
     """Bump the project version.
 
@@ -816,8 +817,11 @@ def bump_version(
 
     # Serialize without dirty flag for clean release tags
     serialized = new_version.serialize(style=Style.Pep440)
-    LOGGER.info("Bumping version to %s", serialized)
-    _run_command(["git", "tag", f"v{serialized}"])
+    if not dry_run:
+        LOGGER.info("Bumping version to %s", serialized)
+        _run_command(["git", "tag", f"v{serialized}"])
+    else:
+        LOGGER.info("Dry run: would bump version to %s", serialized)
 
 
 def _build(
