@@ -19,7 +19,7 @@ else
 	exit 1
 fi
 
-script=$([ -n "$TAGS_TO_INCLUDE" ] && python -c "import sys; tags = sys.argv[1].split(); print('common_python_tasks:get_tasks(include_tags='+repr(tags)+')')" "$TAGS_TO_INCLUDE" || echo "common_python_tasks:tasks()")
+script=$([ -n "$TAGS_TO_INCLUDE" ] && python -c "import sys; tags = sys.argv[1].split(); print('common_python_tasks:tasks(include_tags='+repr(tags)+')')" "$TAGS_TO_INCLUDE" || echo "common_python_tasks:tasks()")
 cat >>pyproject.toml <<EOF
 [tool.poe]
 include_script = "$script"
