@@ -1,0 +1,38 @@
+name: ${PACKAGE_NAME}
+
+x-common-environment: &common-environment
+  API_HOST: ${PACKAGE_NAME}-api
+  API_PORT: ${API_PORT}
+  SECRET_KEY: ${SECRET_KEY}
+  ENVIRONMENT: ${ENVIRONMENT}
+
+x-common-build-args: &common-build-args
+  PACKAGE_NAME: ${PACKAGE_NAME}
+  PYTHON_VERSION: ${PYTHON_VERSION}
+  POETRY_VERSION: ${POETRY_VERSION}
+
+services:
+  api:
+    user: "1000"
+    hostname: ${PACKAGE_NAME}-api
+    environment:
+      SERVER_HOST: 0.0.0.0
+      <<: *common-environment
+    build:
+      context: .
+      dockerfile: Containerfile
+      args: *common-build-args
+      target: runtime
+    image: ${PACKAGE_NAME}:${IMAGE_TAG}
+    networks:
+      - default
+    ports:
+      - mode: ingress
+        target: 8000
+        published: ${API_PORT}
+        protocol: tcp
+    restart: always
+
+networks:
+  default:
+    name: ${PACKAGE_NAME}_default

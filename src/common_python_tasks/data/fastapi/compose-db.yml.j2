@@ -1,0 +1,79 @@
+x-common-environment: &common-environment
+  DB_BASE: ${DB_BASE}
+  DB_HOST: ${PACKAGE_NAME}-db
+  DB_PORT: ${DB_PORT}
+  DB_PASS: ${DB_PASS}
+  DB_USER: ${DB_USER}
+
+x-common-build-args: &common-build-args
+  PACKAGE_NAME: ${PACKAGE_NAME}
+  PYTHON_VERSION: ${PYTHON_VERSION}
+  POETRY_VERSION: ${POETRY_VERSION}
+
+services:
+  api:
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *common-environment
+
+  db:
+    hostname: ${PACKAGE_NAME}-db
+    environment:
+      POSTGRES_DB: ${DB_BASE}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_USER: ${DB_USER}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $$POSTGRES_USER
+      timeout: 3s
+      interval: 2s
+      retries: 40
+    image: postgres:${POSTGRES_VERSION}-trixie
+    networks:
+      - default
+    ports:
+      - mode: ingress
+        target: 5432
+        published: ${DB_PORT}
+        protocol: tcp
+    restart: always
+    volumes:
+      - type: volume
+        source: {{ PACKAGE_NAME }}-db-data
+        target: /var/lib/postgresql/data
+        volume: {}
+
+  migrator:
+    user: "1000"
+    entrypoint:
+      - alembic
+    command:
+      - upgrade
+      - head
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *common-environment
+    build:
+      context: .
+      dockerfile: Containerfile
+      args: *common-build-args
+    image: ${PACKAGE_NAME}:${IMAGE_TAG}
+    networks:
+      - default
+    restart: "no"
+    configs:
+      - source: alembic_config
+        target: ./alembic.ini
+
+volumes:
+  {{ PACKAGE_NAME }}-db-data:
+    name: ${PACKAGE_NAME}-db-data
+
+configs:
+  alembic_config:
+    file: ./alembic.ini

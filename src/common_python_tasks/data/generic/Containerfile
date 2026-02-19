@@ -1,13 +1,11 @@
 # syntax=docker/dockerfile:1
 
 ARG PYTHON_VERSION=3
+ARG PYTHON_VARIANT=slim
 
-FROM python:${PYTHON_VERSION} AS builder
+FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS builder
 
 ENV PYTHON_VERSION=${PYTHON_VERSION}
-
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
 
 ARG POETRY_VERSION
 
@@ -26,7 +24,20 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 RUN --mount=type=cache,target=/root/.cache/pypoetry poetry build --format=wheel
 
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS runtime
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Allow optional installation of extra APT packages via build-arg `APT_PACKAGES`
+ARG APT_PACKAGES
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    [ -n "${APT_PACKAGES}" ] && apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES}
+RUN rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -u 1000 -m -s /sbin/nologin py
 
 WORKDIR /
 
@@ -60,17 +71,27 @@ RUN if [ -z "${CUSTOM_ENTRYPOINT}" ]; then cliScriptName=$(python -c "import os;
     && echo "#!/bin/sh\n\n${cliScriptName:-python} \"\$@\"" >/pkg/entrypoint.sh \
     && chmod +x /pkg/entrypoint.sh
 
+USER py
+
 # Optional debug stage: only installs debug deps if they were exported. This stage will not
 # be built by default (the final stage below is the runtime image), and it will safely do
 # nothing if there are no debug requirements
 FROM runtime AS debug
+
+USER root
 
 COPY --from=builder /tmp/build /tmp/build
 
 RUN --mount=type=cache,target=/root/.cache/pip if [ -f /tmp/build/requirements-debug.txt ] && [ -s /tmp/build/requirements-debug.txt ]; then pip install -r /tmp/build/requirements-debug.txt; fi
 RUN rm -rf /tmp/build /root/.cache/pip
 
+USER py
+
 # Final (default) image: explicitly use runtime as the final target so debug is not used unless requested
 FROM runtime AS final
 
+USER root
+
 RUN rm -rf /tmp/build /root/.cache/pip
+
+USER py

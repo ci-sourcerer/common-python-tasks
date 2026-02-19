@@ -5,6 +5,110 @@ from unittest.mock import MagicMock
 import pytest
 
 
+class TestParseContainerExtensions:
+    """Tests for _parse_container_extensions parameter parsing."""
+
+    def test_plain_bundle_name(self, monkeypatch):
+        from common_python_tasks.tasks import _parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext")
+
+        result = _parse_container_extensions()
+        assert len(result) == 1
+        assert result[0]["id"] == "some_ext"
+        assert result[0]["bundle_name"] == "some_ext"
+        assert result[0]["args"] is None
+
+    def test_parameterised_bundle(self, monkeypatch):
+        from common_python_tasks.tasks import _parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl")
+
+        result = _parse_container_extensions()
+        assert len(result) == 1
+        assert result[0]["id"] == "some_ext"
+        assert result[0]["bundle_name"] == "some_ext"
+        assert result[0]["args"] == "jq curl"
+
+    def test_mixed_parameterised_and_plain(self, monkeypatch):
+        from common_python_tasks.tasks import _parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl wget:plain_ext")
+
+        result = _parse_container_extensions()
+        assert len(result) == 2
+        assert result[0]["id"] == "some_ext"
+        assert result[0]["args"] == "jq curl wget"
+        assert result[1]["id"] == "plain_ext"
+        assert result[1]["args"] is None
+
+    def test_empty_args_treated_as_empty_string(self, monkeypatch):
+        from common_python_tasks.tasks import _parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=")
+
+        result = _parse_container_extensions()
+        assert len(result) == 1
+        assert result[0]["args"] == ""
+
+
+class TestResolveExtensionContent:
+    """Tests for _resolve_extension_content (no template substitution).
+
+    Argument passing is now handled via Docker build-args; this function only
+    returns the fragment content unchanged.
+    """
+
+    def test_template_contains_build_arg_variable(self, mock_load_data_file):
+        from common_python_tasks.tasks import _resolve_extension_content
+
+        desc = {
+            "id": "template_bundle",
+            "source": "bundle",
+            "path": None,
+            "bundle_name": "template_bundle",
+            "args": "jq curl",
+        }
+        content = _resolve_extension_content(desc)
+        assert "APT_PACKAGES" in content
+        assert "jq curl" not in content
+
+    def test_missing_args_do_not_affect_content(self, mock_load_data_file):
+        from common_python_tasks.tasks import _resolve_extension_content
+
+        desc = {
+            "id": "template_bundle",
+            "source": "bundle",
+            "path": None,
+            "bundle_name": "template_bundle",
+            "args": None,
+        }
+        # Should simply return the template content (argument application
+        # happens at build time)
+        content = _resolve_extension_content(desc)
+        assert "APT_PACKAGES" in content
+
+    def test_file_extension_without_placeholder_and_no_args(self, tmp_path):
+        from common_python_tasks.tasks import _resolve_extension_content
+
+        ext_file = tmp_path / "Containerfile.custom"
+        ext_file.write_text("RUN echo hello\n")
+
+        desc = {
+            "id": "custom",
+            "source": "file",
+            "path": str(ext_file),
+            "bundle_name": None,
+            "args": None,
+        }
+        content = _resolve_extension_content(desc)
+        assert content == "RUN echo hello\n"
+
+
 class TestDockerignoreHandling:
     """Tests for .dockerignore file handling during image builds."""
 
@@ -259,3 +363,305 @@ class TestBuildImageLatestTag:
             if arg == "-t" and i + 1 < len(build_command)
         ]
         assert not any("latest" in tag for tag in tag_args)
+
+
+def test_build_with_multiple_extensions(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """Building with multiple extension Containerfiles should build base + extensions.
+
+    Use local `Containerfile.<name>` fixtures (not bundled test fragments).
+    """
+    from common_python_tasks.tasks import build_image
+
+    # create two local extension Containerfile fragments
+    ext1 = temp_project_dir / "Containerfile.ext1"
+    ext1.write_text("# ext1\nRUN echo ext1\n")
+    ext2 = temp_project_dir / "Containerfile.ext2"
+    ext2.write_text("# ext2\nRUN echo ext2\n")
+
+    monkeypatch.setenv(
+        "CONTAINER_EXTENSION_FILES", "Containerfile.ext1:Containerfile.ext2"
+    )
+    # Ensure any bundled CONTAINER_EXTENSIONS in the outer environment do not affect this test
+    monkeypatch.delenv("CONTAINER_EXTENSIONS", raising=False)
+
+    build_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    # Expect 2 docker build invocations: base + stacked extensions
+    assert len(build_calls) == 2
+
+
+def test_prune_removes_base_images_when_enabled(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """When CONTAINER_PRUNE is truthy, base image tags should be removed after builds.
+
+    Use a local extension file (not bundled test fragment).
+    """
+    from common_python_tasks.tasks import build_image
+
+    # create a local extension fragment to exercise extension build path
+    ext = temp_project_dir / "Containerfile.ext1"
+    ext.write_text("# ext1\nRUN echo ext1\n")
+
+    monkeypatch.setenv("CONTAINER_EXTENSION_FILES", "Containerfile.ext1")
+    monkeypatch.setenv("CONTAINER_PRUNE_KEEP", "0")
+
+    calls: list[list[str]] = []
+
+    def tracking(command, *args, **kwargs):
+        # Provide a fake `docker image ls` output (newest first)
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original_side_effect(command, *args, **kwargs)
+            # newest-first list for repository 'docker.io/test-package'
+            result.stdout = (
+                "docker.io/test-package:latest\n"
+                "docker.io/test-package:1.0.0\n"
+                "docker.io/test-package:abc1234\n"
+                "docker.io/test-package:old-tag\n"
+            )
+            return result
+
+        calls.append(command)
+        return original_side_effect(command, *args, **kwargs)
+
+    original_side_effect = mock_run_command.side_effect
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    # Ensure docker rmi was called for the older, non-protected tag only
+    rmi_calls = [c for c in calls if c[:2] == ["docker", "rmi"]]
+
+    assert any("old-tag" in str(call) for call in rmi_calls)
+    assert not any("1.0.0" in str(call) for call in rmi_calls)
+    assert not any("abc1234" in str(call) for call in rmi_calls)
+
+
+def test_no_prune_on_extension_failure(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """If an extension build fails, pruning should not run and base images remain.
+
+    Use local extension Containerfile fixtures instead of bundled test fragments.
+    """
+    from common_python_tasks.tasks import build_image
+
+    # local extension fixtures
+    ext1 = temp_project_dir / "Containerfile.ext1"
+    ext1.write_text("# ext1\nRUN echo ext1\n")
+    ext2 = temp_project_dir / "Containerfile.ext2"
+    ext2.write_text("# ext2\nRUN echo ext2\n")
+
+    monkeypatch.setenv(
+        "CONTAINER_EXTENSION_FILES", "Containerfile.ext1:Containerfile.ext2"
+    )
+    monkeypatch.setenv("CONTAINER_PRUNE_KEEP", "0")
+
+    call_count = 0
+    original = mock_run_command.side_effect
+
+    def failing_side_effect(command, *args, **kwargs):
+        nonlocal call_count
+        if "docker" in command and "build" in command:
+            call_count += 1
+            # Fail the second build (first is base, second is first extension)
+            if call_count == 2:
+                import sys
+
+                sys.exit(1)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = failing_side_effect
+
+    with pytest.raises(SystemExit):
+        build_image()
+
+    # Ensure no docker rmi calls were made
+    calls = [c for c in mock_run_command.call_args_list]
+    assert not any("rmi" in str(c) for c in calls)
+
+
+def test_extension_template_support(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """CONTAINER_EXTENSIONS should load bundled Containerfile templates.
+
+    Verify APT_PACKAGES can be provided via CONTAINER_BUILD_ARGS and is passed to the build.
+    """
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("CONTAINER_BUILD_ARGS", "APT_PACKAGES=jq")
+
+    build_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    # Only the base build should run (no extra extension image)
+    assert len(build_calls) == 1
+
+    # Ensure build-arg for APT_PACKAGES was passed to the base build
+    base_build_cmd = build_calls[0]
+    assert any("APT_PACKAGES=jq" in str(a) for a in base_build_cmd)
+
+
+def test_build_arg_with_multiple_packages(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("CONTAINER_BUILD_ARGS", "APT_PACKAGES=jq curl")
+
+    build_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    # Verify base build received the multi-package build-arg
+    assert len(build_calls) == 1
+    base_build_cmd = build_calls[0]
+    assert any("APT_PACKAGES=jq curl" in str(a) for a in base_build_cmd)
+
+
+def test_build_image_accepts_build_args_param(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+):
+    # Ensure env not set so CLI param is used
+    import os
+
+    from common_python_tasks.tasks import build_image
+
+    os.environ.pop("CONTAINER_BUILD_ARGS", None)
+
+    build_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image(build_args="APT_PACKAGES=jq curl")
+
+    assert len(build_calls) == 1
+    base_build_cmd = build_calls[0]
+    assert any("APT_PACKAGES=jq curl" in str(a) for a in base_build_cmd)
+
+
+def test_container_shell_selects_most_recent_tag(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_package_name,
+):
+    """When `tag` is None, `container_shell` should pick the most-recently-built tag (no build)."""
+    from common_python_tasks.tasks import container_shell
+
+    run_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        # Provide fake `docker image ls` output (newest first)
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original(command, *args, **kwargs)
+            result.stdout = (
+                "docker.io/test-package:abc123\n" "docker.io/test-package:1.0.0\n"
+            )
+            return result
+        if "docker" in command and "run" in command:
+            run_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    container_shell()
+
+    assert len(run_calls) == 1
+    assert any("test-package:abc123" in " ".join(map(str, c)) for c in run_calls)
+
+
+def test_container_shell_fails_when_no_images(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_package_name,
+):
+    """`container_shell` should exit when no built images exist and `tag` is None."""
+    from common_python_tasks.tasks import container_shell
+
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original(command, *args, **kwargs)
+            result.stdout = ""
+            return result
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    with pytest.raises(SystemExit):
+        container_shell()

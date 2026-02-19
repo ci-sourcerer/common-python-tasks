@@ -1,0 +1,45 @@
+name: ${PACKAGE_NAME}
+
+services:
+  migrator:
+    image: ${PACKAGE_NAME}:debug
+  adminer:
+    image: adminer:latest
+    environment:
+      ADMINER_DEFAULT_DRIVER: pgsql
+      ADMINER_DEFAULT_SERVER: ${PACKAGE_NAME}-db
+      ADMINER_DEFAULT_DB: ${DB_BASE}
+      ADMINER_DEFAULT_USERNAME: ${DB_USER}
+      ADMINER_DEFAULT_PASSWORD: ${DB_PASS}
+    networks:
+      - default
+    ports:
+      - mode: ingress
+        target: 8080
+        published: ${ADMINER_PORT}
+        protocol: tcp
+    depends_on:
+      db:
+        condition: service_healthy
+    configs:
+      - source: adminer-index.php
+        target: /var/www/html/index.php
+        uid: "100"
+        gid: "101"
+
+# This makes adminer open directly to an already filled-in login form
+configs:
+  adminer-index.php:
+    content: |
+      <?php
+        if(!count($$_GET)) {
+          $$_POST['auth'] = [
+            'server' => $$_ENV['ADMINER_DEFAULT_SERVER'],
+            'username' => $$_ENV['ADMINER_DEFAULT_USERNAME'],
+            'password' => $$_ENV['ADMINER_DEFAULT_PASSWORD'],
+            'driver' => $$_ENV['ADMINER_DEFAULT_DRIVER'],
+            'db' => $$_ENV['ADMINER_DEFAULT_DB'],
+          ];
+        }
+        include './adminer.php';
+      ?>

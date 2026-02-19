@@ -1,6 +1,6 @@
 # Common Python tasks
 
-This package is a collection of (very) opinionated [Poe the Poet Python tasks](https://poethepoet.natn.io/guides/packaged_tasks.html) for common Python development workflows.
+This package is a collection of (very) opinionated [Poe the Poet](https://poethepoet.natn.io/guides/packaged_tasks.html) Python tasks for common Python development workflows.
 
 ## Quick start
 
@@ -27,9 +27,9 @@ This will complete the following steps.
     ```toml
     [project]
     name = "my-awesome-project"
-    version = "0.0.1"
+    version = "0.0.2"
     dependencies = [
-        "common-python-tasks==0.0.1",  # Always pin to a specific version
+        "common-python-tasks==0.0.2",  # Always pin to a specific version
     ]
 
     [tool.poe]
@@ -54,19 +54,24 @@ This will complete the following steps.
 
 Internal tasks are used by other tasks and are not meant to be run directly.
 
+<!-- tasks-table -->
 | Task | Description | Tags |
 | - | - | - |
-| `build` | Build the project; also builds container images when the `containers` tag is included | packaging, containers |
-| `build-image` | Build a container image using the bundled Containerfile template | containers, build |
+| `build` | Build the project and its containers (when `containers` tag is included) | packaging, containers |
+| `build-image` | Build the container image for this project using the Containerfile template | containers, build |
 | `build-package` | Build the package (wheel and sdist) | packaging, build |
-| `bump-version` | Bump project version and create a git tag | packaging |
-| `clean` | Remove build, cache, and coverage artifacts | clean |
+| `bump-version` | Bump the project version | packaging |
+| `clean` | Clean up temporary files and directories | clean |
+| `container-shell` | Run the debug image with an interactive shell | containers, debug |
 | `format` | Format code with autoflake, black, and isort | format |
-| `lint` | Run autoflake, black, isort checks, and flake8 linting | lint |
-| `publish-package` | Publish the package to PyPI via Poetry | packaging |
-| `push-image` | Push container images to the configured registry | containers, packaging, release |
-| `run-container` | Run the built container image with the selected tag | containers |
-| `test` | Run tests with pytest and generate coverage reports | test |
+| `lint` | Lint Python code with autoflake, black, isort, and flake8 | lint |
+| `publish-package` | Publish the package to the PyPI server | packaging |
+| `push-image` | Push the Docker image to the container registry | containers, packaging, release |
+| `run-container` | Run the Docker image as a container | containers |
+| `stack-down` | Bring down the development stack for the application | web |
+| `stack-up` | Bring up the development stack for the application | web, containers |
+| `test` | Run the test suite with coverage | test |
+<!-- end-tasks-table -->
 
 ## How it works
 
@@ -76,7 +81,7 @@ Your project must meet the following requirements.
 
 - Use Poetry for dependency management
 - Have a `pyproject.toml` file at the root
-- Have a package name (automatically inferred from `project.name` in `pyproject.toml`, or set via `PACKAGE_NAME` environment variable)
+- Have a package name (automatically inferred from `project.name` in `pyproject.toml` or set via `PACKAGE_NAME` environment variable)
 
 ### Configuration precedence
 
@@ -198,13 +203,6 @@ git push --tags
 
 ## Troubleshooting
 
-### "No tests were collected"
-
-The `test` task exits with code 5 if no tests are found. You can address this in one of the following ways.
-
-- Add tests to your `tests/` directory
-- Exclude the `test` tag and simply do not run `poe test` with this configuration `include_script = "common_python_tasks:tasks(exclude_tags=['test', 'internal'])"`
-
 ### Tasks not showing up with `poe --help`
 
 Check your `[tool.poe]` configuration in `pyproject.toml`. Make sure you're using `include_script`, not `includes`.
@@ -224,7 +222,7 @@ includes = "common_python_tasks:tasks"
 This is expected behavior. The `bump-version` task requires commits between the last tag and HEAD. You can resolve this in one of the following ways.
 
 - Make changes and commit them first
-- If you need to re-tag the same commit, delete the old tag (for example, `git tag -d v0.0.1`). This is not recommended. Versions should be immutable, and if you need to fix something, you should create a new patch version instead
+- Delete the old tag (for example, `git tag -d v0.0.1`). This is not recommended. Versions should be immutable, and if you need to fix something, you should create a new patch version instead. Rarely do you want to pass off new code as an old version
 
 ### Config files not being used
 
@@ -239,7 +237,7 @@ COMMON_PYTHON_TASKS_LOG_LEVEL=DEBUG poe test
 Make sure your `pyproject.toml` contains the following.
 
 - A correct package name in `[project]`
-- A package location defined with this configuration `[tool.poetry] packages = [{ include = "your_package", from = "src" }]`
+- A package location defined with this configuration: `[tool.poetry] packages = [{ include = "your_package", from = "src" }]`
 
 ## Design choices
 
@@ -247,16 +245,16 @@ Make sure your `pyproject.toml` contains the following.
 
 The standard Python Containerfile incorporates several intentional design choices.
 
-- Multi-stage build: the build stage installs Poetry and builds a wheel while the runtime stage installs only the wheel to keep the final image slim and reproducible
-- Cache-aware installs mean pip and Poetry cache mounts speed up iterative builds without bloating the final image
+- Multi-stage build: The build stage installs Poetry and builds a wheel while the runtime stage installs only the wheel to keep the final image slim and reproducible
+- Pip and Poetry cache mounts speed up iterative builds without bloating the final image
 - Explicit inputs through build args (`PYTHON_VERSION`, `POETRY_VERSION`, `PACKAGE_NAME`, `AUTHORS`, `GIT_COMMIT`, `CUSTOM_ENTRYPOINT`) make image metadata and behavior predictable and auditable
 - Optional debug stage exports and installs the `debug` dependency group only when present without failing otherwise and is not part of the default final image
 - Stable package path creates symlinks to the installed package so entrypoints and consumers have a consistent `/pkg` and `/_$PACKAGE_NAME` path regardless of wheel layout, which ensures that the package can be reliably imported and executed from a known location, and allows for the less common use case of reading files directly from the package path
 - Safe entrypoint selection means the default entrypoint resolves the console script matching the package name while `CUSTOM_ENTRYPOINT` allows overriding at build time while keeping runtime behavior predictable
-- Minimal final image uses the slim Python base, cleans wheel artifacts and caches, and sets `runtime` as the explicit final target so the debug stage is opt-in
+- Minimal final image uses the slim Python base by default, cleans wheel artifacts and caches, and sets `runtime` as the explicit final target so the debug stage is opt-in
 
 ## Notes
 
 - This project dogfoods itself - it uses `common-python-tasks` for its own development
 - Contributions welcome! Open an issue/discussion to discuss changes before submitting a PR. I do not claim to have all the answers, and you can help determine the future of low-code solutions for Python. I am very interested in your feedback as I don't want to work in a vacuum
-- Alpha status: expect breaking changes between minor versions until 1.0.0
+- Alpha status: Expect breaking changes between minor versions until 1.0.0

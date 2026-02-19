@@ -1,24 +1,21 @@
 import logging
 import os
-from collections.abc import Callable, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import subprocess
-    from typing import Literal
+    from typing import Literal, Any, Callable, Sequence
 
 from poethepoet_tasks import TaskCollection
 
 
 class _ColoredFormatter(logging.Formatter):
-    """Custom formatter with color codes for different log levels."""
-
     COLORS = {
-        "WARNING": "\033[93m",  # Yellow
-        "ERROR": "\033[91m",  # Red
-        "CRITICAL": "\033[91m",  # Red
+        "WARNING": "\033[93m",
+        "ERROR": "\033[91m",
+        "CRITICAL": "\033[91m",
         "RESET": "\033[0m",
     }
 
@@ -44,6 +41,7 @@ LOGGER.setLevel(
 
 
 def _env_truthy(env_var: str) -> bool:
+    """Return `True` if the environment variable is set to a truthy value."""
     return os.getenv(env_var, "").lower() in {
         "1",
         "true",
@@ -57,21 +55,19 @@ def _env_truthy(env_var: str) -> bool:
 
 @lru_cache
 def _is_package_installed(package_name: str) -> bool:
-    """Check if a Python package is installed in the current environment."""
     from importlib.util import find_spec
 
-    # Handle packages where import name differs from package name
-    import_name = package_name.replace("-", "_")
-    is_installed = find_spec(import_name) is not None
+    is_installed = find_spec(package_name.replace("-", "_")) is not None
     if not is_installed:
-        LOGGER.debug("%s is not installed, skipping", package_name)
+        LOGGER.debug("%s is not installed", package_name)
+
     return is_installed
 
 
 def _fatal(message: str, exit_code: int = 1) -> None:
     import sys
 
-    LOGGER.error(message)
+    LOGGER.critical(message)
     sys.exit(exit_code)
 
 
@@ -95,16 +91,11 @@ def _run_available_tools(
 def _get_authors() -> list[tuple[str, str]]:
     import tomllib
 
-    pyproject_data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-
-    def _parse_author(author: dict[str, str]) -> tuple[str, str]:
-        return (author.get("name") or "").strip(), (
-            author.get("email") or ""
-        ).strip().strip("<>")
-
     return [
-        _parse_author(author)
-        for author in (pyproject_data.get("project", {}).get("authors", []))
+        ((a.get("name") or "").strip(), (a.get("email") or "").strip().strip("<>"))
+        for a in tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+        .get("project", {})
+        .get("authors", [])
     ]
 
 
@@ -113,6 +104,7 @@ def _run_command(
     *,
     capture_output: bool = False,
     acceptable_returncodes: Sequence[int] | None = None,
+    env: dict[str, str] | None = None,
 ) -> "subprocess.CompletedProcess":
     import subprocess
     from shlex import quote
@@ -120,12 +112,17 @@ def _run_command(
     if acceptable_returncodes is None:
         acceptable_returncodes = {0}
 
-    command_display = " ".join([quote(arg) for arg in command])
-    LOGGER.debug("Running command: %s", command_display)
+    command = [str(c) for c in command if c is not None]
+
+    bold_command_display = (
+        f"\033[1m{" ".join([quote(str(arg)) for arg in command])}\033[0m"
+    )
+    LOGGER.debug("Running command: %s", bold_command_display)
+
+    merged_env = {**os.environ, **env} if env is not None else None
+
     out = subprocess.run(
-        command,
-        capture_output=capture_output,
-        text=True,
+        command, capture_output=capture_output, text=True, env=merged_env
     )
     if out.returncode not in acceptable_returncodes:
         if capture_output:
@@ -138,10 +135,10 @@ def _run_command(
                 details += f"\nstderr: {stderr}"
         else:
             details = ""
-        LOGGER.error(
+        LOGGER.critical(
             "Command failed (exit code %d): %s%s",
             out.returncode,
-            command_display,
+            bold_command_display,
             details,
         )
 
@@ -151,15 +148,19 @@ def _run_command(
     return out
 
 
-def _load_data_file(file_name: str) -> tuple[str, str]:
+def _load_data_file(
+    file_name: str, type_identifier: str = "generic", fatal_on_missing: bool = True
+) -> tuple[str, str] | None:
     from importlib.resources import files
 
     try:
-        data_files = files("common_python_tasks") / "data"
+        data_files = files("common_python_tasks") / "data" / type_identifier
         data_file = data_files / file_name
         return (str(data_file), data_file.read_text())
     except FileNotFoundError as e:
-        _fatal(f"Data file not found: {file_name} ({e})")
+        if fatal_on_missing:
+            _fatal(f"Data file not found: {file_name} ({e})")
+        return None
 
 
 def _get_dirty_files(ignore: list[str] | None = None) -> list[str]:
@@ -234,10 +235,20 @@ def _has_tags_later_in_history() -> bool:
 
 
 def _get_dockerhub_username() -> str:
-
     from getpass import getuser
 
     return os.getenv("DOCKERHUB_USERNAME") or getuser()
+
+
+def _get_registry_url() -> str:
+    return os.environ.get(
+        "CONTAINER_REGISTRY_URL",
+        f"docker.io/{_get_dockerhub_username()}",
+    ).strip()
+
+
+def _get_full_image_name() -> str:
+    return f"{_get_registry_url()}/{_get_package_name()}"
 
 
 def _get_package_name(use_underscores: bool = False) -> str:
@@ -249,6 +260,16 @@ def _get_package_name(use_underscores: bool = False) -> str:
     if use_underscores and name:
         name = name.replace("-", "_")
     return name
+
+
+def _get_poetry_version() -> str:
+    # Get Poetry version without trailing metadata
+    # Probably would be better to use importlib.metadata, but this is simpler
+    return (
+        _run_command(["poetry", "--version"], capture_output=True)
+        .stdout.strip()
+        .split()[-1]
+    )[0:-1]
 
 
 @lru_cache
@@ -264,24 +285,25 @@ def get_config_path(
     data_config_filename: str,
     *,
     tool_name: str | None = None,
+    type_identifier: str = "generic",
 ) -> Path | None:
     """Get the path to a configuration file.
 
     Checks for configuration in the following order:
-    1. If tool_name provided, check if tool.{tool_name} exists in pyproject.toml
-       - If it exists, return None (use pyproject.toml config)
+    1. If tool_name provided, check if `tool.{tool_name}` exists in `pyproject.toml`
+       - If it exists, return `None` (use `pyproject.toml` config)
     2. Check environment variable
     3. Check for local config file
     4. Fall back to bundled data file
 
     Args:
-        env_var_name: Name of the environment variable to check
-        local_config_filename: Name of the local config file to look for
-        data_config_filename: Name of the bundled config file to use as fallback
-        tool_name: Optional tool name to check in pyproject.toml under [tool.{tool_name}]
+        env_var_name: Name of the environment variable to check.
+        local_config_filename: Name of the local config file to look for.
+        data_config_filename: Name of the bundled config file to use as fallback.
+        tool_name: Optional tool name to check in `pyproject.toml` under `[tool.{tool_name}]`.
 
     Returns:
-        Path to config file, or None if config exists in pyproject.toml
+        `Path` to config file, or `None` if config exists in `pyproject.toml`
     """
     # Check if config exists in pyproject.toml
     if tool_name is not None:
@@ -303,7 +325,9 @@ def get_config_path(
         return local_config_path
 
     # Fall back to bundled data file
-    config_path = Path(_load_data_file(data_config_filename)[0])
+    config_path = Path(
+        _load_data_file(data_config_filename, type_identifier=type_identifier)[0]
+    )
     LOGGER.debug("Using bundled config file: %s", config_path)
     return config_path
 
@@ -312,6 +336,7 @@ tasks = TaskCollection(
     envfile=[
         f
         for f in [
+            ".env.defaults",
             "project.properties",
             ".env",
         ]
@@ -344,8 +369,8 @@ def isort() -> None:
             "--quiet",
             ".",
             "--settings-path",
+            isort_config_path,
         ]
-        + ([str(isort_config_path)] if isort_config_path else [])
     )
 
 
@@ -360,7 +385,7 @@ def autoflake() -> None:
             "--remove-all-unused-imports",
             "--recursive",
             "-i",
-            ".",
+            Path("."),
         ]
     )
 
@@ -369,7 +394,7 @@ def autoflake() -> None:
 def black_check() -> None:
     """Run black in check mode."""
     _require_package("black")
-    _run_command(["black", "--quiet", "--diff", ".", "--check"])
+    _run_command(["black", "--quiet", "--diff", Path("."), "--check"])
 
 
 @tasks.script(task_name="_isort_check", tags=["lint"])
@@ -390,8 +415,8 @@ def isort_check() -> None:
             ".",
             "--check-only",
             "--settings-path",
+            isort_config_path,
         ]
-        + ([str(isort_config_path)] if isort_config_path else [])
     )
 
 
@@ -406,7 +431,7 @@ def autoflake_check() -> None:
             "--remove-all-unused-imports",
             "--recursive",
             "-cd",
-            ".",
+            Path("."),
         ]
     )
 
@@ -416,18 +441,19 @@ def flake8_check() -> None:
     """Run flake8 linting."""
     _require_package("flake8")
 
-    flake8_config_path = get_config_path(
-        "FLAKE8_CONFIG",
-        ".flake8",
-        ".flake8",
-    )
+    flake8_config_path = get_config_path("FLAKE8_CONFIG", ".flake8", ".flake8")
 
-    _run_command(["flake8", ".", "--config", str(flake8_config_path)])
+    _run_command(["flake8", Path("."), "--config", flake8_config_path])
 
 
 @tasks.script(tags=["test"])
-def test() -> None:
-    """Run the test suite with coverage (if pytest-cov is installed)."""
+def test(quiet: bool = False) -> None:
+    """Run the test suite with coverage (if `pytest-cov` is installed).
+
+
+    Args:
+        quiet: If `True`, run tests in a quieter mode.
+    """
     coverage_config_path = get_config_path(
         "COVERAGE_RCFILE",
         ".coveragerc",
@@ -447,32 +473,23 @@ def test() -> None:
             "--cov=" + _get_package_name(use_underscores=True),
             "--cov-report=term-missing",
             "--cov-report=xml:coverage.xml",
-        ] + (
-            [
-                "--cov-config=" + str(coverage_config_path),
-            ]
-            if coverage_config_path
-            else []
-        )
+            (
+                "--cov-config=" + str(coverage_config_path)
+                if coverage_config_path
+                else None
+            ),
+        ]
     else:
         coverage_args = []
 
     exit_code = _run_command(
-        (
-            [
-                "pytest",
-                "-vv",
-            ]
-            + (
-                [
-                    "-c",
-                    str(pytest_config_path),
-                ]
-                if pytest_config_path
-                else []
-            )
-            + coverage_args
-        ),
+        [
+            "pytest",
+            None if quiet else "-vv",
+            "-c" if pytest_config_path else None,
+            str(pytest_config_path) if pytest_config_path else None,
+            *coverage_args,
+        ],
         acceptable_returncodes={0, 5},
     ).returncode
 
@@ -537,7 +554,10 @@ def _build_image(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-) -> None:
+    omit_target: bool = False,
+    image_name: str | None = None,
+    extra_build_args: dict[str, str] | None = None,
+) -> tuple[str, str]:
     import platform
 
     if context_path is None:
@@ -572,6 +592,7 @@ def _build_image(
 
     delete_temp_file = False
     try:
+        # TODO: Revisit this in regards to more architectures
         archs = ["linux/amd64", "linux/arm64"] if not single_arch else None
         files_to_ignore = [".dockerignore"] if temp_dockerignore_created else []
         version_string = _get_image_tag(files_to_ignore_as_dirty=files_to_ignore)
@@ -589,11 +610,7 @@ def _build_image(
         version_tag = f"{version_string}{suffix}"
         commit_tag = f"{_run_command(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True).stdout.strip()}{'-dirty' if _get_dirty_files(ignore=files_to_ignore) else ''}{suffix}"
         python_version = platform.python_version()
-        poetry_version = (
-            _run_command(["poetry", "--version"], capture_output=True)
-            .stdout.strip()
-            .split()[-1]
-        )[0:-1]
+        poetry_version = _get_poetry_version()
 
         build_args = {
             k: v
@@ -609,39 +626,45 @@ def _build_image(
             }.items()
             if v is not None
         }
+        # Merge in caller-supplied build-args (used by extension builds)
+        if extra_build_args:
+            for k, v in extra_build_args.items():
+                if v is not None:
+                    build_args[k] = v
         tags_to_use = [t for t in (tag, version_tag, commit_tag) if t is not None]
-        LOGGER.info("Building image with tags: %s", ", ".join(tags_to_use))
-        build_cmd = (
-            [
-                "docker",
-                "build",
-                str(context_path),
-                "-f",
-                str(containerfile_path),
-                "--target",
-                target,
-            ]
-            + sum(
-                [
-                    ["--build-arg", f"{k}={v if v is not None else ''}"]
-                    for k, v in build_args.items()
-                ],
-                [],
-            )
-            + (["--platform", ",".join(archs)] if archs else [])
-            + (["--no-cache"] if no_cache else [])
-            + sum(
-                [["-t", f"{_get_package_name()}:{t}"] for t in tags_to_use],
-                [],
-            )
-        )
-        registry = os.environ.get(
-            "CONTAINER_REGISTRY_URL",
-            f"docker.io/{_get_dockerhub_username()}",
-        ).strip()
-        full_name = f"{registry}/{_get_package_name()}"
+        LOGGER.debug("Building image with tags: %s", ", ".join(tags_to_use))
+        # Allow override of image name for extension builds
+        image_short_name = image_name if image_name is not None else _get_package_name()
+        orig_full_name = _get_full_image_name()
+        if image_name is None:
+            image_full_name = orig_full_name
+        else:
+            if "/" in orig_full_name:
+                prefix = orig_full_name.rsplit("/", 1)[0]
+                image_full_name = f"{prefix}/{image_name}"
+            else:
+                image_full_name = image_name
+        # Build base docker build command and optionally include --target
+        build_cmd = [
+            "docker",
+            "build",
+            str(context_path),
+            "-f",
+            str(containerfile_path),
+            "--target" if not omit_target else None,
+            target if not omit_target else None,
+            *[
+                item
+                for k, v in build_args.items()
+                for item in ("--build-arg", f"{k}={v if v is not None else ''}")
+            ],
+            "--platform" if archs else None,
+            ",".join(archs) if archs else None,
+            "--no-cache" if no_cache else None,
+            *[item for t in tags_to_use for item in ("-t", f"{image_short_name}:{t}")],
+        ]
         for t in tags_to_use:
-            build_cmd += ["-t", f"{full_name}:{t}"]
+            build_cmd += ["-t", f"{image_full_name}:{t}"]
 
         if plain:
             build_cmd += ["--progress", "plain"]
@@ -658,6 +681,205 @@ def _build_image(
                 dockerignore_path.unlink()
             except FileNotFoundError:
                 pass
+    return version_tag, commit_tag
+
+
+def _parse_container_extensions() -> list[dict]:
+    """Parse CONTAINER_EXTENSION_FILES and CONTAINER_EXTENSIONS (colon-delimited).
+    Returns a list of descriptors: {id, source, path, bundle_name} in order.
+    """
+    exts: list[dict] = []
+    files_raw = os.getenv("CONTAINER_EXTENSION_FILES")
+    if files_raw:
+        for part in [p.strip() for p in files_raw.split(":") if p.strip()]:
+            # Derive id from filename where possible
+            pth = Path(part)
+            exts.append(
+                {
+                    "id": (
+                        pth.name.split("Containerfile.", 1)[1]
+                        if pth.name.startswith("Containerfile.")
+                        else pth.stem
+                    ),
+                    "source": "file",
+                    "path": part,
+                    "bundle_name": None,
+                }
+            )
+    bundles_raw = os.getenv("CONTAINER_EXTENSIONS")
+    if bundles_raw:
+        for part in (p.strip() for p in bundles_raw.split(":")):
+            if not part:
+                continue
+            # Support parameterised extensions: name=arg1 arg2 ...
+            if "=" in part:
+                name, _, args = part.partition("=")
+                name = name.strip()
+                args = args.strip()
+            else:
+                name = part
+                args = None
+            exts.append(
+                {
+                    "id": name,
+                    "source": "bundle",
+                    "path": None,
+                    "bundle_name": name,
+                    "args": args,
+                }
+            )
+    return exts
+
+
+def _resolve_extension_content(descriptor: dict[str, str | None]) -> str:
+    """Return the Containerfile fragment for the given descriptor.
+
+    This helper fails fast (calls `_fatal`) when an expected file/bundle is
+    missing so callers can validate all extensions up-front without duplicating
+    existence checks.
+    """
+    if descriptor["source"] == "file":
+        p = Path(descriptor["path"] or "")
+        if not p.exists():
+            _fatal(f"Extension Containerfile not found: {p}")
+        return p.read_text(encoding="utf-8")
+    if descriptor["source"] == "bundle":
+        bundle_name = descriptor["bundle_name"]
+        out = _load_data_file(
+            f"{bundle_name}/Containerfile",
+            type_identifier="containerfile_extensions",
+            fatal_on_missing=False,
+        )
+        if out is None:
+            _fatal(f"Extension bundle not found: {bundle_name}")
+        return out[1]
+    _fatal(f"Unknown extension descriptor source: {descriptor['source']}")
+
+
+def _build_extension_image(
+    base_full_name: str,
+    base_version_tag: str,
+    extension_content: str,
+    context_path: Path | None = None,
+    image_name_override: str | None = None,
+    debug: bool = False,
+    no_cache: bool = False,
+    single_arch: bool = False,
+    extra_build_args: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Build an image that starts `FROM` the primary image and returns its tags.
+
+    The created Containerfile will begin with `FROM {base_full_name}:{base_version_tag}`
+    followed by the provided extension content.
+    """
+    if context_path is None:
+        context_path = Path(".")
+
+    LOGGER.debug(
+        "Building extension image based on %s:%s with override name '%s'",
+        base_full_name,
+        base_version_tag,
+        image_name_override,
+    )
+    return _build_image(
+        None,
+        f"FROM {base_full_name}:{base_version_tag}\n\n{extension_content}\n",
+        context_path,
+        debug=debug,
+        no_cache=no_cache,
+        plain=False,
+        single_arch=single_arch,
+        omit_target=True,
+        image_name=image_name_override or _get_package_name(),
+        extra_build_args=extra_build_args,
+    )
+
+
+def _get_prune_keep() -> int:
+    """Return the integer value of CONTAINER_PRUNE_KEEP.
+
+    Semantics:
+      -1 => keep all (no pruning)
+       0 => keep only the latest
+       N => keep latest + N previous
+    Defaults to -1 when unset or invalid.
+    """
+    raw = os.getenv("CONTAINER_PRUNE_KEEP")
+    if raw is None:
+        return -1
+    try:
+        return int(raw)
+    except Exception:
+        LOGGER.warning(
+            "Invalid CONTAINER_PRUNE_KEEP value '%s' - defaulting to -1 (no prune)", raw
+        )
+        return -1
+
+
+def _prune_images_keep(
+    full_name: str, package_name: str, keep: int, protect_tags: list[str] | None = None
+) -> None:
+    """Prune images for `full_name` keeping the most-recent `keep + 1` images.
+
+    - `keep` follows CONTAINER_PRUNE_KEEP semantics: -1 => do nothing.
+    - `protect_tags` are never removed even if older.
+    """
+    if keep < 0:
+        return
+    if protect_tags is None:
+        protect_tags = []
+
+    # Number of newest non-protected tags to retain
+    retain_count = keep + 1
+
+    # List images for this repository (newest first)
+    res = _run_command(
+        [
+            "docker",
+            "image",
+            "ls",
+            "--format",
+            "{{.Repository}}:{{.Tag}}",
+            "--filter",
+            f"reference={full_name}:*",
+        ],
+        capture_output=True,
+        acceptable_returncodes={0, 1},
+    )
+    if res.returncode != 0:
+        LOGGER.exception("Failed to list images for pruning: %s", full_name)
+        return
+
+    lines = [
+        line.strip()
+        for line in res.stdout.splitlines()
+        if line.strip() and not line.strip().startswith("<none>")
+    ]
+    # Extract tags preserving order (newest first)
+    tags_in_order: list[str] = []
+    for entry in lines:
+        if ":" not in entry:
+            continue
+        repo, tag = entry.rsplit(":", 1)
+        # Only consider entries that match the full_name (ignore other repos)
+        # repo may be like docker.io/username/test-package
+        if entry.startswith(full_name) or repo.endswith(package_name):
+            tags_in_order.append(tag)
+
+    candidates = [t for t in tags_in_order if t not in protect_tags]
+    if len(candidates) <= retain_count:
+        return
+
+    to_delete = candidates[retain_count:]
+    for tag in to_delete:
+        for img in (f"{package_name}:{tag}", f"{full_name}:{tag}"):
+            try:
+                LOGGER.info("Pruning image %s", img)
+                _run_command(["docker", "rmi", img], acceptable_returncodes={0, 1})
+            except SystemExit:
+                LOGGER.warning(
+                    "Failed to remove image %s during pruning; continuing", img
+                )
 
 
 @tasks.script(tags=["containers", "build"])
@@ -666,6 +888,7 @@ def build_image(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    build_args: str | None = None,
 ) -> None:
     """Build the container image for this project using the Containerfile template.
 
@@ -674,8 +897,35 @@ def build_image(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
+        build_args: Additional build arguments (format: "KEY=VAL:OTHER=VAL"). Overrides CONTAINER_BUILD_ARGS env var if provided.
     """
-    _build_image(
+    # Determine extensions up-front so we can log a single, accurate message
+    extensions = _parse_container_extensions()
+    extension_ids = [desc.get("id") for desc in extensions if desc.get("id")]
+    if extension_ids:
+        LOGGER.info("Building image (with extensions: %s)", ", ".join(extension_ids))
+    else:
+        LOGGER.info("Building image")
+
+    # Resolve all extension fragments up-front so we fail fast on missing
+    # bundles or files and avoid calling resolution logic multiple times.
+    resolved_fragments = [_resolve_extension_content(desc) for desc in extensions]
+
+    # Parse build-args (CLI param overrides environment). Format: "KEY=VAL:OTHER=VAL"
+    raw_build_args = (
+        build_args if build_args is not None else os.getenv("CONTAINER_BUILD_ARGS")
+    )
+    parsed_build_args: dict[str, str] | None = None
+    if raw_build_args:
+        parsed_build_args = {}
+        for part in (p.strip() for p in raw_build_args.split(":") if p.strip()):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                parsed_build_args[k.strip()] = v.strip()
+            else:
+                LOGGER.warning("Ignoring invalid build-arg token: %s", part)
+
+    version_tag, commit_tag = _build_image(
         None,
         _load_data_file("Containerfile")[1],
         Path("."),
@@ -683,17 +933,167 @@ def build_image(
         no_cache=no_cache,
         plain=plain,
         single_arch=single_arch,
+        extra_build_args=parsed_build_args,
     )
+
+    if extensions:
+        combined_content = "\n\n".join(
+            c for c in [f.rstrip() for f in resolved_fragments] if c
+        )
+        # Collect extension-specific build-args (convention per-bundle)
+        extra_build_args: dict[str, str] = {}
+        import re
+
+        for desc, fragment in zip(extensions, resolved_fragments):
+            args_val = desc.get("args")
+            if args_val is None:
+                continue
+
+            arg_names = re.findall(
+                r"^\s*ARG\s+([A-Za-z_][A-Za-z0-9_]*)", fragment, re.M
+            )
+            if not arg_names:
+                LOGGER.warning(
+                    "Extension '%s' provided arguments but its Containerfile contains no ARG declaration — arguments ignored",
+                    desc.get("id", "?"),
+                )
+                continue
+
+            # Use the first ARG that isn't already set by another extension
+            for arg_name in arg_names:
+                if arg_name not in extra_build_args:
+                    extra_build_args[arg_name] = args_val or ""
+                    break
+
+        # Merge top-level build-args with any extension-specific build-args
+        merged_build_args = {**(parsed_build_args or {})}
+        merged_build_args.update(extra_build_args or {})
+
+        _build_extension_image(
+            _get_full_image_name(),
+            version_tag,
+            combined_content,
+            context_path=Path("."),
+            debug=debug,
+            no_cache=no_cache,
+            single_arch=single_arch,
+            extra_build_args=merged_build_args or None,
+        )
+
+    keep = _get_prune_keep()
+    if keep >= 0:
+        # Protect the tags created by this build
+        protect = [t for t in (version_tag, commit_tag) if t is not None]
+        LOGGER.debug(
+            "Pruning old images; keeping %d and protecting tags: %s", keep, protect
+        )
+        _prune_images_keep(
+            _get_full_image_name(), _get_package_name(), keep, protect_tags=protect
+        )
 
 
 @tasks.script(tags=["containers"])
-def run_container(tag: str = "latest") -> None:
+def run_container(
+    tag: str | None = None,
+    *,
+    entrypoint: str | None = None,
+    command: str | None = None,
+    root: bool = False,
+    echo_env: bool = False,
+) -> None:
     """Run the Docker image as a container for this project.
 
+    By default (when `tag` is `None`) this will run the most-recently-built tag for
+    the project's image.
+
     Args:
-        tag: Image tag to run. Defaults to "latest".
+        tag: Image tag to run. If `None`, use the most-recently-built tag.
+        entrypoint: Optional entrypoint override.
+        command: Optional command to pass to the entrypoint.
+        root: Whether to run as root (only relevant with a shell entrypoint).
+        echo_env: Whether to prepend an env dump to the command.
     """
-    _run_command(["docker", "run", "--rm", "-i", "-t", f"{_get_package_name()}:{tag}"])
+    package_name = _get_package_name()
+    if not package_name:
+        _fatal("PACKAGE_NAME could not be resolved")
+
+    full_name = _get_full_image_name()
+    selected_image: str | None = None
+
+    def _image_exists(image: str) -> bool:
+        res = _run_command(
+            ["docker", "image", "inspect", image],
+            capture_output=True,
+            acceptable_returncodes={0, 1},
+        )
+        return res.returncode == 0
+
+    if tag:
+        # Prefer short name, fall back to full name if necessary
+        for candidate in (f"{package_name}:{tag}", f"{full_name}:{tag}"):
+            if _image_exists(candidate):
+                selected_image = candidate
+                break
+        if selected_image is None:
+            # Not found locally — assume full name (allow docker to pull if needed)
+            selected_image = f"{full_name}:{tag}"
+    else:
+        # Find the most-recently-built tag (newest first) for the image
+        for repo in (full_name, package_name):
+            res = _run_command(
+                [
+                    "docker",
+                    "image",
+                    "ls",
+                    "--format",
+                    "{{.Repository}}:{{.Tag}}",
+                    "--filter",
+                    f"reference={repo}:*",
+                ],
+                capture_output=True,
+                acceptable_returncodes={0, 1},
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                matched_line = next(
+                    (
+                        line
+                        for line in res.stdout.splitlines()
+                        if line.strip() and not line.strip().startswith("<none>")
+                    ),
+                    None,
+                )
+                if matched_line:
+                    selected_image = matched_line.strip()
+                    break
+        if selected_image is None:
+            _fatal(
+                f"No local images found for {package_name}. Build the image first or specify a tag."
+            )
+
+    LOGGER.info("Running container %s", selected_image)
+    _run_command(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-i",
+            "-t",
+            "--entrypoint" if entrypoint else None,
+            entrypoint,
+            "--user" if root else None,
+            "root" if root else None,
+            selected_image,
+            "-c" if command else None,
+            (
+                (
+                    "echo '=== Container Environment Variables ===' && env && echo '===================================' && exec "
+                    + command
+                )
+                if echo_env and command
+                else command
+            ),
+        ]
+    )
 
 
 @tasks.script(tags=["containers", "packaging", "release"])
@@ -711,11 +1111,7 @@ def push_image(debug: bool = False) -> None:
         suffix = ""
         # Only push 'latest' tag if there are no tags later in history
         tag = "latest" if not _has_tags_later_in_history() else None
-    registry = os.environ.get(
-        "CONTAINER_REGISTRY_URL",
-        f"docker.io/{_get_dockerhub_username()}",
-    ).strip()
-    full_name = f"{registry}/{_get_package_name()}"
+    full_name = _get_full_image_name()
     tags_to_push = [t for t in [tag, f"{_get_image_tag()}{suffix}"] if t is not None]
     for t in tags_to_push:
         full_tag = f"{full_name}:{t}"
@@ -745,9 +1141,9 @@ def bump_version(
     """Bump the project version.
 
     Args:
-        component: The version component to bump: "major", "minor", or "patch".
-        stage: Optional pre-release stage to apply: "alpha", "beta", or "rc".
-        dry_run: If True, print what would happen without making changes.
+        component: The version component to bump: `major`, `minor`, or `patch`.
+        stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
+        dry_run: If `True`, print what would happen without making changes.
     """
     from dunamai import Version
 
@@ -847,3 +1243,473 @@ def build_with_containers(
 def build_without_containers() -> None:
     """Build the project."""
     _build(False)
+
+
+def _resolve_compose_file(
+    env_var_name: str,
+    local_filename: str,
+    data_filename: str,
+    *,
+    render_template: bool = False,
+    type_identifier: str = "generic",
+) -> tuple[str, bool]:
+    """Resolve a compose file path with env/local/data precedence.
+
+    Returns the usable path and whether it should be cleaned up (temp file).
+    """
+    import tempfile
+
+    resolved_path = get_config_path(
+        env_var_name,
+        local_filename,
+        data_filename,
+        type_identifier=type_identifier,
+    )
+    if resolved_path is None:
+        _fatal(f"No compose configuration resolved for {data_filename}")
+
+    path_obj = Path(resolved_path)
+    should_template = render_template or path_obj.suffix == ".j2"
+
+    if should_template:
+        from jinja2 import Template
+
+        rendered = Template(path_obj.read_text()).render(
+            PACKAGE_NAME=_get_package_name()
+        )
+        tf = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            delete=False,
+            prefix=path_obj.stem + ".",
+            suffix=".yml",
+        )
+        temp_path = tf.name
+        tf.write(rendered)
+        tf.close()
+        return temp_path, True
+
+    return str(path_obj), False
+
+
+def _read_dotenv(path: Path) -> dict[str, str]:
+    """Parse a simple `.env` file into a `dict` (`KEY=VALUE`, ignore comments)."""
+    env: dict[str, str] = {}
+    if not path.exists():
+        return env
+    try:
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key:
+                env[key] = value
+    except Exception as exc:
+        LOGGER.debug("Failed to parse .env file %s: %s", path, exc)
+    return env
+
+
+def _append_dotenv(path: Path, items: dict[str, str]) -> None:
+    """Append key/value pairs to `.env` with a generated header comment."""
+    import datetime
+
+    header = f"\n# Auto-generated by common_python_tasks on {datetime.now().isoformat(timespec='seconds')}\n"
+    with path.open("a", encoding="utf-8") as f:
+        f.write(header)
+        for k, v in items.items():
+            f.write(f"{k}={v}\n")
+
+
+def _get_or_generate_secret(key_name: str, *, length_bytes: int = 32) -> str:
+    """Get an env var or generate, store in `.env`, and return it.
+
+    - Respects already-set environment variables
+    - If not set, checks `.env` for an existing value
+    - Otherwise generates with `secrets.token_hex(length_bytes)`, appends to `.env`,
+      logs at `INFO`, and returns the value
+    """
+    import secrets
+
+    existing = os.getenv(key_name)
+    if existing:
+        return existing
+
+    dotenv_path = Path(".env")
+    existing_in_file = _read_dotenv(dotenv_path).get(key_name)
+    if existing_in_file:
+        os.environ[key_name] = existing_in_file
+        return existing_in_file
+
+    token = secrets.token_hex(length_bytes)
+    try:
+        _append_dotenv(dotenv_path, {key_name: token})
+        LOGGER.info("Generated %s and stored it in .env", key_name)
+    except Exception as exc:
+        LOGGER.warning(
+            "Failed to persist %s to .env (%s); using in-memory only", key_name, exc
+        )
+    os.environ[key_name] = token
+    return token
+
+
+def _ensure_secrets_generated() -> None:
+    """Ensure required secrets exist (generate once and persist to .env)."""
+    _get_or_generate_secret("SECRET_KEY")
+    _get_or_generate_secret("DB_PASS")
+
+
+# Compose file variable requirements mapping by type
+_COMPOSE_VAR_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
+    "fastapi": {
+        "compose-base": {
+            "PACKAGE_NAME",
+            "PACKAGE_UNDERSCORE_NAME",
+            "API_PORT",
+            "SECRET_KEY",
+            "ENVIRONMENT",
+            "IMAGE_TAG",
+            "PYTHON_VERSION",
+            "POETRY_VERSION",
+        },
+        "compose-db": {
+            "PACKAGE_NAME",
+            "DB_BASE",
+            "DB_USER",
+            "DB_PASS",
+            "DB_PORT",
+            "IMAGE_TAG",
+            "PYTHON_VERSION",
+            "POETRY_VERSION",
+            "POSTGRES_VERSION",
+        },
+        "compose-debug": {
+            "PACKAGE_NAME",
+            "PACKAGE_UNDERSCORE_NAME",
+            "IMAGE_TAG",
+            "DEBUG_PORT",
+        },
+        "compose-db-debug": {
+            "PACKAGE_NAME",
+            "DB_BASE",
+            "DB_USER",
+            "DB_PASS",
+            "ADMINER_PORT",
+        },
+    }
+}
+
+
+def _get_required_vars_for_files(
+    compose_type: str, compose_files: list[str]
+) -> set[str]:
+    """Determine required environment variables based on compose files being used.
+
+    Args:
+        compose_type: The compose type (e.g., `fastapi`)
+        compose_files: List of compose file paths
+
+    Returns:
+        Set of environment variable names needed for the given files
+    """
+    type_requirements = _COMPOSE_VAR_REQUIREMENTS.get(compose_type, {})
+    required_vars: set[str] = set()
+
+    for file_path in compose_files:
+        # Extract the base name without path and extension
+        # Handle temp files like "compose-base.abc123.yml" -> "compose-base"
+        file_name = Path(file_path).name
+        # Remove .yml, .yaml extensions
+        for ext in [".yml", ".yaml"]:
+            if file_name.endswith(ext):
+                file_name = file_name[: -len(ext)]
+                break
+        # Remove temp file hash if present (e.g., ".abc123")
+        parts = file_name.split(".")
+        base_name = (
+            parts[0]
+            if len(parts) > 1 and parts[-1].replace("_", "").replace("-", "").isalnum()
+            else file_name
+        )
+
+        if base_name in type_requirements:
+            required_vars.update(type_requirements[base_name])
+
+    return required_vars
+
+
+def _get_compose_env(
+    image_tag: str | None = None,
+    compose_type: str | None = None,
+    compose_files: list[str] | None = None,
+) -> dict[str, str]:
+    """Get environment variables for docker-compose.
+
+    Only includes variables required by the compose files being used,
+    plus all current OS environment variables for pass-through.
+
+    Args:
+        image_tag: Docker image tag to use
+        compose_type: The compose type (e.g., `fastapi`) for variable filtering
+        compose_files: List of compose file paths for variable filtering
+
+    Returns:
+        `dict` of environment variables for docker-compose
+    """
+    import platform
+
+    package_name = _get_package_name()
+
+    # Build the full set of available variables
+    all_vars = {
+        "ADMINER_PORT": os.getenv("ADMINER_PORT", "8081"),
+        "API_PORT": os.getenv("API_PORT", "8080"),
+        "COMPOSE_MENU": "false",
+        "DB_BASE": os.getenv("DB_BASE", package_name),
+        "DB_PASS": os.getenv("DB_PASS", ""),
+        "DB_PORT": os.getenv("DB_PORT", "5432"),
+        "DB_USER": os.getenv("DB_USER", package_name),
+        "DEBUG_PORT": os.getenv("DEBUG_PORT", "5678"),
+        "ENVIRONMENT": os.getenv("ENVIRONMENT", "production"),
+        "IMAGE_TAG": image_tag or "latest",
+        "PACKAGE_NAME": package_name,
+        "PACKAGE_UNDERSCORE_NAME": package_name.replace("-", "_"),
+        "POETRY_VERSION": _get_poetry_version(),
+        "POSTGRES_VERSION": os.getenv("POSTGRES_VERSION", "17"),
+        "PYTHON_VERSION": platform.python_version(),
+        "SECRET_KEY": os.getenv("SECRET_KEY", ""),
+    }
+
+    # Determine which variables to include
+    if compose_type and compose_files:
+        required_vars = _get_required_vars_for_files(compose_type, compose_files)
+        filtered_vars = {k: v for k, v in all_vars.items() if k in required_vars}
+    else:
+        filtered_vars = all_vars
+
+    # Always include all OS environment variables for pass-through
+    return {**os.environ, **filtered_vars}
+
+
+def _load_compose_files(debug: bool = False) -> tuple[list[str], list[str]]:
+    compose_files_env = os.getenv("COMPOSE_FILE")
+    if compose_files_env:
+        LOGGER.debug(
+            "Using compose files from environment variable COMPOSE_FILE: %s",
+            compose_files_env,
+        )
+        return compose_files_env.split(":"), []
+
+    compose_type = os.getenv("COMPOSE_TYPE", "fastapi")
+    compose_addons_str = os.getenv("COMPOSE_ADDONS", "")
+    compose_addons = [a.strip() for a in compose_addons_str.split(":") if a.strip()]
+
+    LOGGER.debug(
+        "Loading compose files for type '%s' with addons: %s%s",
+        compose_type,
+        compose_addons if compose_addons else "none",
+        " (debug mode)" if debug else "",
+    )
+
+    files_and_cleanups = [
+        _resolve_compose_file(
+            f"{compose_type.upper()}_COMPOSE_BASE",
+            "compose-base.yml",
+            "compose-base.yml.j2",
+            render_template=True,
+            type_identifier=compose_type,
+        )
+    ]
+
+    for addon in compose_addons:
+        files_and_cleanups.append(
+            _resolve_compose_file(
+                f"{compose_type.upper()}_COMPOSE_{addon.upper()}",
+                f"compose-{addon}.yml",
+                f"compose-{addon}.yml.j2",
+                render_template=True,
+                type_identifier=compose_type,
+            )
+        )
+
+    if debug:
+        # Load base debug overlay
+        files_and_cleanups.append(
+            _resolve_compose_file(
+                f"{compose_type.upper()}_COMPOSE_DEBUG",
+                "compose-debug.yml",
+                "compose-debug.yml",
+                render_template=False,
+                type_identifier=compose_type,
+            )
+        )
+        # Load debug overlays only for addons that were explicitly requested
+        for addon in compose_addons:
+            files_and_cleanups.append(
+                _resolve_compose_file(
+                    f"{compose_type.upper()}_COMPOSE_{addon.upper()}_DEBUG",
+                    f"compose-{addon}-debug.yml",
+                    f"compose-{addon}-debug.yml",
+                    render_template=False,
+                    type_identifier=compose_type,
+                )
+            )
+
+    overlay_files_str = os.getenv("COMPOSE_OVERLAY_FILES", "")
+    if overlay_files_str:
+        overlay_files = [f.strip() for f in overlay_files_str.split(":") if f.strip()]
+        LOGGER.debug("Adding overlay compose files: %s", overlay_files)
+        for overlay_file in overlay_files:
+            files_and_cleanups.append((overlay_file, False))
+
+    compose_files = [path for path, _ in files_and_cleanups]
+    temp_files = [path for path, cleanup in files_and_cleanups if cleanup]
+    return compose_files, temp_files
+
+
+@tasks.script(task_name="stack-up", tags=["web", "containers"])
+def fastapi_stack_up(
+    debug: bool = False, no_cache: bool = False, detach: bool = False
+) -> None:
+    """Bring up the development stack for the application.
+
+    Args:
+        debug: Enable debug mode (auto-loads all `*-debug.yml` compose files).
+        no_cache: Do not use cache when building the image.
+        detach: Run the stack in detached mode.
+    """
+    _, commit_tag = _build_image(
+        None,
+        _load_data_file("Containerfile")[1],
+        Path("."),
+        debug=debug,
+        no_cache=no_cache,
+        single_arch=True,
+    )
+
+    # Ensure secrets exist before preparing compose environment
+    _ensure_secrets_generated()
+
+    compose_files, temp_files_to_cleanup = _load_compose_files(debug=debug)
+    compose_type = os.getenv("COMPOSE_TYPE", "fastapi")
+    compose_env = _get_compose_env(
+        image_tag=commit_tag, compose_type=compose_type, compose_files=compose_files
+    )
+    api_port = int(compose_env["API_PORT"])
+
+    def _cleanup() -> None:
+        LOGGER.debug("Caught interrupt — shutting down docker-compose...")
+        _run_command(
+            [
+                "docker-compose",
+                *[item for f in compose_files for item in ("-f", f)],
+                *[
+                    item
+                    for env_file in tasks.envfile
+                    for item in ("--env-file", env_file)
+                ],
+                "down",
+                "--remove-orphans",
+            ],
+            env=compose_env,
+        )
+
+    try:
+        LOGGER.info(
+            "Starting application. Once the stack is up, check the API docs at http://localhost:%i/api/docs",
+            api_port,
+        )
+        try:
+            _run_command(
+                [
+                    "docker-compose",
+                    *[item for f in compose_files for item in ("-f", f)],
+                    *[
+                        item
+                        for env_file in tasks.envfile
+                        for item in ("--env-file", env_file)
+                    ],
+                    "up",
+                    "--no-build",
+                    "--force-recreate",
+                    "--remove-orphans",
+                    "-d" if detach else None,
+                ],
+                env=compose_env,
+            )
+        except KeyboardInterrupt:
+            if not detach:
+                _cleanup()
+
+        if detach:
+            LOGGER.info("Application has started! To stop it, run poe stack-down")
+    finally:
+        for temp_file in temp_files_to_cleanup:
+            try:
+                Path(temp_file).unlink()
+            except FileNotFoundError:
+                pass
+
+
+@tasks.script(task_name="stack-down", tags=["web"])
+def fastapi_stack_down() -> None:
+    """Bring down the development stack for the application."""
+    compose_files, temp_files_to_cleanup = _load_compose_files()
+    compose_type = os.getenv("COMPOSE_TYPE", "fastapi")
+    compose_env = _get_compose_env(
+        compose_type=compose_type, compose_files=compose_files
+    )
+
+    try:
+        LOGGER.info("Bringing down the application stack...")
+        _run_command(
+            [
+                "docker-compose",
+                *[item for f in compose_files for item in ("-f", f)],
+                *[
+                    item
+                    for env_file in tasks.envfile
+                    for item in ("--env-file", env_file)
+                ],
+                "down",
+                "--remove-orphans",
+            ],
+            env=compose_env,
+        )
+    finally:
+        for temp_file in temp_files_to_cleanup:
+            try:
+                Path(temp_file).unlink()
+            except FileNotFoundError:
+                pass
+
+
+@tasks.script(tags=["containers", "debug"])
+def container_shell(
+    tag: str | None = None,
+    shell: str = "/bin/bash",
+    root: bool = False,
+    no_echo_env: bool = False,
+) -> None:
+    """Run the debug image with an interactive shell.
+
+    Behavior when `tag` is `None` mirrors `run_container`:
+      - select the most-recently-built tag for the project's image (do not build).
+
+    Args:
+        tag: Image tag to use. If `None`, use the most-recently-built tag.
+        shell: Shell to use inside the container.
+        root: Whether to run the shell as root.
+        no_echo_env: Whether to suppress printing environment variables on startup for debugging.
+    """
+    run_container(
+        tag,
+        entrypoint="/bin/sh",
+        command=shell,
+        root=root,
+        echo_env=not no_echo_env,
+    )

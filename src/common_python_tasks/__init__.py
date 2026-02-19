@@ -12,7 +12,7 @@ __all__ = ["TaskCollection"]
 
 def tasks(
     include_tags: "Sequence[str]" = tuple(), exclude_tags: "Sequence[str]" = tuple()
-):
+) -> dict:
     from .tasks import tasks
 
     return tasks(include_tags=include_tags, exclude_tags=exclude_tags)

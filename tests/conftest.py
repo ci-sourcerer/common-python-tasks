@@ -40,15 +40,28 @@ def mock_load_data_file():
     """Mock _load_data_file to return test data."""
     with patch("common_python_tasks.tasks._load_data_file") as mock:
 
-        def side_effect(filename):
-            if filename == "Containerfile":
+        def side_effect(filename, type_identifier="generic", fatal_on_missing=True):
+            # normalize inputs for both call styles (old: single `filename`, new: `file, type_identifier`)
+            key = filename
+            if type_identifier == "containerfile_extensions":
+                # new top-level call style: filename will be like "jq/Containerfile"
+                key = f"containerfile_extensions/{filename}"
+
+            if key == "Containerfile":
                 return ("/fake/path/Containerfile", "FROM python:3.11\n")
-            elif filename == ".dockerignore":
+            elif key == "containerfile_extensions/template_bundle/Containerfile":
+                return (
+                    "/fake/path/Containerfile.template_bundle",
+                    "# template bundle used by tests\nUSER root\nARG APT_PACKAGES\nRUN apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES} && rm -rf /var/lib/apt/lists/*\nUSER py\n",
+                )
+            elif key == ".dockerignore":
                 return (
                     "/fake/path/.dockerignore",
                     "*\n!dist/*.whl\n!pyproject.toml\n",
                 )
-            return ("/fake/path/" + filename, "")
+            if not fatal_on_missing:
+                return None
+            return ("/fake/path/" + key, "")
 
         mock.side_effect = side_effect
         yield mock

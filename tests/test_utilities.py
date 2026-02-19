@@ -68,7 +68,7 @@ def test_fatal_logs_and_exits():
         with pytest.raises(SystemExit) as exc_info:
             _fatal("Test error message")
 
-        mock_logger.error.assert_called_once_with("Test error message")
+        mock_logger.critical.assert_called_once_with("Test error message")
         assert exc_info.value.code == 1
 
 
@@ -332,13 +332,17 @@ class TestBumpVersion:
         with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
             with patch("common_python_tasks.tasks._run_command") as mock_run:
                 mock_dirty.return_value = []  # Clean repo
-                
+
                 def side_effect(command, *args, **kwargs):
                     result = MagicMock()
                     if command[:4] == ["git", "describe", "--tags", "--abbrev=0"]:
                         result.returncode = 128
                         result.stdout = ""
-                    elif len(command) >= 3 and command[0] == "git" and command[1] == "tag":
+                    elif (
+                        len(command) >= 3
+                        and command[0] == "git"
+                        and command[1] == "tag"
+                    ):
                         result.returncode = 0
                         tag_calls.append(command[-1])
                         result.stdout = ""
@@ -356,13 +360,17 @@ class TestBumpVersion:
         with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
             with patch("common_python_tasks.tasks._run_command") as mock_run:
                 mock_dirty.return_value = []  # Clean repo
-                
+
                 def side_effect(command, *args, **kwargs):
                     result = MagicMock()
                     if command[:4] == ["git", "describe", "--tags", "--abbrev=0"]:
                         result.returncode = 0
                         result.stdout = "v1.2.3"
-                    elif len(command) >= 3 and command[0] == "git" and command[1] == "tag":
+                    elif (
+                        len(command) >= 3
+                        and command[0] == "git"
+                        and command[1] == "tag"
+                    ):
                         result.returncode = 0
                         tag_calls.append(command[-1])
                         result.stdout = ""
@@ -434,30 +442,34 @@ class TestBumpVersion:
         # Test short stage names
         bump_version("patch", stage="a")
         assert tag_calls[-1] == "v0.0.1a1"
-        
+
         tag_calls.clear()
         bump_version("patch", stage="b")
         assert tag_calls[-1] == "v0.0.1b1"
 
     def test_dry_run_no_tags(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
-        
+
         with patch("common_python_tasks.tasks.LOGGER") as mock_logger:
             bump_version("patch", dry_run=True)
-            mock_logger.info.assert_called_with("Dry run: would bump version to %s", "0.0.1")
+            mock_logger.info.assert_called_with(
+                "Dry run: would bump version to %s", "0.0.1"
+            )
             assert len(tag_calls) == 0  # No tag should be created in dry run
 
     def test_dry_run_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
         from common_python_tasks.tasks import bump_version
-        
+
         with patch("common_python_tasks.tasks.LOGGER") as mock_logger:
             bump_version("minor", stage="alpha", dry_run=True)
-            mock_logger.info.assert_called_with("Dry run: would bump version to %s", "1.3.0a1")
+            mock_logger.info.assert_called_with(
+                "Dry run: would bump version to %s", "1.3.0a1"
+            )
             assert len(tag_calls) == 0  # No tag should be created in dry run
 
     def test_invalid_component_fails(self):
         from common_python_tasks.tasks import bump_version
-        
+
         with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
             mock_dirty.return_value = []
             with patch("common_python_tasks.tasks.LOGGER"):
@@ -467,7 +479,7 @@ class TestBumpVersion:
 
     def test_invalid_stage_fails(self):
         from common_python_tasks.tasks import bump_version
-        
+
         with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
             mock_dirty.return_value = []
             with patch("common_python_tasks.tasks.LOGGER"):
@@ -477,7 +489,7 @@ class TestBumpVersion:
 
     def test_dirty_repo_fails(self):
         from common_python_tasks.tasks import bump_version
-        
+
         with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
             mock_dirty.return_value = ["modified_file.py"]
             with patch("common_python_tasks.tasks.LOGGER"):
@@ -490,7 +502,7 @@ class TestBumpVersion:
 
         bump_version("MAJOR")
         assert tag_calls[-1] == "v1.0.0"
-        
+
         tag_calls.clear()
         bump_version("Minor")
         assert tag_calls[-1] == "v0.1.0"
@@ -500,7 +512,7 @@ class TestBumpVersion:
 
         bump_version("patch", stage="ALPHA")
         assert tag_calls[-1] == "v0.0.1a1"
-        
+
         tag_calls.clear()
         bump_version("patch", stage="Beta")
         assert tag_calls[-1] == "v0.0.1b1"
@@ -508,17 +520,21 @@ class TestBumpVersion:
     def test_tag_without_v_prefix(self, tag_calls):
         """Test bumping from a tag that doesn't have 'v' prefix."""
         from common_python_tasks.tasks import bump_version
-        
+
         with patch("common_python_tasks.tasks._get_dirty_files") as mock_dirty:
             with patch("common_python_tasks.tasks._run_command") as mock_run:
                 mock_dirty.return_value = []  # Clean repo
-                
+
                 def side_effect(command, *args, **kwargs):
                     result = MagicMock()
                     if command[:4] == ["git", "describe", "--tags", "--abbrev=0"]:
                         result.returncode = 0
                         result.stdout = "1.2.3"  # No 'v' prefix
-                    elif len(command) >= 3 and command[0] == "git" and command[1] == "tag":
+                    elif (
+                        len(command) >= 3
+                        and command[0] == "git"
+                        and command[1] == "tag"
+                    ):
                         result.returncode = 0
                         tag_calls.append(command[-1])
                         result.stdout = ""
