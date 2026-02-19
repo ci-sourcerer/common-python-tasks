@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1
 
 ARG PYTHON_VERSION=3
+# Variant for the runtime image, e.g. `slim`, `alpine`, etc.
+# See https://hub.docker.com/_/python for available variants.
 ARG PYTHON_VARIANT=slim
 
-FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS builder
+FROM python:${PYTHON_VERSION} AS builder
 
 ENV PYTHON_VERSION=${PYTHON_VERSION}
 
@@ -33,7 +35,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ARG APT_PACKAGES
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    [ -n "${APT_PACKAGES}" ] && apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES}
+    if [ -n "${APT_PACKAGES}" ]; then apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES}; fi
 RUN rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 
 # Create non-root user
