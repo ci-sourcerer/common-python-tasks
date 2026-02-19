@@ -560,6 +560,16 @@ def _build_image(
 ) -> tuple[str, str]:
     import platform
 
+    dist_path = Path("dist")
+    if dist_path.exists() and any(dist_path.iterdir()):
+        LOGGER.warning(
+            "The 'dist' directory is not empty. "
+            "This may indicate that old build artifacts are present which could be "
+            "unintentionally included in the image build context or cause the image "
+            "build to fail. Consider cleaning the 'dist' directory before building "
+            "with `poe clean`."
+        )
+
     if context_path is None:
         context_path = Path(".")
 
