@@ -1255,6 +1255,33 @@ def build_without_containers() -> None:
     _build(False)
 
 
+def _ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
+    """Render ``alembic.ini`` from the bundled template when a local copy is absent.
+
+    Returns ``(path, should_cleanup)``.
+    """
+    alembic_ini_path = Path("alembic.ini")
+    if alembic_ini_path.exists():
+        LOGGER.debug("Using existing alembic.ini")
+        return alembic_ini_path, False
+
+    result = _load_data_file(
+        "alembic.ini.j2", type_identifier=compose_type, fatal_on_missing=False
+    )
+    if result is None:
+        return None, False
+
+    from jinja2 import Template
+
+    _, template_content = result
+    rendered = Template(template_content).render(
+        package_name=_get_package_name(use_underscores=True),
+    )
+    alembic_ini_path.write_text(rendered, encoding="utf-8")
+    LOGGER.debug("Rendered bundled alembic.ini.j2 to %s", alembic_ini_path)
+    return alembic_ini_path, True
+
+
 def _resolve_compose_file(
     env_var_name: str,
     local_filename: str,
@@ -1505,7 +1532,7 @@ def _get_compose_env(
     return {**os.environ, **filtered_vars}
 
 
-def _load_compose_files(debug: bool = False) -> tuple[list[str], list[str]]:
+def _load_compose_files(debug: bool = False) -> tuple[list[str], list[Path]]:
     compose_files_env = os.getenv("COMPOSE_FILE")
     if compose_files_env:
         LOGGER.debug(
@@ -1577,7 +1604,15 @@ def _load_compose_files(debug: bool = False) -> tuple[list[str], list[str]]:
             files_and_cleanups.append((overlay_file, False))
 
     compose_files = [path for path, _ in files_and_cleanups]
-    temp_files = [path for path, cleanup in files_and_cleanups if cleanup]
+    temp_files = [Path(path) for path, cleanup in files_and_cleanups if cleanup]
+
+    # Render auxiliary configs needed by compose addons
+    if "db" in compose_addons:
+        if compose_type == "fastapi":
+            alembic_path, alembic_cleanup = _ensure_alembic_config(compose_type)
+            if alembic_cleanup and alembic_path:
+                temp_files.append(alembic_path)
+
     return compose_files, temp_files
 
 
@@ -1660,7 +1695,7 @@ def fastapi_stack_up(
     finally:
         for temp_file in temp_files_to_cleanup:
             try:
-                Path(temp_file).unlink()
+                temp_file.unlink()
             except FileNotFoundError:
                 pass
 
@@ -1693,7 +1728,7 @@ def fastapi_stack_down() -> None:
     finally:
         for temp_file in temp_files_to_cleanup:
             try:
-                Path(temp_file).unlink()
+                temp_file.unlink()
             except FileNotFoundError:
                 pass
 
