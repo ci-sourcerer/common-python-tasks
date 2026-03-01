@@ -1,9 +1,9 @@
 x-common-environment: &common-environment
-  DB_BASE: ${DB_BASE}
-  DB_HOST: ${PACKAGE_NAME}-db
-  DB_PORT: ${DB_PORT}
-  DB_PASS: ${DB_PASS}
-  DB_USER: ${DB_USER}
+  {{ ENV_PREFIX }}_DB_BASE: ${DB_BASE}
+  {{ ENV_PREFIX }}_DB_HOST: db
+  {{ ENV_PREFIX }}_DB_PORT: ${DB_PORT}
+  {{ ENV_PREFIX }}_DB_PASS: ${DB_PASS}
+  {{ ENV_PREFIX }}_DB_USER: ${DB_USER}
 
 x-common-build-args: &common-build-args
   PACKAGE_NAME: ${PACKAGE_NAME}
@@ -68,7 +68,7 @@ services:
     restart: "no"
     configs:
       - source: alembic_config
-        target: ./alembic.ini
+        target: /workspace/alembic.ini
 
 volumes:
   {{ PACKAGE_NAME }}-db-data:
@@ -76,4 +76,4 @@ volumes:
 
 configs:
   alembic_config:
-    file: ./alembic.ini
+    file: {{ alembic_config_path }}

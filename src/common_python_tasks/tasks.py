@@ -1,11 +1,11 @@
 import logging
 import os
+import subprocess
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import subprocess
     from typing import Literal, Any, Callable, Sequence
 
 from poethepoet_tasks import TaskCollection
@@ -214,21 +214,15 @@ def _has_tags_later_in_history() -> bool:
         acceptable_returncodes={0, 128},
     )
     if result.returncode != 0 or not result.stdout.strip():
-        # No tags exist
         return False
 
-    # Check each tag to see if it's reachable from HEAD
     for tag in result.stdout.strip().split("\n"):
-        # Check if HEAD is an ancestor of the tag's commit
-        # If git merge-base --is-ancestor HEAD <tag> returns 0, then HEAD is an ancestor
-        # If it returns 1, then HEAD is NOT an ancestor (tag is in a different branch/future)
         check_result = _run_command(
             ["git", "merge-base", "--is-ancestor", "HEAD", tag],
             capture_output=True,
             acceptable_returncodes={0, 1},
         )
         if check_result.returncode == 1:
-            # HEAD is not an ancestor of this tag, meaning the tag is later in history
             return True
 
     return False
@@ -263,8 +257,6 @@ def _get_package_name(use_underscores: bool = False) -> str:
 
 
 def _get_poetry_version() -> str:
-    # Get Poetry version without trailing metadata
-    # Probably would be better to use importlib.metadata, but this is simpler
     return (
         _run_command(["poetry", "--version"], capture_output=True)
         .stdout.strip()
@@ -305,26 +297,22 @@ def get_config_path(
     Returns:
         `Path` to config file, or `None` if config exists in `pyproject.toml`
     """
-    # Check if config exists in pyproject.toml
     if tool_name is not None:
         pyproject_data = _read_pyproject_toml()
         if pyproject_data.get("tool", {}).get(tool_name):
             LOGGER.debug("Using [tool.%s] configuration from pyproject.toml", tool_name)
             return None
 
-    # Check environment variable
     if os.getenv(env_var_name):
         config_path = Path(os.getenv(env_var_name))
         LOGGER.debug("Using config from %s: %s", env_var_name, config_path)
         return config_path
 
-    # Check for local config file
     local_config_path = Path(local_config_filename)
     if local_config_path.exists():
         LOGGER.debug("Using local config file: %s", local_config_path)
         return local_config_path
 
-    # Fall back to bundled data file
     config_path = Path(
         _load_data_file(data_config_filename, type_identifier=type_identifier)[0]
     )
@@ -591,7 +579,6 @@ def _build_image(
             f.write(containerfile_text)
         containerfile_path = Path(temp_file_path)
 
-    # Handle .dockerignore file
     dockerignore_path = context_path / ".dockerignore"
     temp_dockerignore_created = False
     if not dockerignore_path.exists():
@@ -654,7 +641,6 @@ def _build_image(
                 image_full_name = f"{prefix}/{image_name}"
             else:
                 image_full_name = image_name
-        # Build base docker build command and optionally include --target
         build_cmd = [
             "docker",
             "build",
@@ -839,10 +825,8 @@ def _prune_images_keep(
     if protect_tags is None:
         protect_tags = []
 
-    # Number of newest non-protected tags to retain
     retain_count = keep + 1
 
-    # List images for this repository (newest first)
     res = _run_command(
         [
             "docker",
@@ -865,7 +849,6 @@ def _prune_images_keep(
         for line in res.stdout.splitlines()
         if line.strip() and not line.strip().startswith("<none>")
     ]
-    # Extract tags preserving order (newest first)
     tags_in_order: list[str] = []
     for entry in lines:
         if ":" not in entry:
@@ -1136,9 +1119,12 @@ def publish_package() -> None:
 
 
 @tasks.script(task_name="build-package", tags=["packaging", "build"])
-def build_package() -> None:
+def build_package(wheel_only: bool = False) -> None:
     """Build the package (wheel and sdist)."""
-    _run_command(["poetry", "build"])
+    command = ["poetry", "build"]
+    if wheel_only:
+        command += ["--format", "wheel"]
+    _run_command(command)
 
 
 @tasks.script(tags=["packaging"])
@@ -1174,7 +1160,6 @@ def bump_version(
             "Please commit or stash changes before bumping version."
         )
 
-    # Get the latest version tag
     tag_result = _run_command(
         ["git", "describe", "--tags", "--abbrev=0"],
         capture_output=True,
@@ -1188,13 +1173,10 @@ def bump_version(
 
     bumped = Version.parse(version_str).bump(bump_index)
 
-    # Apply pre-release stage if specified
     if stage is not None:
-        # Normalize stage name
         bumped.stage = {"a": "alpha", "b": "beta"}.get(stage, stage)
         bumped.revision = 1
 
-    # Format the new version string
     new_version = bumped.serialize()
 
     if dry_run:
@@ -1256,9 +1238,9 @@ def build_without_containers() -> None:
 
 
 def _ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
-    """Render ``alembic.ini`` from the bundled template when a local copy is absent.
+    """Render `alembic.ini` from the bundled template when a local copy is absent.
 
-    Returns ``(path, should_cleanup)``.
+    Returns `(path, should_cleanup)`.
     """
     alembic_ini_path = Path("alembic.ini")
     if alembic_ini_path.exists():
@@ -1289,6 +1271,7 @@ def _resolve_compose_file(
     *,
     render_template: bool = False,
     type_identifier: str = "generic",
+    extra_template_vars: dict[str, str] | None = None,
 ) -> tuple[str, bool]:
     """Resolve a compose file path with env/local/data precedence.
 
@@ -1311,9 +1294,21 @@ def _resolve_compose_file(
     if should_template:
         from jinja2 import Template
 
-        rendered = Template(path_obj.read_text()).render(
-            PACKAGE_NAME=_get_package_name()
+        package_name = _get_package_name()
+        env_prefix = os.getenv(
+            "ENV_PREFIX",
+            package_name.upper().replace("-", "_") if package_name else "",
         )
+        template_vars = {
+            "PACKAGE_NAME": package_name,
+            "PACKAGE_UNDERSCORE_NAME": (
+                package_name.replace("-", "_") if package_name else ""
+            ),
+            "ENV_PREFIX": env_prefix,
+        }
+        if extra_template_vars:
+            template_vars.update(extra_template_vars)
+        rendered = Template(path_obj.read_text()).render(**template_vars)
         tf = tempfile.NamedTemporaryFile(
             mode="w",
             encoding="utf-8",
@@ -1400,7 +1395,6 @@ def _ensure_secrets_generated() -> None:
     _get_or_generate_secret("DB_PASS")
 
 
-# Compose file variable requirements mapping by type
 _COMPOSE_VAR_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
     "fastapi": {
         "compose-base": {
@@ -1484,7 +1478,7 @@ def _get_compose_env(
     compose_type: str | None = None,
     compose_files: list[str] | None = None,
 ) -> dict[str, str]:
-    """Get environment variables for docker-compose.
+    """Get environment variables for `docker compose`.
 
     Only includes variables required by the compose files being used,
     plus all current OS environment variables for pass-through.
@@ -1495,17 +1489,15 @@ def _get_compose_env(
         compose_files: List of compose file paths for variable filtering
 
     Returns:
-        `dict` of environment variables for docker-compose
+        `dict` of environment variables for `docker compose`
     """
     import platform
 
     package_name = _get_package_name()
 
-    # Build the full set of available variables
     all_vars = {
         "ADMINER_PORT": os.getenv("ADMINER_PORT", "8081"),
         "API_PORT": os.getenv("API_PORT", "8080"),
-        "COMPOSE_MENU": "false",
         "DB_BASE": os.getenv("DB_BASE", package_name),
         "DB_PASS": os.getenv("DB_PASS", ""),
         "DB_PORT": os.getenv("DB_PORT", "5432"),
@@ -1521,27 +1513,46 @@ def _get_compose_env(
         "SECRET_KEY": os.getenv("SECRET_KEY", ""),
     }
 
-    # Determine which variables to include
     if compose_type and compose_files:
         required_vars = _get_required_vars_for_files(compose_type, compose_files)
         filtered_vars = {k: v for k, v in all_vars.items() if k in required_vars}
     else:
         filtered_vars = all_vars
 
-    # Always include all OS environment variables for pass-through
-    return {**os.environ, **filtered_vars}
+    return {**os.environ, "COMPOSE_MENU": "false", **filtered_vars}
 
 
-def _load_compose_files(debug: bool = False) -> tuple[list[str], list[Path]]:
+def _get_compose_type() -> str:
+    """Get the compose type from environment variable or default to 'fastapi'."""
+    return os.getenv("COMPOSE_TYPE", "fastapi")
+
+
+def _load_compose_files(
+    debug: bool = False,
+) -> tuple[list[str], list[Path], list[Path]]:
+    """Load and resolve compose files.
+
+    Returns:
+        A 3-tuple of `(compose_files, temp_compose_files, temp_config_files)`.
+
+        *temp_compose_files* are rendered YAML files consumed only by
+        ``docker compose`` itself and may be removed once the command finishes
+        parsing them.
+
+        *temp_config_files* are files referenced by compose `configs:` blocks
+        (e.g. `alembic.ini`) that are bind-mounted into running containers.
+        They must persist for the lifetime of the stack and should only be
+        cleaned up **after** ``docker compose` down`.
+    """
     compose_files_env = os.getenv("COMPOSE_FILE")
     if compose_files_env:
         LOGGER.debug(
             "Using compose files from environment variable COMPOSE_FILE: %s",
             compose_files_env,
         )
-        return compose_files_env.split(":"), []
+        return compose_files_env.split(":"), [], []
 
-    compose_type = os.getenv("COMPOSE_TYPE", "fastapi")
+    compose_type = os.environ["COMPOSE_TYPE"]
     compose_addons_str = os.getenv("COMPOSE_ADDONS", "")
     compose_addons = [a.strip() for a in compose_addons_str.split(":") if a.strip()]
 
@@ -1562,6 +1573,20 @@ def _load_compose_files(debug: bool = False) -> tuple[list[str], list[Path]]:
         )
     ]
 
+    # Resolve auxiliary configs needed by addons before rendering addon compose
+    # files, so that absolute paths can be passed as template variables.
+    temp_config_files: list[Path] = []
+    addon_template_vars: dict[str, dict[str, str]] = {}
+
+    if "db" in compose_addons and compose_type == "fastapi":
+        alembic_path, alembic_cleanup = _ensure_alembic_config(compose_type)
+        if alembic_path:
+            addon_template_vars["db"] = {
+                "alembic_config_path": str(alembic_path.resolve()),
+            }
+            if alembic_cleanup:
+                temp_config_files.append(alembic_path)
+
     for addon in compose_addons:
         files_and_cleanups.append(
             _resolve_compose_file(
@@ -1570,17 +1595,17 @@ def _load_compose_files(debug: bool = False) -> tuple[list[str], list[Path]]:
                 f"compose-{addon}.yml.j2",
                 render_template=True,
                 type_identifier=compose_type,
+                extra_template_vars=addon_template_vars.get(addon),
             )
         )
 
     if debug:
-        # Load base debug overlay
         files_and_cleanups.append(
             _resolve_compose_file(
                 f"{compose_type.upper()}_COMPOSE_DEBUG",
                 "compose-debug.yml",
-                "compose-debug.yml",
-                render_template=False,
+                "compose-debug.yml.j2",
+                render_template=True,
                 type_identifier=compose_type,
             )
         )
@@ -1590,8 +1615,8 @@ def _load_compose_files(debug: bool = False) -> tuple[list[str], list[Path]]:
                 _resolve_compose_file(
                     f"{compose_type.upper()}_COMPOSE_{addon.upper()}_DEBUG",
                     f"compose-{addon}-debug.yml",
-                    f"compose-{addon}-debug.yml",
-                    render_template=False,
+                    f"compose-{addon}-debug.yml.j2",
+                    render_template=True,
                     type_identifier=compose_type,
                 )
             )
@@ -1604,133 +1629,284 @@ def _load_compose_files(debug: bool = False) -> tuple[list[str], list[Path]]:
             files_and_cleanups.append((overlay_file, False))
 
     compose_files = [path for path, _ in files_and_cleanups]
-    temp_files = [Path(path) for path, cleanup in files_and_cleanups if cleanup]
+    temp_compose_files = [Path(path) for path, cleanup in files_and_cleanups if cleanup]
 
-    # Render auxiliary configs needed by compose addons
-    if "db" in compose_addons:
-        if compose_type == "fastapi":
-            alembic_path, alembic_cleanup = _ensure_alembic_config(compose_type)
-            if alembic_cleanup and alembic_path:
-                temp_files.append(alembic_path)
-
-    return compose_files, temp_files
+    return compose_files, temp_compose_files, temp_config_files
 
 
-@tasks.script(task_name="stack-up", tags=["web", "containers"])
-def fastapi_stack_up(
-    debug: bool = False, no_cache: bool = False, detach: bool = False
+def _load_and_prepare_compose(
+    debug: bool = False,
+    image_tag: str | None = None,
+) -> tuple[list[str], list[Path], list[Path], dict[str, str]]:
+    """Load compose files and prepare environment variables.
+
+    Returns:
+        A 4-tuple of (compose_files, temp_compose_files, temp_config_files, compose_env).
+    """
+    compose_files, temp_compose_files, temp_config_files = _load_compose_files(
+        debug=debug
+    )
+    compose_type = _get_compose_type()
+    compose_env = _get_compose_env(
+        image_tag=image_tag, compose_type=compose_type, compose_files=compose_files
+    )
+    return compose_files, temp_compose_files, temp_config_files, compose_env
+
+
+def _run_docker_compose_command(
+    *args: str | None,
+    compose_files: list[str],
+    compose_env: dict[str, str],
 ) -> None:
-    """Bring up the development stack for the application.
+    """Run `docker compose` with standard file and env-file arguments.
 
     Args:
-        debug: Enable debug mode (auto-loads all `*-debug.yml` compose files).
-        no_cache: Do not use cache when building the image.
-        detach: Run the stack in detached mode.
+        *args: Command arguments (None values are filtered out).
+        compose_files: List of compose file paths.
+        compose_env: Environment variables for the command.
     """
-    _, commit_tag = _build_image(
+    _run_command(
+        [
+            *_compose_cmd_prefix(compose_files),
+            *[arg for arg in args if arg is not None],
+        ],
+        env=compose_env,
+    )
+
+
+def _compose_cmd_prefix(compose_files: list[str]) -> list[str]:
+    """Build the common `docker compose` command prefix with file and env-file flags."""
+    return [
+        "docker",
+        "compose",
+        "--project-directory",
+        os.getcwd(),
+        *[item for f in compose_files for item in ("-f", f)],
+        *[item for env_file in tasks.envfile for item in ("--env-file", env_file)],
+    ]
+
+
+def _cleanup_temp_files(*file_lists: list[Path]) -> None:
+    """Remove temporary files, ignoring files that are already gone."""
+    for file_list in file_lists:
+        for temp_file in file_list:
+            try:
+                temp_file.unlink()
+            except FileNotFoundError:
+                pass
+
+
+@tasks.script(task_name="_stack-up", tags=["web", "containers", "fastapi"])
+def _bring_up_fastapi_stack(
+    debug: bool = False,
+    no_cache: bool = False,
+    detach: bool = False,
+    services: str | None = None,
+) -> None:
+    # TODO: Don't mess with signals. Possibly use a shell-type task
+    containerfile_text = _load_data_file("Containerfile")[1]
+
+    commit_tag = _build_image(
         None,
-        _load_data_file("Containerfile")[1],
+        containerfile_text,
         Path("."),
         debug=debug,
         no_cache=no_cache,
         single_arch=True,
-    )
+    )[1]
 
-    # Ensure secrets exist before preparing compose environment
     _ensure_secrets_generated()
 
-    compose_files, temp_files_to_cleanup = _load_compose_files(debug=debug)
-    compose_type = os.getenv("COMPOSE_TYPE", "fastapi")
-    compose_env = _get_compose_env(
-        image_tag=commit_tag, compose_type=compose_type, compose_files=compose_files
+    compose_files, temp_compose_files, temp_config_files, compose_env = (
+        _load_and_prepare_compose(
+            debug=debug,
+            image_tag=commit_tag,
+        )
     )
     api_port = int(compose_env["API_PORT"])
 
-    def _cleanup() -> None:
-        LOGGER.debug("Caught interrupt — shutting down docker-compose...")
-        _run_command(
-            [
-                "docker-compose",
-                *[item for f in compose_files for item in ("-f", f)],
-                *[
-                    item
-                    for env_file in tasks.envfile
-                    for item in ("--env-file", env_file)
-                ],
-                "down",
-                "--remove-orphans",
-            ],
-            env=compose_env,
-        )
+    # When watch mode is active, `docker compose` needs the Containerfile present
+    # in the project directory so that watch-triggered rebuilds can find it.
+    watch_mode = debug and not detach
+    local_containerfile = Path("Containerfile")
+    wrote_containerfile = False
+    if watch_mode and not local_containerfile.exists():
+        local_containerfile.write_text(containerfile_text, encoding="utf-8")
+        wrote_containerfile = True
+
+    up_args = [
+        "up",
+        *(["--watch"] if debug and not detach else []),
+        *(["--no-build"] if not (debug and not detach) else []),
+        "--force-recreate",
+        "--remove-orphans",
+        *(["-d"] if detach else []),
+        *(services.split(",") if services else []),
+    ]
 
     try:
+        LOGGER.info("Building and starting the application stack...")
         LOGGER.info(
             "Starting application. Once the stack is up, check the API docs at http://localhost:%i/api/docs",
             api_port,
         )
-        try:
-            _run_command(
-                [
-                    "docker-compose",
-                    *[item for f in compose_files for item in ("-f", f)],
-                    *[
-                        item
-                        for env_file in tasks.envfile
-                        for item in ("--env-file", env_file)
-                    ],
-                    "up",
-                    "--no-build",
-                    "--force-recreate",
-                    "--remove-orphans",
-                    "-d" if detach else None,
-                ],
-                env=compose_env,
-            )
-        except KeyboardInterrupt:
-            if not detach:
-                _cleanup()
-
         if detach:
+            _run_docker_compose_command(
+                *up_args,
+                compose_files=compose_files,
+                compose_env=compose_env,
+            )
             LOGGER.info("Application has started! To stop it, run poe stack-down")
-    finally:
-        for temp_file in temp_files_to_cleanup:
+        else:
+            import signal
+
+            process = subprocess.Popen(
+                [
+                    *_compose_cmd_prefix(compose_files),
+                    *[arg for arg in up_args if arg is not None],
+                ],
+                env={**os.environ, **compose_env},
+                text=True,
+                preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN),
+            )
+
             try:
-                temp_file.unlink()
+                process.wait()
+            except KeyboardInterrupt:
+                LOGGER.debug("Received interrupt, forwarding to docker compose...")
+                process.terminate()
+                try:
+                    # Wait for compose to exit; this can also be interrupted by a
+                    # second Ctrl+C, which we simply ignore rather than bubbling
+                    # out of the task. Without this guard the outer handler will
+                    # see another KeyboardInterrupt and re-raise it, aborting the
+                    # stack-down sequence.
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    LOGGER.warning("Compose did not exit in time; killing process")
+                    process.kill()
+                except KeyboardInterrupt:
+                    LOGGER.debug("Second interrupt received while waiting; ignoring")
+                # Once we've forwarded the signal and torn the stack down we can
+                # return; there's no need for the KeyboardInterrupt to escape
+                # past this function.
+                return
+    finally:
+        if not detach:
+            _cleanup_temp_files(temp_config_files)
+        _cleanup_temp_files(temp_compose_files)
+        if wrote_containerfile:
+            try:
+                local_containerfile.unlink()
             except FileNotFoundError:
                 pass
 
 
-@tasks.script(task_name="stack-down", tags=["web"])
+_STACK_UP_DEBUG_HELP = "Enable debug mode (auto-loads all `*-debug.yml` compose files)."
+_STACK_UP_NO_CACHE_HELP = "Do not use cache when building the image."
+_STACK_UP_DETACH_HELP = "Run the stack in detached mode."
+_STACK_UP_SERVICES_HELP = (
+    "Optional comma-separated list of services to start (e.g. 'api,db'). "
+    "If not provided, all services will be started."
+)
+
+
+tasks.add(
+    task_name="stack-up",
+    task_config={
+        "help": f"""Bring up the development stack for the application.
+
+    Args:
+        debug: {_STACK_UP_DEBUG_HELP}
+        no_cache: {_STACK_UP_NO_CACHE_HELP}
+        detach: {_STACK_UP_DETACH_HELP}
+        services: {_STACK_UP_SERVICES_HELP}
+    """,
+        "sequence": ["_stack-up", "stack-down"],
+        "args": {
+            "debug": {"help": _STACK_UP_DEBUG_HELP, "type": "boolean"},
+            "no_cache": {"help": _STACK_UP_NO_CACHE_HELP, "type": "boolean"},
+            "detach": {"help": _STACK_UP_DETACH_HELP, "type": "boolean"},
+            "services": {"help": _STACK_UP_SERVICES_HELP},
+        },
+    },
+    tags=["web", "containers", "fastapi"],
+)
+
+
+@tasks.script(task_name="stack-down", tags=["web", "containers", "fastapi"])
 def fastapi_stack_down() -> None:
     """Bring down the development stack for the application."""
-    compose_files, temp_files_to_cleanup = _load_compose_files()
-    compose_type = os.getenv("COMPOSE_TYPE", "fastapi")
-    compose_env = _get_compose_env(
-        compose_type=compose_type, compose_files=compose_files
+    compose_files, temp_compose_files, temp_config_files, compose_env = (
+        _load_and_prepare_compose()
     )
 
     try:
         LOGGER.info("Bringing down the application stack...")
+        _run_docker_compose_command(
+            "rm",
+            "-f",
+            "-s",
+            "-v",
+            compose_files=compose_files,
+            compose_env=compose_env,
+        )
+    finally:
+        _cleanup_temp_files(temp_compose_files, temp_config_files)
+
+
+@tasks.script(task_name="reset-db", tags=["web", "containers", "database", "fastapi"])
+def fastapi_reset_db() -> None:
+    """Reset the database by deleting the database volume."""
+    compose_env = _load_and_prepare_compose()[3]
+
+    volume_name = f"{_get_package_name()}-db-data"
+    _run_command(
+        ["docker", "volume", "rm", "-f", volume_name],
+        capture_output=True,
+        env=compose_env,
+    )
+
+
+@tasks.script(task_name="run-db-migrations", tags=["web", "containers", "database", "fastapi"])
+def fastapi_run_db_migrations() -> None:
+    """Run database migrations."""
+    services = ["db", "migrator"]
+    _bring_up_fastapi_stack(debug=False, detach=True, services=",".join(services))
+    compose_files, _, _, compose_env = _load_and_prepare_compose()
+    _run_docker_compose_command(
+        "logs",
+        "migrator",
+        compose_files=compose_files,
+        compose_env=compose_env,
+    )
+    fastapi_stack_down()
+
+
+@tasks.script(task_name="db-shell", tags=["web", "containers", "database", "fastapi"])
+def fastapi_db_shell() -> None:
+    """Open a psql shell to the database container."""
+    _bring_up_fastapi_stack(debug=False, no_cache=True, detach=True, services="db")
+    try:
+        compose_files, _, _, compose_env = _load_and_prepare_compose()
+
         _run_command(
             [
-                "docker-compose",
+                "docker",
+                "compose",
                 *[item for f in compose_files for item in ("-f", f)],
-                *[
-                    item
-                    for env_file in tasks.envfile
-                    for item in ("--env-file", env_file)
-                ],
-                "down",
-                "--remove-orphans",
+                "exec",
+                "-it",
+                "db",
+                "psql",
+                "-U",
+                os.getenv("DB_USER", _get_package_name()),
+                os.getenv("DB_BASE", _get_package_name()),
             ],
             env=compose_env,
         )
     finally:
-        for temp_file in temp_files_to_cleanup:
-            try:
-                temp_file.unlink()
-            except FileNotFoundError:
-                pass
+        fastapi_stack_down()
 
 
 @tasks.script(tags=["containers", "debug"])

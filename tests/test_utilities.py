@@ -439,7 +439,6 @@ class TestBumpVersion:
     def test_bump_with_short_stage_names(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
 
-        # Test short stage names
         bump_version("patch", stage="a")
         assert tag_calls[-1] == "v0.0.1a1"
 

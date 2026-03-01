@@ -12,15 +12,15 @@ services:
       - -m
       - ${PACKAGE_UNDERSCORE_NAME}
     environment:
-      ENVIRONMENT: dev
+      {{ ENV_PREFIX }}_ENVIRONMENT: dev
     build:
       target: debug
     image: ${PACKAGE_NAME}:${IMAGE_TAG}
     develop:
       watch:
         - action: sync+restart
-          path: ./src/${PACKAGE_NAME}
-          target: /${PACKAGE_NAME}
+          path: ./src/${PACKAGE_UNDERSCORE_NAME}
+          target: /${PACKAGE_UNDERSCORE_NAME}
         - action: rebuild
           path: poetry.lock
     ports:

@@ -39,9 +39,9 @@ RUN --mount=type=cache,target=/var/cache/apt \
 RUN rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 
 # Create non-root user
-RUN useradd -u 1000 -m -s /sbin/nologin py
+RUN useradd -u 1000 -m -s /sbin/nologin py && mkdir -p /workspace && chown py:py /workspace
 
-WORKDIR /
+WORKDIR /workspace
 
 # Grab package from builder image
 COPY --from=builder /tmp/build/dist/*.whl /tmp/

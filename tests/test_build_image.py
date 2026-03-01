@@ -380,7 +380,6 @@ def test_build_with_multiple_extensions(
     """
     from common_python_tasks.tasks import build_image
 
-    # create two local extension Containerfile fragments
     ext1 = temp_project_dir / "Containerfile.ext1"
     ext1.write_text("# ext1\nRUN echo ext1\n")
     ext2 = temp_project_dir / "Containerfile.ext2"
@@ -423,7 +422,6 @@ def test_prune_removes_base_images_when_enabled(
     """
     from common_python_tasks.tasks import build_image
 
-    # create a local extension fragment to exercise extension build path
     ext = temp_project_dir / "Containerfile.ext1"
     ext.write_text("# ext1\nRUN echo ext1\n")
 
@@ -476,7 +474,6 @@ def test_no_prune_on_extension_failure(
     """
     from common_python_tasks.tasks import build_image
 
-    # local extension fixtures
     ext1 = temp_project_dir / "Containerfile.ext1"
     ext1.write_text("# ext1\nRUN echo ext1\n")
     ext2 = temp_project_dir / "Containerfile.ext2"
@@ -587,7 +584,6 @@ def test_build_image_accepts_build_args_param(
     mock_get_authors,
     mock_get_package_name,
 ):
-    # Ensure env not set so CLI param is used
     import os
 
     from common_python_tasks.tasks import build_image

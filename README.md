@@ -1,4 +1,4 @@
-# Common Python tasks
+# Common Python Tasks
 
 This package is a collection of (very) opinionated [Poe the Poet](https://poethepoet.natn.io/guides/packaged_tasks.html) Python tasks for common Python development workflows.
 
@@ -63,15 +63,83 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `bump-version` | Bump the project version | packaging |
 | `clean` | Clean up temporary files and directories | clean |
 | `container-shell` | Run the debug image with an interactive shell | containers, debug |
+| `db-shell` | Open a psql shell to the database container | web, containers, database |
 | `format` | Format code with autoflake, black, and isort | format |
 | `lint` | Lint Python code with autoflake, black, isort, and flake8 | lint |
 | `publish-package` | Publish the package to the PyPI server | packaging |
 | `push-image` | Push the Docker image to the container registry | containers, packaging, release |
+| `reset-db` | Reset the database by deleting the database volume | web, containers, database |
 | `run-container` | Run the Docker image as a container | containers |
-| `stack-down` | Bring down the development stack for the application | web |
+| `run-db-migrations` | Run database migrations | web, containers, database |
+| `stack-down` | Bring down the development stack for the application | web, containers |
 | `stack-up` | Bring up the development stack for the application | web, containers |
 | `test` | Run the test suite with coverage | test |
 <!-- end-tasks-table -->
+
+## Docker Compose Development Stacks
+
+Some tasks of certain tags provide Docker Compose-based development stacks for running your application with supporting services (databases, caches, etc.). Currently supports FastAPI applications with PostgreSQL.
+
+### Configuration
+
+#### `COMPOSE_TYPE`
+
+Specifies the type of application stack. Currently supported:
+
+- `fastapi` - FastAPI application with optional database, Alembic migrations
+
+Set via environment variable:
+
+```toml
+[tool.poe.env]
+COMPOSE_TYPE = "fastapi"
+```
+
+#### `COMPOSE_ADDONS`
+
+Colon-separated list of additional services to include. Available addons:
+
+- `db` - PostgreSQL database with Alembic migration support and Adminer web UI
+
+Example:
+
+```toml
+[tool.poe.env]
+COMPOSE_ADDONS = "db"
+```
+
+For multiple addons (future): `COMPOSE_ADDONS = "db:redis:cache"`
+
+### Compose File Customization
+
+The compose setup follows this precedence.
+
+1. **Environment override** - `COMPOSE_FILE` environment variable with colon-separated paths
+2. **Auto-loaded files** - Based on `COMPOSE_TYPE` and `COMPOSE_ADDONS`:
+   - `compose-base.yml` - Core application service
+   - `compose-{addon}.yml` - For each addon (e.g., `compose-db.yml`)
+   - `compose-debug.yml` - When `--debug` flag is used
+   - `compose-{addon}-debug.yml` - Debug overlays for addons
+3. **Additional overlays** - `COMPOSE_OVERLAY_FILES` with colon-separated paths
+
+You can provide local compose files or let the tasks use bundled templates.
+
+### `fastapi`
+
+The `fastapi` stack includes a service for your FastAPI application. It uses the standard Containerfile included with this package.
+
+#### Environment variables
+
+- `API_PORT` - Port for the API server (default: `8080`)
+- `SECRET_KEY` - Application secret key (auto-generated and stored in `.env` if not set)
+- `ENVIRONMENT` - Environment name like `development` or `production` (default: `production`)
+- `DEBUG_PORT` - Port for the Python debugger when using `--debug` (default: `5678`)
+- `DB_PORT` - PostgreSQL port (default: `5432`)
+- `DB_USER` - Database user (default: package name)
+- `DB_BASE` - Database name (default: package name)
+- `DB_PASS` - Database password (auto-generated and stored in `.env` if not set)
+- `POSTGRES_VERSION` - PostgreSQL Docker image version (default: `17`)
+- `ADMINER_PORT` - Adminer web UI port (default: `8081`)
 
 ## How it works
 
@@ -114,6 +182,25 @@ The following environment variables configure package and container behavior.
 - `DOCKERHUB_USERNAME` specifies the Docker Hub username for image tagging (default is current local user)
 - `CONTAINER_REGISTRY_URL` specifies the registry URL (default is `docker.io/{username}`)
 - `CUSTOM_IMAGE_ENTRYPOINT` specifies a custom entrypoint script name for containers
+
+#### Docker Compose settings
+
+The following environment variables configure Docker Compose stacks (when using the `web` tag).
+
+- `COMPOSE_TYPE` specifies the type of application stack (e.g., `fastapi`)
+- `COMPOSE_ADDONS` colon-separated list of services to include (e.g., `db` for database)
+- `COMPOSE_FILE` overrides all compose files with colon-separated paths
+- `COMPOSE_OVERLAY_FILES` additional compose files to merge (colon-separated paths)
+- `API_PORT` port for the API server (default: `8080`)
+- `SECRET_KEY` application secret key (auto-generated if not set)
+- `ENVIRONMENT` environment name (default: `production`)
+- `DEBUG_PORT` port for Python debugger in debug mode (default: `5678`)
+- `DB_PORT` PostgreSQL port (default: `5432`)
+- `DB_USER` database user (default: package name)
+- `DB_BASE` database name (default: package name)
+- `DB_PASS` database password (auto-generated if not set)
+- `POSTGRES_VERSION` PostgreSQL version (default: `17`)
+- `ADMINER_PORT` Adminer web UI port (default: `8081`)
 
 #### Debugging
 
@@ -238,6 +325,32 @@ Make sure your `pyproject.toml` contains the following.
 
 - A correct package name in `[project]`
 - A package location defined with this configuration: `[tool.poetry] packages = [{ include = "your_package", from = "src" }]`
+
+### Stack fails to start or services won't connect
+
+If `stack-up` builds successfully but services can't connect:
+
+- Check that required environment variables are set (`COMPOSE_TYPE` at minimum)
+- Verify ports aren't already in use (defaults: 8080 for API, 5432 for database, 8081 for Adminer)
+- Check Docker daemon is running: `docker info`
+- View service logs: `docker-compose logs` in your project directory
+
+### Database migrations fail
+
+If `run-db-migrations` fails:
+
+- Ensure the `db` addon is included: `COMPOSE_ADDONS=db`
+- Check that your project has Alembic configured with migrations in the expected location
+- Verify database credentials in `.env` match your Alembic configuration
+- Manually inspect the database: `poe db-shell`
+
+### Secrets not being generated
+
+If `SECRET_KEY` or `DB_PASS` aren't auto-generated:
+
+- Ensure `.env` file is writable in your project root
+- Check file permissions: `ls -la .env`
+- Generate manually: `python -c "import secrets; print(secrets.token_hex(32))"`
 
 ## Design choices
 

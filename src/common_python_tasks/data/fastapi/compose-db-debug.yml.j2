@@ -7,7 +7,7 @@ services:
     image: adminer:latest
     environment:
       ADMINER_DEFAULT_DRIVER: pgsql
-      ADMINER_DEFAULT_SERVER: ${PACKAGE_NAME}-db
+      ADMINER_DEFAULT_SERVER: db
       ADMINER_DEFAULT_DB: ${DB_BASE}
       ADMINER_DEFAULT_USERNAME: ${DB_USER}
       ADMINER_DEFAULT_PASSWORD: ${DB_PASS}
