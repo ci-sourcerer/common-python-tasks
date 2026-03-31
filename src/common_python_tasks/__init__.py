@@ -5,8 +5,6 @@ if TYPE_CHECKING:
 
 from poethepoet_tasks import TaskCollection
 
-__version__ = "0.0.0"
-
 __all__ = ["TaskCollection"]
 
 
