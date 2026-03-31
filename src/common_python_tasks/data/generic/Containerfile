@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG PYTHON_VERSION=3
-# Variant for the runtime image, e.g. `slim`, `alpine`, etc.
+# Variant for the runtime image, e.g. slim, alpine, etc.
 # See https://hub.docker.com/_/python for available variants.
 ARG PYTHON_VARIANT=slim
 
@@ -36,7 +36,6 @@ ARG APT_PACKAGES
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [ -n "${APT_PACKAGES}" ]; then apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES}; fi
-RUN rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 
 # Create non-root user
 RUN useradd -u 1000 -m -s /sbin/nologin py && mkdir -p /workspace && chown py:py /workspace
@@ -48,8 +47,6 @@ COPY --from=builder /tmp/build/dist/*.whl /tmp/
 
 # Install package
 RUN --mount=type=cache,target=/root/.cache/pip pip install /tmp/*.whl
-RUN rm -rf /tmp/*.whl \
-    && rm -rf /root/.cache/pip
 # Create symlinks for the package
 ARG PACKAGE_NAME
 ENV PACKAGE_NAME=${PACKAGE_NAME}
@@ -85,15 +82,10 @@ USER root
 COPY --from=builder /tmp/build /tmp/build
 
 RUN --mount=type=cache,target=/root/.cache/pip if [ -f /tmp/build/requirements-debug.txt ] && [ -s /tmp/build/requirements-debug.txt ]; then pip install -r /tmp/build/requirements-debug.txt; fi
-RUN rm -rf /tmp/build /root/.cache/pip
 
 USER py
 
 # Final (default) image: explicitly use runtime as the final target so debug is not used unless requested
 FROM runtime AS final
-
-USER root
-
-RUN rm -rf /tmp/build /root/.cache/pip
 
 USER py
