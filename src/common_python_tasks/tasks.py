@@ -256,6 +256,7 @@ def _get_package_name(use_underscores: bool = False) -> str:
     return name
 
 
+@lru_cache
 def _get_poetry_version() -> str:
     return (
         _run_command(["poetry", "--version"], capture_output=True)
@@ -1703,7 +1704,6 @@ def _bring_up_fastapi_stack(
     detach: bool = False,
     services: str | None = None,
 ) -> None:
-    # TODO: Don't mess with signals. Possibly use a shell-type task
     containerfile_text = _load_data_file("Containerfile")[1]
 
     commit_tag = _build_image(
@@ -1758,38 +1758,14 @@ def _bring_up_fastapi_stack(
             )
             LOGGER.info("Application has started! To stop it, run poe stack-down")
         else:
-            import signal
-
-            process = subprocess.Popen(
-                [
-                    *_compose_cmd_prefix(compose_files),
-                    *[arg for arg in up_args if arg is not None],
-                ],
-                env={**os.environ, **compose_env},
-                text=True,
-                preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN),
-            )
-
             try:
-                process.wait()
+                _run_docker_compose_command(
+                    *up_args,
+                    compose_files=compose_files,
+                    compose_env=compose_env,
+                )
             except KeyboardInterrupt:
-                LOGGER.debug("Received interrupt, forwarding to docker compose...")
-                process.terminate()
-                try:
-                    # Wait for compose to exit; this can also be interrupted by a
-                    # second Ctrl+C, which we simply ignore rather than bubbling
-                    # out of the task. Without this guard the outer handler will
-                    # see another KeyboardInterrupt and re-raise it, aborting the
-                    # stack-down sequence.
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    LOGGER.warning("Compose did not exit in time; killing process")
-                    process.kill()
-                except KeyboardInterrupt:
-                    LOGGER.debug("Second interrupt received while waiting; ignoring")
-                # Once we've forwarded the signal and torn the stack down we can
-                # return; there's no need for the KeyboardInterrupt to escape
-                # past this function.
+                LOGGER.info("Received interrupt while running compose up")
                 return
     finally:
         if not detach:
@@ -1837,20 +1813,45 @@ tasks.add(
 @tasks.script(task_name="stack-down", tags=["web", "containers", "fastapi"])
 def fastapi_stack_down() -> None:
     """Bring down the development stack for the application."""
-    compose_files, temp_compose_files, temp_config_files, compose_env = (
-        _load_and_prepare_compose()
-    )
+    compose_files = []
+    temp_compose_files: list[Path] = []
+    temp_config_files: list[Path] = []
+    compose_env: dict[str, str] = {}
+
+    try:
+        compose_files, temp_compose_files, temp_config_files, compose_env = (
+            _load_and_prepare_compose()
+        )
+    except KeyboardInterrupt:
+        # For some reason, the Ctrl+C signal seems to be processed twice when the stack is brought up in non-detached debug mode, causing a second interrupt during cleanup. To ensure that cleanup still happens in this case, catch the KeyboardInterrupt and attempt to prepare the compose files again (without debug mode) for cleanup.
+        try:
+            compose_files, temp_compose_files, temp_config_files = _load_compose_files()
+            compose_env = _get_compose_env(
+                compose_type=_get_compose_type(), compose_files=compose_files
+            )
+        except Exception as exc:
+            LOGGER.warning(
+                "Failed to prepare compose files for cleanup after interrupt: %s",
+                exc,
+            )
+            compose_files = []
+            compose_env = {**os.environ, "COMPOSE_MENU": "false"}
 
     try:
         LOGGER.info("Bringing down the application stack...")
-        _run_docker_compose_command(
-            "rm",
-            "-f",
-            "-s",
-            "-v",
-            compose_files=compose_files,
-            compose_env=compose_env,
-        )
+        try:
+            _run_docker_compose_command(
+                "rm",
+                "-f",
+                "-s",
+                "-v",
+                compose_files=compose_files,
+                compose_env=compose_env,
+            )
+        except KeyboardInterrupt:
+            LOGGER.info(
+                "Interrupt received while bringing stack down; continuing cleanup"
+            )
     finally:
         _cleanup_temp_files(temp_compose_files, temp_config_files)
 
