@@ -85,12 +85,87 @@ def require_package(package_name: str) -> None:
 
     Args:
         package_name: The name of the package to check.
-
-    Raises:
-        SystemExit: If the package is not installed.
     """
     if not is_package_installed(package_name):
         fatal(f"{package_name} is not installed")
+
+
+def log_dry_run(message: str, *args: object) -> None:
+    """Log a dry-run informational message with a yellow prefix."""
+    LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
+
+
+def infer_bump_component_from_git_cliff() -> str:
+    """Infer the next semantic version bump type using git-cliff.
+
+    Returns:
+        One of "major", "minor", or "patch".
+    """
+    import shutil
+
+    from dunamai import Version
+
+    if shutil.which("git-cliff") is None:
+        fatal(
+            "git-cliff is required for auto version bump inference. "
+            "Install git-cliff or pass one of: major, minor, patch."
+        )
+
+    result = run_command(
+        ["git-cliff", "--bumped-version", "--unreleased"],
+        capture_output=True,
+        acceptable_returncodes={0},
+    )
+    version_text = result.stdout.strip()
+    if not version_text:
+        fatal(
+            "git-cliff did not return a bumped version. "
+            "Ensure there are unreleased commits and git-cliff is configured correctly."
+        )
+
+    normalized_version = version_text.lstrip("v")
+    try:
+        bumped = Version.parse(normalized_version)
+    except Exception:
+        fatal(f"Unable to parse bumped version from git-cliff: {version_text!r}")
+
+    current_version = get_project_version_from_poetry()
+    try:
+        current = Version.parse(current_version)
+    except Exception:
+        fatal(
+            "Unable to parse current version from Poetry output: "
+            f"{current_version!r}"
+        )
+
+    def _parse_semver(version_value: str | Any) -> tuple[int, int, int]:
+        if not isinstance(version_value, str):
+            version_value = str(version_value)
+        match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version_value)
+        if match is None:
+            fatal(
+                f"Unable to parse semantic version from: {version_value!r}. "
+                "Expected a version like X.Y.Z."
+            )
+        return tuple(int(part) for part in match.groups())
+
+    def _serialize_base(value: Any) -> str:
+        return getattr(value, "serialize", lambda: str(value))()
+
+    bumped_major, bumped_minor, bumped_patch = _parse_semver(bumped.base)
+    current_major, current_minor, current_patch = _parse_semver(current.base)
+
+    if bumped_major != current_major:
+        return "major"
+    if bumped_minor != current_minor:
+        return "minor"
+    if bumped_patch != current_patch:
+        return "patch"
+
+    fatal(
+        "git-cliff did not infer a version change beyond the current version "
+        f"{_serialize_base(current.base)!r}; bumped version was {_serialize_base(bumped.base)!r}."
+    )
 
 
 def run_available_tools(

@@ -336,6 +336,24 @@ def test_run_available_tools_runs_all_when_all_installed(mock_find_spec):
     autoflake_fn.assert_called_once()
 
 
+def test_infer_bump_component_from_git_cliff_returns_expected_bump():
+    """Test auto bump inference from git-cliff output."""
+    from common_python_tasks.utils import infer_bump_component_from_git_cliff
+
+    with (
+        patch("shutil.which", return_value="/usr/bin/git-cliff"),
+        patch(
+            "common_python_tasks.utils.run_command",
+            return_value=MagicMock(stdout="v2.0.0\n", returncode=0),
+        ),
+        patch(
+            "common_python_tasks.utils.get_project_version_from_poetry",
+            return_value="1.3.2",
+        ),
+    ):
+        assert infer_bump_component_from_git_cliff() == "major"
+
+
 def test_format_all_uses_run_available_tools(mock_find_spec):
     """Test format_all task uses _run_available_tools correctly."""
     from common_python_tasks.tasks import format_all
@@ -493,58 +511,64 @@ class TestBumpVersion:
         """Mock clean repository with no existing tags."""
         with patch("common_python_tasks.utils.get_dirty_files") as mock_dirty:
             with patch(
-                "common_python_tasks.utils.get_project_version_from_poetry",
-                return_value="0.0.0",
-            ):
-                with patch("common_python_tasks.utils.run_command") as mock_run:
-                    mock_dirty.return_value = []  # Clean repo
+                "common_python_tasks.utils.ensure_on_default_branch"
+            ) as mock_default_branch:
+                with patch(
+                    "common_python_tasks.utils.get_project_version_from_poetry",
+                    return_value="0.0.0",
+                ):
+                    with patch("common_python_tasks.utils.run_command") as mock_run:
+                        mock_dirty.return_value = []  # Clean repo
 
-                    def side_effect(command, *args, **kwargs):
-                        result = MagicMock()
-                        if (
-                            len(command) >= 3
-                            and command[0] == "git"
-                            and command[1] == "tag"
-                        ):
-                            result.returncode = 0
-                            tag_calls.append(command[-1])
-                            result.stdout = ""
-                        else:
-                            result.returncode = 0
-                            result.stdout = ""
-                        return result
+                        def side_effect(command, *args, **kwargs):
+                            result = MagicMock()
+                            if (
+                                len(command) >= 2
+                                and str(command[0]) == "git"
+                                and str(command[1]) == "tag"
+                            ):
+                                result.returncode = 0
+                                tag_calls.append(str(command[-1]))
+                                result.stdout = ""
+                            else:
+                                result.returncode = 0
+                                result.stdout = ""
+                            return result
 
-                    mock_run.side_effect = side_effect
-                    yield mock_run
+                        mock_run.side_effect = side_effect
+                        yield mock_run
 
     @pytest.fixture
     def mock_clean_repo_with_tag(self, tag_calls):
         """Mock clean repository with existing v1.2.3 tag."""
         with patch("common_python_tasks.utils.get_dirty_files") as mock_dirty:
             with patch(
-                "common_python_tasks.utils.get_project_version_from_poetry",
-                return_value="1.2.3",
-            ):
-                with patch("common_python_tasks.utils.run_command") as mock_run:
-                    mock_dirty.return_value = []  # Clean repo
+                "common_python_tasks.utils.ensure_on_default_branch"
+            ) as mock_default_branch:
+                with patch(
+                    "common_python_tasks.utils.get_project_version_from_poetry",
+                    return_value="1.2.3",
+                ):
+                    with patch("common_python_tasks.utils.run_command") as mock_run:
+                        mock_dirty.return_value = []  # Clean repo
 
-                    def side_effect(command, *args, **kwargs):
-                        result = MagicMock()
-                        if (
-                            len(command) >= 3
-                            and command[0] == "git"
-                            and command[1] == "tag"
-                        ):
-                            result.returncode = 0
-                            tag_calls.append(command[-1])
-                            result.stdout = ""
-                        else:
-                            result.returncode = 0
-                            result.stdout = ""
-                        return result
+                        def side_effect(command, *args, **kwargs):
+                            result = MagicMock()
+                            if (
+                                len(command) >= 2
+                                and str(command[0]) == "git"
+                                and str(command[1]) == "tag"
+                            ):
+                                result.returncode = 0
+                                tag_calls.append(str(command[-1]))
+                                result.stdout = ""
+                            else:
+                                result.returncode = 0
+                                result.stdout = ""
+                            return result
 
-                    mock_run.side_effect = side_effect
-                    yield mock_run
+                        mock_run.side_effect = side_effect
+                        yield mock_run
 
     def test_bump_major_no_tags(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
@@ -582,6 +606,105 @@ class TestBumpVersion:
         bump_version("patch")
         assert tag_calls[-1] == "v1.2.4"
 
+    def test_bump_version_defaults_to_auto(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        def run_command_side_effect(command, *args, **kwargs):
+            result = MagicMock()
+            if (
+                len(command) >= 2
+                and str(command[0]) == "git"
+                and str(command[1]) == "tag"
+            ):
+                result.returncode = 0
+                tag_calls.append(str(command[-1]))
+                result.stdout = ""
+            else:
+                result.returncode = 0
+                result.stdout = ""
+            return result
+
+        with (
+            patch(
+                "common_python_tasks.utils.infer_bump_component_from_git_cliff",
+                return_value="minor",
+            ),
+            patch(
+                "common_python_tasks.utils.run_command",
+                side_effect=run_command_side_effect,
+            ),
+        ):
+            bump_version()
+
+        assert tag_calls[-1] == "v1.3.0"
+
+    def test_bump_version_auto_for_pre_production_forces_patch(self, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        def run_command_side_effect(command, *args, **kwargs):
+            result = MagicMock()
+            if (
+                len(command) >= 2
+                and str(command[0]) == "git"
+                and str(command[1]) == "tag"
+            ):
+                result.returncode = 0
+                tag_calls.append(str(command[-1]))
+                result.stdout = ""
+            else:
+                result.returncode = 0
+                result.stdout = ""
+            return result
+
+        with (
+            patch("common_python_tasks.utils.ensure_on_default_branch"),
+            patch(
+                "common_python_tasks.utils.infer_bump_component_from_git_cliff",
+                return_value="major",
+            ),
+            patch(
+                "common_python_tasks.utils.get_project_version_from_poetry",
+                return_value="0.2.5",
+            ),
+            patch(
+                "common_python_tasks.utils.get_dirty_files",
+                return_value=[],
+            ),
+            patch(
+                "common_python_tasks.utils.run_command",
+                side_effect=run_command_side_effect,
+            ),
+        ):
+            bump_version()
+
+        assert tag_calls[-1] == "v0.2.6"
+
+    def test_bump_version_requires_default_branch(self, tag_calls):
+        from common_python_tasks.tasks import bump_version
+
+        with (
+            patch(
+                "common_python_tasks.utils.ensure_on_default_branch",
+                side_effect=SystemExit(1),
+            ),
+            patch(
+                "common_python_tasks.utils.get_project_version_from_poetry",
+                return_value="0.2.5",
+            ),
+            patch(
+                "common_python_tasks.utils.get_dirty_files",
+                return_value=[],
+            ),
+            patch(
+                "common_python_tasks.utils.run_command",
+                return_value=MagicMock(returncode=0, stdout=""),
+            ),
+        ):
+            with pytest.raises(SystemExit):
+                bump_version()
+
+        assert tag_calls == []
+
     def test_bump_with_alpha_stage(self, mock_clean_repo_with_tag, tag_calls):
         from common_python_tasks.tasks import bump_version
 
@@ -613,27 +736,32 @@ class TestBumpVersion:
     def test_dry_run_no_tags(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
 
-        with patch("common_python_tasks.tasks.LOGGER") as mock_logger:
+        with patch("common_python_tasks.utils.LOGGER") as mock_logger:
             bump_version("patch", dry_run=True)
             mock_logger.info.assert_called_with(
-                "[DRY RUN] Would bump version to %s", "0.0.1"
+                "\033[93m[DRY RUN]\033[0m Would bump version to %s",
+                "0.0.1",
             )
             assert len(tag_calls) == 0  # No tag should be created in dry run
 
     def test_dry_run_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
         from common_python_tasks.tasks import bump_version
 
-        with patch("common_python_tasks.tasks.LOGGER") as mock_logger:
+        with patch("common_python_tasks.utils.LOGGER") as mock_logger:
             bump_version("minor", stage="alpha", dry_run=True)
             mock_logger.info.assert_called_with(
-                "[DRY RUN] Would bump version to %s", "1.3.0a1"
+                "\033[93m[DRY RUN]\033[0m Would bump version to %s",
+                "1.3.0a1",
             )
             assert len(tag_calls) == 0  # No tag should be created in dry run
 
     def test_invalid_component_fails(self):
         from common_python_tasks.tasks import bump_version
 
-        with patch("common_python_tasks.utils.get_dirty_files") as mock_dirty:
+        with (
+            patch("common_python_tasks.utils.ensure_on_default_branch"),
+            patch("common_python_tasks.utils.get_dirty_files") as mock_dirty,
+        ):
             mock_dirty.return_value = []
             with patch("common_python_tasks.utils.LOGGER"):
                 with pytest.raises(SystemExit) as exc_info:
@@ -643,7 +771,10 @@ class TestBumpVersion:
     def test_invalid_stage_fails(self):
         from common_python_tasks.tasks import bump_version
 
-        with patch("common_python_tasks.utils.get_dirty_files") as mock_dirty:
+        with (
+            patch("common_python_tasks.utils.ensure_on_default_branch"),
+            patch("common_python_tasks.utils.get_dirty_files") as mock_dirty,
+        ):
             mock_dirty.return_value = []
             with patch("common_python_tasks.utils.LOGGER"):
                 with pytest.raises(SystemExit) as exc_info:
@@ -653,9 +784,12 @@ class TestBumpVersion:
     def test_dirty_repo_fails(self):
         from common_python_tasks.tasks import bump_version
 
-        with patch("common_python_tasks.utils.get_dirty_files") as mock_dirty:
+        with (
+            patch("common_python_tasks.utils.ensure_on_default_branch"),
+            patch("common_python_tasks.utils.get_dirty_files") as mock_dirty,
+        ):
             mock_dirty.return_value = ["modified_file.py"]
-            with patch("common_python_tasks.tasks.LOGGER"):
+            with patch("common_python_tasks.utils.LOGGER"):
                 with pytest.raises(SystemExit) as exc_info:
                     bump_version("patch")
                 assert exc_info.value.code == 1
@@ -684,7 +818,10 @@ class TestBumpVersion:
         """Test bumping from a development version with PEP 440 suffixes."""
         from common_python_tasks.tasks import bump_version
 
-        with patch("common_python_tasks.utils.get_dirty_files") as mock_dirty:
+        with (
+            patch("common_python_tasks.utils.ensure_on_default_branch"),
+            patch("common_python_tasks.utils.get_dirty_files") as mock_dirty,
+        ):
             with patch(
                 "common_python_tasks.utils.get_project_version_from_poetry",
                 return_value="1.2.3.post2.dev0",
@@ -782,6 +919,10 @@ class TestReleaseTask:
                 return_value="v1.2.3",
             ),
             patch(
+                "common_python_tasks.utils.get_github_release_asset_paths",
+                return_value=[],
+            ) as mock_get_asset_paths,
+            patch(
                 "common_python_tasks.utils.publish_github_release"
             ) as mock_publish_github_release,
         ):
@@ -827,6 +968,10 @@ class TestReleaseTask:
                 return_value="v1.2.3",
             ),
             patch(
+                "common_python_tasks.utils.get_github_release_asset_paths",
+                return_value=[],
+            ) as mock_get_asset_paths,
+            patch(
                 "common_python_tasks.utils.publish_github_release"
             ) as mock_publish_github_release,
         ):
@@ -871,7 +1016,7 @@ class TestReleaseTask:
             ) as mock_has_tag,
             patch("common_python_tasks.utils.build_image") as mock_build_image,
             patch("common_python_tasks.tasks.push_image") as mock_push_image,
-            patch("common_python_tasks.tasks.LOGGER") as mock_logger,
+            patch("common_python_tasks.utils.LOGGER") as mock_logger,
             patch(
                 "common_python_tasks.utils.publish_github_release"
             ) as mock_publish_github_release,
@@ -892,24 +1037,27 @@ class TestReleaseTask:
             mock_push_image.assert_not_called()
             mock_publish_github_release.assert_not_called()
             mock_logger.info.assert_any_call(
-                "[DRY RUN] Would clean generated artifacts before release"
-            )
-            mock_logger.info.assert_any_call("[DRY RUN] Would push tags to origin")
-            mock_logger.info.assert_any_call(
-                "[DRY RUN] Would build package with clean_dist=True"
+                "\033[93m[DRY RUN]\033[0m Would clean generated artifacts before release"
             )
             mock_logger.info.assert_any_call(
-                "[DRY RUN] Would publish package with build_first=False"
+                "\033[93m[DRY RUN]\033[0m Would push tags to origin"
             )
             mock_logger.info.assert_any_call(
-                "[DRY RUN] Would build container image with debug=%s no_cache=%s plain=%s single_arch=%s",
+                "\033[93m[DRY RUN]\033[0m Would build package with clean_dist=True"
+            )
+            mock_logger.info.assert_any_call(
+                "\033[93m[DRY RUN]\033[0m Would publish package with build_first=False"
+            )
+            mock_logger.info.assert_any_call(
+                "\033[93m[DRY RUN]\033[0m Would build container image with debug=%s no_cache=%s plain=%s single_arch=%s",
                 False,
                 False,
                 False,
                 False,
             )
             mock_logger.info.assert_any_call(
-                "[DRY RUN] Would push container image with debug=%s", False
+                "\033[93m[DRY RUN]\033[0m Would push container image with debug=%s",
+                False,
             )
 
     def test_release_accepts_none_stage_string(self):
@@ -931,6 +1079,10 @@ class TestReleaseTask:
                 "common_python_tasks.utils.get_release_tag_from_poetry_version",
                 return_value="v1.2.3",
             ),
+            patch(
+                "common_python_tasks.utils.get_github_release_asset_paths",
+                return_value=[],
+            ) as mock_get_asset_paths,
             patch(
                 "common_python_tasks.utils.publish_github_release"
             ) as mock_publish_github_release,
@@ -1021,6 +1173,10 @@ class TestGitHubReleasePublishing:
             ),
             patch("common_python_tasks.utils.get_github_token", return_value="token"),
             patch(
+                "common_python_tasks.utils.get_github_release_asset_paths",
+                return_value=[],
+            ),
+            patch(
                 "common_python_tasks.utils.urllib.request.urlopen",
                 side_effect=urlopen_side_effect,
             ),
@@ -1081,6 +1237,10 @@ class TestGitHubReleasePublishing:
                 return_value="ci-sourcerer/common-python-tasks",
             ),
             patch("common_python_tasks.utils.get_github_token", return_value="token"),
+            patch(
+                "common_python_tasks.utils.get_github_release_asset_paths",
+                return_value=[],
+            ),
             patch(
                 "common_python_tasks.utils.urllib.request.urlopen",
                 side_effect=urlopen_side_effect,

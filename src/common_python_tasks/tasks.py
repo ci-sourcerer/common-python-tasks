@@ -645,7 +645,7 @@ def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
 
 @tasks.script(tags=["packaging"])
 def bump_version(
-    component: str = "patch",
+    component: str = "auto",
     *,
     stage: str | None = None,
     dry_run: bool = False,
@@ -653,16 +653,20 @@ def bump_version(
     """Bump the project version.
 
     Args:
-        component: The version component to bump: `major`, `minor`, or `patch`.
+        component: The version component to bump: `major`, `minor`, `patch`, or
+            `auto` to infer the bump from git history using git-cliff.
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
         dry_run: If `True`, print what would happen without making changes.
     """
     from typing import Literal
 
     from common_python_tasks.utils import (
+        ensure_on_default_branch,
         fatal,
         get_dirty_files,
         get_project_version_from_poetry,
+        infer_bump_component_from_git_cliff,
+        log_dry_run,
         run_command,
     )
     from dunamai import Version
@@ -670,13 +674,33 @@ def bump_version(
     component = component.lower()
     stage = stage.lower() if stage is not None else None
 
+    ensure_on_default_branch()
+
     valid_components = {"major": 0, "minor": 1, "patch": 2}
+    current_version_text: str | None = None
+    if component == "auto":
+        import re
+
+        current_version_text = get_project_version_from_poetry()
+        component = infer_bump_component_from_git_cliff()
+        current_version = Version.parse(current_version_text)
+        if re.match(r"^0\.", str(current_version.base)):
+            LOGGER.info(
+                "Current version %s is pre-production; forcing patch bump.",
+                current_version_text,
+            )
+            component = "patch"
     if component not in valid_components:
-        fatal(f'Invalid component "{component}". Must be one of: major, minor, patch')
+        fatal(
+            f'Invalid component "{component}". Must be one of: {set(valid_components.keys())} or "auto"'
+        )
     bump_index: Literal[0, 1, 2] = valid_components[component]
 
-    if stage is not None and stage not in {"alpha", "a", "beta", "b", "rc"}:
-        fatal(f'Invalid stage "{stage}". Must be one of: alpha, beta, rc')
+    valid_stages = {"alpha", "a", "beta", "b", "rc"}
+    if stage is not None and stage not in valid_stages:
+        fatal(
+            f'Invalid stage "{stage}". Must be one of: {valid_stages} or empty for none.'
+        )
 
     if get_dirty_files():
         fatal(
@@ -695,7 +719,7 @@ def bump_version(
     new_version = bumped.serialize()
 
     if dry_run:
-        LOGGER.info("[DRY RUN] Would bump version to %s", new_version)
+        log_dry_run("Would bump version to %s", new_version)
     else:
         new_tag = f"v{new_version}"
         LOGGER.info("Bumping version to %s", new_version)
@@ -731,6 +755,7 @@ def release(
         get_github_release_asset_paths,
         get_release_tag_from_poetry_version,
         is_task_tag_included,
+        log_dry_run,
     )
     from common_python_tasks.utils import (
         publish_github_release as publish_github_release_helper,
@@ -745,28 +770,26 @@ def release(
 
     ensure_on_default_branch()
     if dry_run:
-        LOGGER.info("[DRY RUN] Would clean generated artifacts before release")
+        log_dry_run("Would clean generated artifacts before release")
     else:
         clean()
 
     bump_version(component=component, stage=normalized_stage, dry_run=dry_run)
     if dry_run:
-        LOGGER.info("[DRY RUN] Would push tags to origin")
-        LOGGER.info("[DRY RUN] Would build package with clean_dist=True")
-        LOGGER.info("[DRY RUN] Would publish package with build_first=False")
+        log_dry_run("Would push tags to origin")
+        log_dry_run("Would build package with clean_dist=True")
+        log_dry_run("Would publish package with build_first=False")
         if is_task_tag_included("containers"):
-            LOGGER.info(
-                "[DRY RUN] Would build container image with debug=%s no_cache=%s plain=%s single_arch=%s",
+            log_dry_run(
+                "Would build container image with debug=%s no_cache=%s plain=%s single_arch=%s",
                 debug,
                 no_cache,
                 plain,
                 single_arch,
             )
-            LOGGER.info("[DRY RUN] Would push container image with debug=%s", debug)
+            log_dry_run("Would push container image with debug=%s", debug)
         else:
-            LOGGER.info(
-                "[DRY RUN] Containers tag is not included; would skip image build/push"
-            )
+            log_dry_run("Containers tag is not included; would skip image build/push")
         return
 
     build_package(clean_dist=True)

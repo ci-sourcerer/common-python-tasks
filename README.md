@@ -60,7 +60,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `build` | Build the project and its containers (when `containers` tag is included) | packaging, containers |
 | `build-image` | Build the container image for this project using the Dockerfile template (and configured extensions) | containers, build |
 | `build-package` | Build the package (wheel and sdist) | packaging, build |
-| `bump-version` | Bump the project version | packaging |
+| `bump-version` | Bump the project version, defaulting to an inferred semantic bump from git history when `git-cliff` is available | packaging |
 | `clean` | Clean up temporary files and directories | clean |
 | `container-shell` | Run the debug image with an interactive shell | containers, debug |
 | `db-shell` | Open a psql shell to the database container | web, containers, database |
@@ -152,6 +152,7 @@ Your project must meet the following requirements.
 - Use Poetry for dependency management
 - Have a `pyproject.toml` file at the root
 - Have a package name (automatically inferred from `project.name` in `pyproject.toml` or set via `PACKAGE_NAME` environment variable)
+- Install `git-cliff` for automatic semantic version inference when running `poe bump-version` without an explicit component
 
 ### Configuration precedence
 
