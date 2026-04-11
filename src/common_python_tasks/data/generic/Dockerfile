@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 
+# It is wise to use the Python version you are developing with. The `build-image` task
+# passes that properly here.
 ARG PYTHON_VERSION=3
 # Variant for the runtime image, e.g. slim, alpine, etc.
 # See https://hub.docker.com/_/python for available variants.
@@ -10,9 +12,16 @@ FROM python:${PYTHON_VERSION} AS builder
 ENV PYTHON_VERSION=${PYTHON_VERSION}
 
 ARG POETRY_VERSION
+ARG POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION
+ARG POETRY_PLUGIN_EXPORT_VERSION
+ARG TOMLKIT_VERSION
 
-# Install Poetry and required Poetry plugins
-RUN --mount=type=cache,target=/root/.cache/pip pip install "poetry==$POETRY_VERSION" "poetry-dynamic-versioning[plugin]" poetry-plugin-export tomlkit
+# Install Poetry and required Poetry plugins for build
+RUN --mount=type=cache,target=/root/.cache/pip pip install \
+    "poetry==$POETRY_VERSION" \
+    "poetry-dynamic-versioning[plugin]==$POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION" \
+    "poetry-plugin-export==$POETRY_PLUGIN_EXPORT_VERSION" \
+    "tomlkit==$TOMLKIT_VERSION"
 
 # Build package
 WORKDIR /tmp/build
@@ -24,6 +33,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         poetry export --only debug --without-hashes -f requirements.txt --output requirements-debug.txt; \
     fi
 
+# Build the wheel, caching Poetry's cache directory to speed up subsequent builds.
+# If running this in a CI system, you must be using a persistent builder to take
+# advantage of the cache mount, and you should configure your CI to persist the
+# cache directory between builds
 RUN --mount=type=cache,target=/root/.cache/pypoetry poetry build --format=wheel
 
 FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS runtime
@@ -33,12 +46,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 # Allow optional installation of extra APT packages via build-arg `APT_PACKAGES`
 ARG APT_PACKAGES
+ENV DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [ -n "${APT_PACKAGES}" ]; then apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES}; fi
 
-# Create non-root user
-RUN useradd -u 1000 -m -s /sbin/nologin py && mkdir -p /workspace && chown py:py /workspace
+# Create non-root user by UID only (no named account)
+RUN mkdir -p /workspace && chown 1000:1000 /workspace
 
 WORKDIR /workspace
 
@@ -64,13 +78,13 @@ LABEL git.commit=${GIT_COMMIT}
 # Set custom entrypoint if provided
 # This entrypoint is deliberately not configurable via environment variables in order to
 # ensure that the container always uses the entrypoint selected at build time. If the
-# current package does not provide a console script, the entrypoint will default to python
+# current package does not provide a console script, the entrypoint will default to `python`
 ARG CUSTOM_ENTRYPOINT
 RUN if [ -z "${CUSTOM_ENTRYPOINT}" ]; then cliScriptName=$(python -c "import os; from importlib import metadata as m; print(next((e.name for e in m.entry_points().select(group='console_scripts') if e.name==os.environ['PACKAGE_NAME'].replace('-','_')), ''))"); else cliScriptName=$CUSTOM_ENTRYPOINT; fi \
     && echo "#!/bin/sh\n\n${cliScriptName:-python} \"\$@\"" >/pkg/entrypoint.sh \
     && chmod +x /pkg/entrypoint.sh
 
-USER py
+USER 1000
 
 # Optional debug stage: only installs debug deps if they were exported. This stage will not
 # be built by default (the final stage below is the runtime image), and it will safely do
@@ -83,9 +97,9 @@ COPY --from=builder /tmp/build /tmp/build
 
 RUN --mount=type=cache,target=/root/.cache/pip if [ -f /tmp/build/requirements-debug.txt ] && [ -s /tmp/build/requirements-debug.txt ]; then pip install -r /tmp/build/requirements-debug.txt; fi
 
-USER py
+USER 1000
 
 # Final (default) image: explicitly use runtime as the final target so debug is not used unless requested
 FROM runtime AS final
 
-USER py
+USER 1000

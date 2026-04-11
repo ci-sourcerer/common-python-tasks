@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -9,36 +9,36 @@ class TestParseContainerExtensions:
     """Tests for _parse_container_extensions parameter parsing."""
 
     def test_plain_bundle_name(self, monkeypatch):
-        from common_python_tasks.tasks import _parse_container_extensions
+        from common_python_tasks.utils import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext")
 
-        result = _parse_container_extensions()
+        result = parse_container_extensions()
         assert len(result) == 1
         assert result[0]["id"] == "some_ext"
         assert result[0]["bundle_name"] == "some_ext"
         assert result[0]["args"] is None
 
     def test_parameterised_bundle(self, monkeypatch):
-        from common_python_tasks.tasks import _parse_container_extensions
+        from common_python_tasks.utils import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl")
 
-        result = _parse_container_extensions()
+        result = parse_container_extensions()
         assert len(result) == 1
         assert result[0]["id"] == "some_ext"
         assert result[0]["bundle_name"] == "some_ext"
         assert result[0]["args"] == "jq curl"
 
     def test_mixed_parameterised_and_plain(self, monkeypatch):
-        from common_python_tasks.tasks import _parse_container_extensions
+        from common_python_tasks.utils import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl wget:plain_ext")
 
-        result = _parse_container_extensions()
+        result = parse_container_extensions()
         assert len(result) == 2
         assert result[0]["id"] == "some_ext"
         assert result[0]["args"] == "jq curl wget"
@@ -46,12 +46,12 @@ class TestParseContainerExtensions:
         assert result[1]["args"] is None
 
     def test_empty_args_treated_as_empty_string(self, monkeypatch):
-        from common_python_tasks.tasks import _parse_container_extensions
+        from common_python_tasks.utils import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=")
 
-        result = _parse_container_extensions()
+        result = parse_container_extensions()
         assert len(result) == 1
         assert result[0]["args"] == ""
 
@@ -64,7 +64,7 @@ class TestResolveExtensionContent:
     """
 
     def test_template_contains_build_arg_variable(self, mock_load_data_file):
-        from common_python_tasks.tasks import _resolve_extension_content
+        from common_python_tasks.utils import resolve_extension_content
 
         desc = {
             "id": "template_bundle",
@@ -73,12 +73,12 @@ class TestResolveExtensionContent:
             "bundle_name": "template_bundle",
             "args": "jq curl",
         }
-        content = _resolve_extension_content(desc)
+        content = resolve_extension_content(desc)
         assert "APT_PACKAGES" in content
         assert "jq curl" not in content
 
     def test_missing_args_do_not_affect_content(self, mock_load_data_file):
-        from common_python_tasks.tasks import _resolve_extension_content
+        from common_python_tasks.utils import resolve_extension_content
 
         desc = {
             "id": "template_bundle",
@@ -89,13 +89,13 @@ class TestResolveExtensionContent:
         }
         # Should simply return the template content (argument application
         # happens at build time)
-        content = _resolve_extension_content(desc)
+        content = resolve_extension_content(desc)
         assert "APT_PACKAGES" in content
 
     def test_file_extension_without_placeholder_and_no_args(self, tmp_path):
-        from common_python_tasks.tasks import _resolve_extension_content
+        from common_python_tasks.utils import resolve_extension_content
 
-        ext_file = tmp_path / "Containerfile.custom"
+        ext_file = tmp_path / "Dockerfile.custom"
         ext_file.write_text("RUN echo hello\n")
 
         desc = {
@@ -105,12 +105,24 @@ class TestResolveExtensionContent:
             "bundle_name": None,
             "args": None,
         }
-        content = _resolve_extension_content(desc)
+        content = resolve_extension_content(desc)
         assert content == "RUN echo hello\n"
 
 
 class TestDockerignoreHandling:
     """Tests for .dockerignore file handling during image builds."""
+
+    @pytest.fixture(autouse=True)
+    def mock_installed_requirement_version(self):
+        with patch(
+            "common_python_tasks.utils.get_installed_requirement_version"
+        ) as mock:
+            mock.side_effect = lambda name: {
+                "poetry-dynamic-versioning[plugin]": "0.17.0",
+                "poetry-plugin-export": "1.5.0",
+                "tomlkit": "0.12.1",
+            }.get(name)
+            yield mock
 
     def test_uses_builtin_dockerignore_when_missing(
         self,
@@ -122,14 +134,14 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that built-in .dockerignore is used when none exists."""
-        from common_python_tasks.tasks import _build_image
+        from common_python_tasks.utils import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         assert not dockerignore_path.exists()
 
-        _build_image(
-            containerfile_path=None,
-            containerfile_text="FROM python:3.11\n",
+        build_image(
+            dockerfile_path=None,
+            dockerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
@@ -146,15 +158,15 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that existing .dockerignore is not modified."""
-        from common_python_tasks.tasks import _build_image
+        from common_python_tasks.utils import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         original_content = "# Custom dockerignore\n*.log\n"
         dockerignore_path.write_text(original_content)
 
-        _build_image(
-            containerfile_path=None,
-            containerfile_text="FROM python:3.11\n",
+        build_image(
+            dockerfile_path=None,
+            dockerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
@@ -171,7 +183,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that temporary .dockerignore is created and removed."""
-        from common_python_tasks.tasks import _build_image
+        from common_python_tasks.utils import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         assert not dockerignore_path.exists()
@@ -188,9 +200,9 @@ class TestDockerignoreHandling:
 
         mock_run_command.side_effect = tracking_side_effect
 
-        _build_image(
-            containerfile_path=None,
-            containerfile_text="FROM python:3.11\n",
+        build_image(
+            dockerfile_path=None,
+            dockerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
@@ -208,7 +220,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that temporary .dockerignore is cleaned up even on error."""
-        from common_python_tasks.tasks import _build_image
+        from common_python_tasks.utils import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
 
@@ -235,9 +247,9 @@ class TestDockerignoreHandling:
         mock_run_command.side_effect = failing_side_effect
 
         with pytest.raises(SystemExit):
-            _build_image(
-                containerfile_path=None,
-                containerfile_text="FROM python:3.11\n",
+            build_image(
+                dockerfile_path=None,
+                dockerfile_text="FROM python:3.11\n",
                 context_path=temp_project_dir,
             )
 
@@ -253,7 +265,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that the correct content is written from built-in .dockerignore."""
-        from common_python_tasks.tasks import _build_image
+        from common_python_tasks.utils import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         expected_content = "*\n!dist/*.whl\n!pyproject.toml\n"
@@ -270,9 +282,9 @@ class TestDockerignoreHandling:
 
         mock_run_command.side_effect = tracking_side_effect
 
-        _build_image(
-            containerfile_path=None,
-            containerfile_text="FROM python:3.11\n",
+        build_image(
+            dockerfile_path=None,
+            dockerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
@@ -292,7 +304,7 @@ class TestBuildImageLatestTag:
         mock_get_package_name,
     ):
         """Test that 'latest' tag is used when no tags are later in history."""
-        from common_python_tasks.tasks import _build_image
+        from common_python_tasks.utils import build_image
 
         build_command = None
         original_side_effect = mock_run_command.side_effect
@@ -310,9 +322,9 @@ class TestBuildImageLatestTag:
 
         mock_run_command.side_effect = tracking_side_effect
 
-        _build_image(
-            containerfile_path=None,
-            containerfile_text="FROM python:3.11\n",
+        build_image(
+            dockerfile_path=None,
+            dockerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
@@ -329,7 +341,7 @@ class TestBuildImageLatestTag:
         mock_get_package_name,
     ):
         """Test that 'latest' tag is NOT used when tags are later in history."""
-        from common_python_tasks.tasks import _build_image
+        from common_python_tasks.utils import build_image
 
         build_command = None
         original_side_effect = mock_run_command.side_effect
@@ -350,9 +362,9 @@ class TestBuildImageLatestTag:
 
         mock_run_command.side_effect = tracking_side_effect
 
-        _build_image(
-            containerfile_path=None,
-            containerfile_text="FROM python:3.11\n",
+        build_image(
+            dockerfile_path=None,
+            dockerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
         )
 
@@ -374,20 +386,18 @@ def test_build_with_multiple_extensions(
     mock_get_package_name,
     monkeypatch,
 ):
-    """Building with multiple extension Containerfiles should build base + extensions.
+    """Building with multiple extension Dockerfiles should build base + extensions.
 
-    Use local `Containerfile.<name>` fixtures (not bundled test fragments).
+    Use local `Dockerfile.<name>` fixtures (not bundled test fragments).
     """
     from common_python_tasks.tasks import build_image
 
-    ext1 = temp_project_dir / "Containerfile.ext1"
+    ext1 = temp_project_dir / "Dockerfile.ext1"
     ext1.write_text("# ext1\nRUN echo ext1\n")
-    ext2 = temp_project_dir / "Containerfile.ext2"
+    ext2 = temp_project_dir / "Dockerfile.ext2"
     ext2.write_text("# ext2\nRUN echo ext2\n")
 
-    monkeypatch.setenv(
-        "CONTAINER_EXTENSION_FILES", "Containerfile.ext1:Containerfile.ext2"
-    )
+    monkeypatch.setenv("CONTAINER_EXTENSION_FILES", "Dockerfile.ext1:Dockerfile.ext2")
     # Ensure any bundled CONTAINER_EXTENSIONS in the outer environment do not affect this test
     monkeypatch.delenv("CONTAINER_EXTENSIONS", raising=False)
 
@@ -422,10 +432,10 @@ def test_prune_removes_base_images_when_enabled(
     """
     from common_python_tasks.tasks import build_image
 
-    ext = temp_project_dir / "Containerfile.ext1"
+    ext = temp_project_dir / "Dockerfile.ext1"
     ext.write_text("# ext1\nRUN echo ext1\n")
 
-    monkeypatch.setenv("CONTAINER_EXTENSION_FILES", "Containerfile.ext1")
+    monkeypatch.setenv("CONTAINER_EXTENSION_FILES", "Dockerfile.ext1")
     monkeypatch.setenv("CONTAINER_PRUNE_KEEP", "0")
 
     calls: list[list[str]] = []
@@ -470,18 +480,16 @@ def test_no_prune_on_extension_failure(
 ):
     """If an extension build fails, pruning should not run and base images remain.
 
-    Use local extension Containerfile fixtures instead of bundled test fragments.
+    Use local extension Dockerfile fixtures instead of bundled test fragments.
     """
     from common_python_tasks.tasks import build_image
 
-    ext1 = temp_project_dir / "Containerfile.ext1"
+    ext1 = temp_project_dir / "Dockerfile.ext1"
     ext1.write_text("# ext1\nRUN echo ext1\n")
-    ext2 = temp_project_dir / "Containerfile.ext2"
+    ext2 = temp_project_dir / "Dockerfile.ext2"
     ext2.write_text("# ext2\nRUN echo ext2\n")
 
-    monkeypatch.setenv(
-        "CONTAINER_EXTENSION_FILES", "Containerfile.ext1:Containerfile.ext2"
-    )
+    monkeypatch.setenv("CONTAINER_EXTENSION_FILES", "Dockerfile.ext1:Dockerfile.ext2")
     monkeypatch.setenv("CONTAINER_PRUNE_KEEP", "0")
 
     call_count = 0
@@ -517,7 +525,7 @@ def test_extension_template_support(
     mock_get_package_name,
     monkeypatch,
 ):
-    """CONTAINER_EXTENSIONS should load bundled Containerfile templates.
+    """CONTAINER_EXTENSIONS should load bundled Dockerfile templates.
 
     Verify APT_PACKAGES can be provided via CONTAINER_BUILD_ARGS and is passed to the build.
     """
@@ -574,6 +582,51 @@ def test_build_arg_with_multiple_packages(
     assert len(build_calls) == 1
     base_build_cmd = build_calls[0]
     assert any("APT_PACKAGES=jq curl" in str(a) for a in base_build_cmd)
+
+
+def test_build_image_passes_required_dependency_versions(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+):
+    import os
+    from unittest.mock import patch
+
+    from common_python_tasks.tasks import build_image
+
+    os.environ.pop("CONTAINER_BUILD_ARGS", None)
+
+    with patch(
+        "common_python_tasks.utils.get_installed_requirement_version",
+        side_effect=lambda name: {
+            "poetry-dynamic-versioning[plugin]": "0.17.0",
+            "poetry-plugin-export": "1.5.0",
+            "tomlkit": "0.12.1",
+        }.get(name),
+    ):
+        build_calls: list[list[str]] = []
+        original = mock_run_command.side_effect
+
+        def tracking(command, *args, **kwargs):
+            if "docker" in command and "build" in command:
+                build_calls.append(command)
+            return original(command, *args, **kwargs)
+
+        mock_run_command.side_effect = tracking
+
+        build_image()
+
+    assert len(build_calls) == 1
+    base_build_cmd = build_calls[0]
+    assert any(
+        "POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION=0.17.0" in str(a)
+        for a in base_build_cmd
+    )
+    assert any("POETRY_PLUGIN_EXPORT_VERSION=1.5.0" in str(a) for a in base_build_cmd)
+    assert any("TOMLKIT_VERSION=0.12.1" in str(a) for a in base_build_cmd)
 
 
 def test_build_image_accepts_build_args_param(

@@ -20,7 +20,7 @@ services:
       <<: *common-environment
     build:
       context: .
-      dockerfile: Containerfile
+      dockerfile: Dockerfile
       args: *common-build-args
       target: runtime
     image: ${PACKAGE_NAME}:${IMAGE_TAG}
@@ -32,6 +32,8 @@ services:
         published: ${API_PORT}
         protocol: tcp
     restart: always
+    tmpfs:
+      - /.gunicorn
 
 networks:
   default:

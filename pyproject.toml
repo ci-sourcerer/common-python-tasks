@@ -2,7 +2,7 @@
 name = "common-python-tasks"
 description = "Opinionated Poe the Poet tasks for Python package development."
 readme = "README.md"
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.11,<4.0"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Joseph Asbury", email = "ci_sourcerer@yahoo.com" }]
@@ -10,7 +10,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",

@@ -58,7 +58,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | Task | Description | Tags |
 | - | - | - |
 | `build` | Build the project and its containers (when `containers` tag is included) | packaging, containers |
-| `build-image` | Build the container image for this project using the Containerfile template | containers, build |
+| `build-image` | Build the container image for this project using the Dockerfile template (and configured extensions) | containers, build |
 | `build-package` | Build the package (wheel and sdist) | packaging, build |
 | `bump-version` | Bump the project version | packaging |
 | `clean` | Clean up temporary files and directories | clean |
@@ -68,6 +68,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `lint` | Lint Python code with autoflake, black, isort, and flake8 | lint |
 | `publish-package` | Publish the package to the PyPI server | packaging |
 | `push-image` | Push the Docker image to the container registry | containers, packaging, release |
+| `release` | Run package release flow and publish containers when `containers` tag is included | packaging, release |
 | `reset-db` | Reset the database by deleting the database volume | web, containers, database |
 | `run-container` | Run the Docker image as a container | containers |
 | `run-db-migrations` | Run database migrations | web, containers, database |
@@ -126,7 +127,7 @@ You can provide local compose files or let the tasks use bundled templates.
 
 ### `fastapi`
 
-The `fastapi` stack includes a service for your FastAPI application. It uses the standard Containerfile included with this package.
+The `fastapi` stack includes a service for your FastAPI application. It uses the standard Dockerfile included with this package.
 
 #### Environment variables
 
@@ -181,6 +182,8 @@ The following environment variables configure package and container behavior.
 - `POETRY_VERSION` overrides the Poetry version for container builds
 - `DOCKERHUB_USERNAME` specifies the Docker Hub username for image tagging (default is current local user)
 - `CONTAINER_REGISTRY_URL` specifies the registry URL (default is `docker.io/{username}`)
+- `CONTAINER_BUILD_ARGS` provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
+- `CONTAINER_PRUNE_KEEP` controls image pruning after builds (`-1` keep all, `0` keep latest only, `N` keep latest + `N` previous)
 - `CUSTOM_IMAGE_ENTRYPOINT` specifies a custom entrypoint script name for containers
 
 #### Docker Compose settings
@@ -262,32 +265,6 @@ addopts = "-ra"
 
 The `test` task will automatically use your `[tool.pytest.ini_options]` configuration.
 
-## Release workflow
-
-The `release` tag is used to identify tasks that are part of the release process. To perform a complete release, follow these steps.
-
-```shell
-# 1. Ensure all changes are committed
-git add .
-git commit -m "Prepare for release"  # You probably want a better commit message than this
-
-# 2. Bump the version (creates a git tag)
-poe bump-version patch  # or 'minor', 'major'; for pre-releases: poe bump-version patch --stage alpha
-
-# 3. Build the package
-poetry build
-
-# 4. Publish to PyPI
-poe publish-package
-
-# 5. (Optional) If using containers
-poe build-image
-poe push-image
-
-# 6. Push tags to remote
-git push --tags
-```
-
 ## Troubleshooting
 
 ### Tasks not showing up with `poe --help`
@@ -354,9 +331,9 @@ If `SECRET_KEY` or `DB_PASS` aren't auto-generated:
 
 ## Design choices
 
-### Containerfile (see [src/common_python_tasks/data/Containerfile](src/common_python_tasks/data/Containerfile))
+### Dockerfile (see [src/common_python_tasks/data/Dockerfile](src/common_python_tasks/data/Dockerfile))
 
-The standard Python Containerfile incorporates several intentional design choices.
+The standard Python Dockerfile incorporates several intentional design choices.
 
 - Multi-stage build: The build stage installs Poetry and builds a wheel while the runtime stage installs only the wheel to keep the final image slim and reproducible
 - Pip and Poetry cache mounts speed up iterative builds without bloating the final image
