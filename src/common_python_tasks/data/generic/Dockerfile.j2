@@ -50,6 +50,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     if [ -n "${APT_PACKAGES}" ]; then apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES}; fi
+{% if DEPS_IMAGE %}
+
+# Pull external dependencies from the pre-built deps image
+ARG DEPS_IMAGE
+COPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps
+{% endif %}
+{% if DEPS_MOVE_SCRIPT %}
+RUN python - <<'PYCODE'
+{{ DEPS_MOVE_SCRIPT }}
+PYCODE
+{% endif %}
 
 # Create non-root user by UID only (no named account)
 RUN mkdir -p /workspace && chown 1000:1000 /workspace
@@ -85,6 +96,8 @@ RUN if [ -z "${CUSTOM_ENTRYPOINT}" ]; then cliScriptName=$(python -c "import os;
     && chmod +x /pkg/entrypoint.sh
 
 USER 1000
+
+{{ EXTENSION_CONTENT|default('') }}
 
 # Optional debug stage: only installs debug deps if they were exported. This stage will not
 # be built by default (the final stage below is the runtime image), and it will safely do

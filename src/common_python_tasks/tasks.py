@@ -297,14 +297,19 @@ def build_image(
         build_args: Additional build arguments (format: "KEY=VAL:OTHER=VAL"). Overrides CONTAINER_BUILD_ARGS env var if provided.
     """
     from common_python_tasks.utils import (
-        build_extension_image,
+        build_deps_image,
         build_image,
+        fatal,
         get_full_image_name,
         get_package_name,
         get_prune_keep,
         load_data_file,
+        parse_container_deps_mappings,
+        parse_container_deps_source,
         parse_container_extensions,
         prune_images_keep,
+        render_deps_move_script,
+        render_template_text,
         resolve_extension_content,
     )
 
@@ -334,17 +339,8 @@ def build_image(
             else:
                 LOGGER.warning("Ignoring invalid build-arg token: %s", part)
 
-    version_tag, commit_tag = build_image(
-        dockerfile_path=None,
-        dockerfile_text=load_data_file("Dockerfile")[1],
-        context_path=Path("."),
-        debug=debug,
-        no_cache=no_cache,
-        plain=plain,
-        single_arch=single_arch,
-        extra_build_args=parsed_build_args,
-    )
-
+    combined_content = ""
+    merged_build_args = parsed_build_args
     if extensions:
         combined_content = "\n\n".join(
             c for c in [f.rstrip() for f in resolved_fragments] if c
@@ -376,19 +372,52 @@ def build_image(
 
         # Merge top-level build-args with any extension-specific build-args
         merged_build_args = {**(parsed_build_args or {})}
-        merged_build_args.update(extra_build_args or {})
+        merged_build_args.update(extra_build_args)
 
-        build_extension_image(
-            get_full_image_name(),
-            version_tag,
-            combined_content,
+    # Optionally build a deps collector image
+    deps_dockerfile_path, deps_content = parse_container_deps_source()
+    deps_mappings = parse_container_deps_mappings()
+    if deps_mappings and not (deps_content or deps_dockerfile_path):
+        fatal(
+            "CONTAINER_DEPS_MAPPINGS is set but no CONTAINER_DEPS_CONTENT or CONTAINER_DEPS_FILE was provided"
+        )
+
+    deps_image_tag = ""
+    deps_move_script = ""
+    if deps_content or deps_dockerfile_path:
+        deps_image_tag = build_deps_image(
+            deps_content=deps_content,
+            deps_dockerfile_path=deps_dockerfile_path,
             context_path=Path("."),
-            debug=debug,
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
-            extra_build_args=merged_build_args or None,
+            extra_build_args=parsed_build_args,
         )
+        if merged_build_args is None:
+            merged_build_args = {}
+        merged_build_args["DEPS_IMAGE"] = deps_image_tag
+        deps_move_script = render_deps_move_script(deps_mappings or {})
+
+    dockerfile_text = render_template_text(
+        load_data_file("Dockerfile.j2")[1],
+        {
+            "EXTENSION_CONTENT": combined_content,
+            "DEPS_IMAGE": deps_image_tag,
+            "DEPS_MOVE_SCRIPT": deps_move_script,
+        },
+    )
+
+    version_tag, commit_tag = build_image(
+        dockerfile_path=None,
+        dockerfile_text=dockerfile_text,
+        context_path=Path("."),
+        debug=debug,
+        no_cache=no_cache,
+        plain=plain,
+        single_arch=single_arch,
+        extra_build_args=merged_build_args or None,
+    )
 
     keep = get_prune_keep()
     if keep >= 0:
@@ -836,10 +865,14 @@ def fastapi_stack_up(
         exec_script,
         load_and_prepare_compose,
         load_data_file,
+        render_template_text,
         run_docker_compose_command,
     )
 
-    dockerfile_text = load_data_file("Dockerfile")[1]
+    dockerfile_text = render_template_text(
+        load_data_file("Dockerfile.j2")[1],
+        {"EXTENSION_CONTENT": ""},
+    )
 
     commit_tag = build_image(
         None,

@@ -413,8 +413,23 @@ def test_build_with_multiple_extensions(
 
     build_image()
 
-    # Expect 2 docker build invocations: base + stacked extensions
-    assert len(build_calls) == 2
+    # Expect a single Docker build invocation with extensions injected into the base image
+    assert len(build_calls) == 1
+
+
+def test_render_template_text_injects_extension_content():
+    from common_python_tasks.utils import render_template_text
+
+    template = (
+        "FROM runtime\n{{ EXTENSION_CONTENT|default('') }}\nFROM runtime AS debug\n"
+    )
+    rendered = render_template_text(
+        template,
+        {"EXTENSION_CONTENT": "# ext1\nRUN echo ext1\n"},
+    )
+
+    assert "RUN echo ext1" in rendered
+    assert rendered.index("RUN echo ext1") < rendered.index("FROM runtime AS debug")
 
 
 def test_prune_removes_base_images_when_enabled(
@@ -492,18 +507,13 @@ def test_no_prune_on_extension_failure(
     monkeypatch.setenv("CONTAINER_EXTENSION_FILES", "Dockerfile.ext1:Dockerfile.ext2")
     monkeypatch.setenv("CONTAINER_PRUNE_KEEP", "0")
 
-    call_count = 0
     original = mock_run_command.side_effect
 
     def failing_side_effect(command, *args, **kwargs):
-        nonlocal call_count
         if "docker" in command and "build" in command:
-            call_count += 1
-            # Fail the second build (first is base, second is first extension)
-            if call_count == 2:
-                import sys
+            import sys
 
-                sys.exit(1)
+            sys.exit(1)
         return original(command, *args, **kwargs)
 
     mock_run_command.side_effect = failing_side_effect
@@ -714,3 +724,332 @@ def test_container_shell_fails_when_no_images(
 
     with pytest.raises(SystemExit):
         container_shell()
+
+
+class TestParseContainerDeps:
+    """Tests for parse_container_deps env var handling."""
+
+    def test_returns_none_when_unset(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.delenv("CONTAINER_DEPS_FILE", raising=False)
+        assert parse_container_deps() is None
+
+    def test_returns_content_from_env(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps
+
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "RUN apt-get install -y curl")
+        assert parse_container_deps() == "RUN apt-get install -y curl"
+
+    def test_returns_content_from_file(self, monkeypatch, tmp_path):
+        from common_python_tasks.utils import parse_container_deps
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        deps_file = tmp_path / "deps.Dockerfile"
+        deps_file.write_text("RUN pip install boto3\n", encoding="utf-8")
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", str(deps_file))
+        assert parse_container_deps() == "RUN pip install boto3"
+
+    def test_content_takes_precedence_over_file(self, monkeypatch, tmp_path):
+        from common_python_tasks.utils import parse_container_deps
+
+        deps_file = tmp_path / "deps.Dockerfile"
+        deps_file.write_text("FROM FILE\n", encoding="utf-8")
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "FROM ENV")
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", str(deps_file))
+        assert parse_container_deps() == "FROM ENV"
+
+    def test_file_source_returns_path_when_no_content(self, monkeypatch, tmp_path):
+        from common_python_tasks.utils import parse_container_deps_source
+
+        deps_file = tmp_path / "deps.Dockerfile"
+        deps_file.write_text("FROM FILE\n", encoding="utf-8")
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", str(deps_file))
+
+        dockerfile_path, content = parse_container_deps_source()
+        assert dockerfile_path == deps_file
+        assert content is None
+
+    def test_content_overrides_file_source(self, monkeypatch, tmp_path):
+        from common_python_tasks.utils import parse_container_deps_source
+
+        deps_file = tmp_path / "deps.Dockerfile"
+        deps_file.write_text("FROM FILE\n", encoding="utf-8")
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "FROM ENV")
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", str(deps_file))
+
+        dockerfile_path, content = parse_container_deps_source()
+        assert dockerfile_path is None
+        assert content == "FROM ENV"
+
+    def test_file_missing_raises(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", "/nonexistent/deps.Dockerfile")
+        with pytest.raises(SystemExit):
+            parse_container_deps()
+
+    def test_empty_content_returns_none(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps
+
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "   ")
+        monkeypatch.delenv("CONTAINER_DEPS_FILE", raising=False)
+        assert parse_container_deps() is None
+
+
+class TestParseContainerDepsMappings:
+    """Tests for parse_container_deps_mappings env var handling."""
+
+    def test_returns_none_when_unset(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps_mappings
+
+        monkeypatch.delenv("CONTAINER_DEPS_MAPPINGS", raising=False)
+        assert parse_container_deps_mappings() is None
+
+    def test_parses_simple_mappings(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps_mappings
+
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_MAPPINGS",
+            "dep1:/opt/dep1 dep2:/usr/local/bin/dep2",
+        )
+        assert parse_container_deps_mappings() == {
+            "dep1": "/opt/dep1",
+            "dep2": "/usr/local/bin/dep2",
+        }
+
+    def test_parses_quoted_paths(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps_mappings
+
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_MAPPINGS",
+            "dep1:'/opt/dep one' dep2:\"/usr/local/bin/dep two\"",
+        )
+        assert parse_container_deps_mappings() == {
+            "dep1": "/opt/dep one",
+            "dep2": "/usr/local/bin/dep two",
+        }
+
+    def test_invalid_token_raises(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps_mappings
+
+        monkeypatch.setenv("CONTAINER_DEPS_MAPPINGS", "invalid-token")
+        with pytest.raises(SystemExit):
+            parse_container_deps_mappings()
+
+    def test_duplicate_name_raises(self, monkeypatch):
+        from common_python_tasks.utils import parse_container_deps_mappings
+
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_MAPPINGS",
+            "dep1:/opt/dep1 dep1:/opt/dep2",
+        )
+        with pytest.raises(SystemExit):
+            parse_container_deps_mappings()
+
+
+class TestRenderDepsMoveScript:
+    """Tests for generating the dependency move script."""
+
+    def test_script_contains_expected_move_logic(self):
+        from common_python_tasks.utils import render_deps_move_script
+
+        script = render_deps_move_script(
+            {"dep1": "/opt/dep1", "dep2": "/usr/local/bin/dep2"}
+        )
+        assert "shutil.move" in script
+        assert 'source_root = pathlib.Path("/tmp/deps")' in script
+        assert "'dep1': '/opt/dep1'" in script
+
+
+class TestBuildDepsImage:
+    """Tests for build_deps_image building and tagging flow."""
+
+    def test_builds_deps_image_and_returns_tag(
+        self,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_package_name,
+    ):
+        from common_python_tasks.utils import build_deps_image
+
+        tag = build_deps_image("RUN apt-get install -y curl", single_arch=True)
+        assert tag.startswith("test-package-deps:deps-")
+        # Verify docker build was called
+        docker_calls = [
+            c
+            for c in mock_run_command.call_args_list
+            if c[0][0][0] == "docker" and c[0][0][1] == "build"
+        ]
+        assert len(docker_calls) == 1
+
+    def test_builds_deps_image_from_dockerfile_path(
+        self,
+        tmp_path,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_package_name,
+    ):
+        from common_python_tasks.utils import build_deps_image
+
+        deps_file = tmp_path / "Dockerfile.deps"
+        deps_file.write_text(
+            "FROM python:3.11\nRUN mkdir -p /tmp/deps\nRUN echo hi > /tmp/deps/dep1\n",
+            encoding="utf-8",
+        )
+
+        tag = build_deps_image(
+            deps_content=None,
+            deps_dockerfile_path=deps_file,
+            single_arch=True,
+        )
+        assert tag.startswith("test-package-deps:deps-")
+        docker_calls = [
+            c
+            for c in mock_run_command.call_args_list
+            if c[0][0][0] == "docker" and c[0][0][1] == "build"
+        ]
+        assert len(docker_calls) == 1
+
+    def test_tag_varies_with_content(
+        self,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_package_name,
+    ):
+        from common_python_tasks.utils import build_deps_image
+
+        tag1 = build_deps_image("RUN apt-get install -y curl", single_arch=True)
+        tag2 = build_deps_image("RUN apt-get install -y wget", single_arch=True)
+        assert tag1 != tag2
+
+    def test_same_content_gives_same_tag(
+        self,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_package_name,
+    ):
+        from common_python_tasks.utils import build_deps_image
+
+        content = "RUN apt-get install -y jq"
+        tag1 = build_deps_image(content, single_arch=True)
+        tag2 = build_deps_image(content, single_arch=True)
+        assert tag1 == tag2
+
+
+class TestBuildImageWithDeps:
+    """Tests for the build_image task integrating the deps image path."""
+
+    def test_deps_image_built_when_env_set(
+        self,
+        monkeypatch,
+        temp_project_dir,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_image_tag,
+        mock_get_authors,
+        mock_get_package_name,
+    ):
+        """When CONTAINER_DEPS_CONTENT is set, deps image is built first."""
+        from common_python_tasks.tasks import build_image
+
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "RUN apt-get install -y curl")
+
+        build_image(single_arch=True)
+
+        docker_calls = [
+            c
+            for c in mock_run_command.call_args_list
+            if c[0][0][0] == "docker" and c[0][0][1] == "build"
+        ]
+        # Two builds: deps image + main image
+        assert len(docker_calls) == 2
+        deps_call = docker_calls[0]
+        main_call = docker_calls[1]
+        deps_cmd = " ".join(str(x) for x in deps_call[0][0] if x is not None)
+        main_cmd = " ".join(str(x) for x in main_call[0][0] if x is not None)
+        assert "test-package-deps:deps-" in deps_cmd
+        assert "DEPS_IMAGE" in main_cmd
+
+    def test_renders_deps_move_script_when_mappings_set(
+        self,
+        monkeypatch,
+        temp_project_dir,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_image_tag,
+        mock_get_authors,
+        mock_get_package_name,
+    ):
+        from common_python_tasks.tasks import build_image
+
+        captured: dict[str, str] = {}
+        original_side_effect = mock_run_command.side_effect
+
+        def tracking(command, *args, **kwargs):
+            result = original_side_effect(command, *args, **kwargs)
+            if isinstance(command, list) and len(command) >= 4:
+                cmd = [str(c) for c in command if c is not None]
+                if cmd[:2] == ["docker", "build"] and "-f" in cmd:
+                    dockerfile_path = cmd[cmd.index("-f") + 1]
+                    try:
+                        captured["content"] = Path(dockerfile_path).read_text(
+                            encoding="utf-8"
+                        )
+                    except FileNotFoundError:
+                        captured["content"] = ""
+            return result
+
+        original_load_data_file = mock_load_data_file.side_effect
+
+        def load_data_file_side_effect(
+            filename, type_identifier="generic", fatal_on_missing=True
+        ):
+            if filename == "Dockerfile.j2":
+                return (
+                    "/fake/path/Dockerfile.j2",
+                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if DEPS_MOVE_SCRIPT %}\nRUN python - <<'PYCODE'\n{{ DEPS_MOVE_SCRIPT }}\nPYCODE\n{% endif %}\n",
+                )
+            return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+        mock_load_data_file.side_effect = load_data_file_side_effect
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "RUN apt-get install -y curl")
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_MAPPINGS",
+            "dep1:/opt/dep1 dep2:/usr/local/bin/dep2",
+        )
+        mock_run_command.side_effect = tracking
+
+        build_image(single_arch=True)
+
+        assert "RUN python - <<'PYCODE'" in captured.get("content", "")
+        assert "shutil.move" in captured.get("content", "")
+        assert "'dep1': '/opt/dep1'" in captured.get("content", "")
+
+    def test_no_deps_image_when_env_unset(
+        self,
+        monkeypatch,
+        temp_project_dir,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_image_tag,
+        mock_get_authors,
+        mock_get_package_name,
+    ):
+        """When no CONTAINER_DEPS_CONTENT, only one build occurs (no deps image)."""
+        from common_python_tasks.tasks import build_image
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.delenv("CONTAINER_DEPS_FILE", raising=False)
+
+        build_image(single_arch=True)
+
+        docker_calls = [
+            c
+            for c in mock_run_command.call_args_list
+            if c[0][0][0] == "docker" and c[0][0][1] == "build"
+        ]
+        assert len(docker_calls) == 1

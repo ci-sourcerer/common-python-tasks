@@ -61,8 +61,13 @@ def mock_load_data_file():
                 # new top-level call style: filename will be like "jq/Dockerfile"
                 key = f"dockerfile_extensions/{filename}"
 
-            if key == "Dockerfile":
-                return ("/fake/path/Dockerfile", "FROM python:3.11\n")
+            if key == "Dockerfile" or key == "Dockerfile.j2":
+                return ("/fake/path/Dockerfile.j2", "FROM python:3.11\n")
+            elif key == "Dockerfile.deps.j2":
+                return (
+                    "/fake/path/Dockerfile.deps.j2",
+                    "FROM python:3.11 AS deps\nRUN mkdir -p /tmp/deps\n{{ DEPS_CONTENT }}\n",
+                )
             elif key == "dockerfile_extensions/template_bundle/Dockerfile":
                 return (
                     "/fake/path/Dockerfile.template_bundle",

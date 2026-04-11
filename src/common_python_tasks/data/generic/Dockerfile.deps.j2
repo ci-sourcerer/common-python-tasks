@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1
+
+# Dependency collector image: installs external dependencies into /tmp/deps
+# so the main application Dockerfile can COPY --from this image.
+ARG PYTHON_VERSION=3
+ARG PYTHON_VARIANT=slim
+
+FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS deps
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN mkdir -p /tmp/deps
+
+{{ DEPS_CONTENT }}

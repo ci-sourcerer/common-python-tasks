@@ -707,6 +707,229 @@ def resolve_extension_content(descriptor: dict[str, str | None]) -> str:
     fatal(f"Unknown extension descriptor source: {descriptor['source']}")
 
 
+def render_template_text(
+    template_text: str,
+    extra_template_vars: dict[str, str] | None = None,
+) -> str:
+    """Render a Jinja2 template string with optional template variables."""
+    from jinja2 import Template
+
+    template_vars = {**extra_template_vars} if extra_template_vars else {}
+    return Template(template_text).render(**template_vars)
+
+
+def parse_container_deps_source() -> tuple[Path | None, str | None]:
+    """Return the source for dependency Dockerfile input.
+
+    `CONTAINER_DEPS_CONTENT` is preferred and overrides `CONTAINER_DEPS_FILE`.
+
+    Returns:
+        A tuple of `(dockerfile_path, inline_content)`. One of the values may be
+        ``None`` when not provided.
+    """
+    content = os.getenv("CONTAINER_DEPS_CONTENT")
+    if content and content.strip():
+        return None, content.strip()
+
+    path_raw = os.getenv("CONTAINER_DEPS_FILE")
+    if path_raw:
+        p = Path(path_raw.strip())
+        if not p.exists():
+            fatal(f"CONTAINER_DEPS_FILE not found: {p}")
+        return p, None
+    return None, None
+
+
+def parse_container_deps() -> str | None:
+    """Return the Dockerfile content for the deps image from environment.
+
+    `CONTAINER_DEPS_CONTENT` overrides `CONTAINER_DEPS_FILE`.
+    """
+    dockerfile_path, content = parse_container_deps_source()
+    if content is not None:
+        return content
+    if dockerfile_path is not None:
+        return dockerfile_path.read_text(encoding="utf-8").strip()
+    return None
+
+
+def parse_container_deps_mappings() -> dict[str, str] | None:
+    """Parse `CONTAINER_DEPS_MAPPINGS` into dependency-name-to-path pairs.
+
+    The env var should contain whitespace-separated mappings in the form
+    `name:/target/path`.
+
+    Returns:
+        A dict of dependency names to destination paths, or `None` when unset.
+    """
+    raw = os.getenv("CONTAINER_DEPS_MAPPINGS")
+    if not raw or not raw.strip():
+        return None
+
+    import shlex
+
+    try:
+        tokens = shlex.split(raw)
+    except ValueError as exc:
+        fatal(f"Invalid CONTAINER_DEPS_MAPPINGS: {exc}")
+
+    mappings: dict[str, str] = {}
+    for token in tokens:
+        if ":" not in token:
+            fatal(
+                "CONTAINER_DEPS_MAPPINGS must contain pairs like 'name:/target/path'; invalid token: %s",
+                token,
+            )
+        name, dest = token.split(":", 1)
+        name = name.strip()
+        dest = dest.strip()
+        if not name or not dest:
+            fatal(
+                "CONTAINER_DEPS_MAPPINGS must provide both a dependency name and a destination path"
+            )
+        if name in mappings:
+            fatal(f"Duplicate dependency mapping for: {name}")
+        mappings[name] = dest
+
+    return mappings
+
+
+def render_deps_move_script(mappings: dict[str, str]) -> str:
+    """Render a Python script that moves deps from /tmp/deps into target paths."""
+    if not mappings:
+        return ""
+
+    import textwrap
+
+    script_lines = [
+        "import pathlib",
+        "import shutil",
+        "import sys",
+        "",
+        f"mappings = {repr(mappings)}",
+        'source_root = pathlib.Path("/tmp/deps")',
+        "",
+        "for name, dest in mappings.items():",
+        "    source_path = source_root / name",
+        "    if not source_path.exists():",
+        '        print(f"Dependency source not found: {source_path}", file=sys.stderr)',
+        "        sys.exit(1)",
+        "    dest_path = pathlib.Path(dest)",
+        "    dest_path.parent.mkdir(parents=True, exist_ok=True)",
+        "    shutil.move(str(source_path), str(dest_path))",
+    ]
+
+    return textwrap.dedent("\n".join(script_lines)).strip()
+
+
+def build_deps_image(
+    deps_content: str | None = None,
+    deps_dockerfile_path: Path | None = None,
+    context_path: Path | None = None,
+    no_cache: bool = False,
+    plain: bool = False,
+    single_arch: bool = False,
+    extra_build_args: dict[str, str] | None = None,
+) -> str:
+    """Build the dependency collector image and return its full tag.
+
+    Args:
+        deps_content: Dockerfile instructions to install deps into `/tmp/deps`.
+        deps_dockerfile_path: Optional path to an explicit deps Dockerfile.
+        context_path: Docker build context directory. Defaults to `.`.
+        no_cache: Pass `--no-cache` to the Docker build command.
+        plain: Pass `--progress plain` to the Docker build command.
+        single_arch: Build for a single architecture only.
+        extra_build_args: Additional build arguments.
+
+    Returns:
+        The full `<name>:<tag>` identifier of the built deps image.
+    """
+    import hashlib
+    import platform
+
+    if context_path is None:
+        context_path = Path(".")
+
+    deps_image_name = f"{get_package_name()}-deps"
+    if deps_content is not None and deps_dockerfile_path is not None:
+        fatal(
+            "build_deps_image may only receive one of deps_content or deps_dockerfile_path"
+        )
+
+    if deps_dockerfile_path is not None:
+        if not deps_dockerfile_path.exists():
+            fatal(f"Deps Dockerfile not found: {deps_dockerfile_path}")
+        hash_source = deps_dockerfile_path.read_text(encoding="utf-8")
+    elif deps_content is not None:
+        hash_source = deps_content
+    else:
+        fatal("build_deps_image requires either deps_content or deps_dockerfile_path")
+
+    content_hash = hashlib.sha256(hash_source.encode()).hexdigest()[:12]
+    deps_tag = f"deps-{content_hash}"
+
+    temp_file_path = None
+    if deps_dockerfile_path is None:
+        dockerfile_text = render_template_text(
+            load_data_file("Dockerfile.deps.j2")[1],
+            {"DEPS_CONTENT": deps_content},
+        )
+
+        import tempfile
+
+        tf = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            delete=False,
+            prefix="Dockerfile.deps.",
+            suffix=".generated",
+        )
+        temp_file_path = tf.name
+        with open(temp_file_path, "w", encoding="utf-8") as f:
+            f.write(dockerfile_text)
+
+        dockerfile_path = Path(temp_file_path)
+    else:
+        dockerfile_path = deps_dockerfile_path
+
+    python_version = platform.python_version()
+    archs = ["linux/amd64", "linux/arm64"] if not single_arch else None
+
+    build_args: dict[str, str] = {"PYTHON_VERSION": python_version}
+    if extra_build_args:
+        build_args.update({k: v for k, v in extra_build_args.items() if v is not None})
+
+    full_tag = f"{deps_image_name}:{deps_tag}"
+    build_cmd = [
+        "docker",
+        "build",
+        str(context_path),
+        "-f",
+        str(dockerfile_path),
+        *[item for k, v in build_args.items() for item in ("--build-arg", f"{k}={v}")],
+        "--platform" if archs else None,
+        ",".join(archs) if archs else None,
+        "--no-cache" if no_cache else None,
+        "-t",
+        full_tag,
+    ]
+    if plain:
+        build_cmd += ["--progress", "plain"]
+
+    LOGGER.info("Building deps image: %s", full_tag)
+    try:
+        run_command(build_cmd)
+    finally:
+        if temp_file_path is not None:
+            try:
+                Path(temp_file_path).unlink()
+            except FileNotFoundError:
+                pass
+
+    return full_tag
+
+
 def get_prune_keep() -> int:
     """Return the integer value of CONTAINER_PRUNE_KEEP.
 
