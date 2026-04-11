@@ -186,6 +186,9 @@ The following environment variables configure package and container behavior.
 - `CONTAINER_BUILD_ARGS` provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
 - `CONTAINER_PRUNE_KEEP` controls image pruning after builds (`-1` keep all, `0` keep latest only, `N` keep latest + `N` previous)
 - `CUSTOM_IMAGE_ENTRYPOINT` specifies a custom entrypoint script name for containers
+- `CONTAINER_DEPS_CONTENT` supplies inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`
+- `CONTAINER_DEPS_FILE` points to an explicit Dockerfile to build the dependency image. It is used only when `CONTAINER_DEPS_CONTENT` is unset.
+- `CONTAINER_DEPS_MAPPINGS` maps copied dependency names from `/tmp/deps` into destination paths, as whitespace-separated `name:/target/path` entries.
 - `GITHUB_RELEASE_ASSETS` colon-separated list of file paths or glob patterns to attach to the GitHub Release (default: `dist/*`)
 
 #### Docker Compose settings
