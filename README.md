@@ -67,6 +67,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `format` | Format code with autoflake, black, and isort | format |
 | `lint` | Lint Python code with autoflake, black, isort, and flake8 | lint |
 | `publish-package` | Publish the package to the PyPI server | packaging |
+| `publish-github-release` | Publish or update a GitHub Release and attach built distribution assets | packaging, release |
 | `push-image` | Push the Docker image to the container registry | containers, packaging, release |
 | `release` | Run package release flow and publish containers when `containers` tag is included | packaging, release |
 | `reset-db` | Reset the database by deleting the database volume | web, containers, database |
@@ -185,6 +186,7 @@ The following environment variables configure package and container behavior.
 - `CONTAINER_BUILD_ARGS` provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
 - `CONTAINER_PRUNE_KEEP` controls image pruning after builds (`-1` keep all, `0` keep latest only, `N` keep latest + `N` previous)
 - `CUSTOM_IMAGE_ENTRYPOINT` specifies a custom entrypoint script name for containers
+- `GITHUB_RELEASE_ASSETS` colon-separated list of file paths or glob patterns to attach to the GitHub Release (default: `dist/*`)
 
 #### Docker Compose settings
 
@@ -291,6 +293,14 @@ This is expected behavior. The `bump-version` task requires commits between the 
 ### Config files not being used
 
 Check the configuration precedence (see [How it works](#how-it-works)). Use debug logging to see which config is selected.
+
+### GitHub Release assets not uploading
+
+If your release task does not attach assets, confirm `dist/` contains the built wheels and sdists. You can override the default asset selection using `GITHUB_RELEASE_ASSETS`, for example:
+
+```shell
+GITHUB_RELEASE_ASSETS="dist/*.whl:dist/*.tar.gz" poe publish-github-release
+```
 
 ```shell
 COMMON_PYTHON_TASKS_LOG_LEVEL=DEBUG poe test

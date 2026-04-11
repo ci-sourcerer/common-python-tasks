@@ -1,7 +1,6 @@
 import logging
 import os
 from pathlib import Path
-from typing import Literal
 
 from poethepoet_tasks import TaskCollection
 
@@ -565,13 +564,17 @@ def publish_github_release(
     body: str | None = None,
     prerelease: bool = False,
     draft: bool = False,
+    assets: str | None = None,
 ) -> None:
     """Publish or update a GitHub Release for the current repository."""
     from common_python_tasks.utils import (
         env_truthy,
         fatal,
+        get_github_release_asset_paths,
         get_release_tag_from_poetry_version,
-        publish_github_release,
+    )
+    from common_python_tasks.utils import (
+        publish_github_release as publish_github_release_helper,
     )
 
     resolved_tag_name = tag_name or os.getenv("GITHUB_RELEASE_TAG")
@@ -584,13 +587,15 @@ def publish_github_release(
         release_name or os.getenv("GITHUB_RELEASE_NAME") or resolved_tag_name
     )
     resolved_body = body or os.getenv("GITHUB_RELEASE_BODY")
+    asset_paths = get_github_release_asset_paths(assets)
 
-    return publish_github_release(
+    return publish_github_release_helper(
         resolved_tag_name,
         release_name=resolved_release_name,
         body=resolved_body,
         prerelease=prerelease or env_truthy("GITHUB_RELEASE_PRERELEASE"),
         draft=draft or env_truthy("GITHUB_RELEASE_DRAFT"),
+        assets=asset_paths,
     )
 
 
@@ -623,6 +628,8 @@ def bump_version(
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
         dry_run: If `True`, print what would happen without making changes.
     """
+    from typing import Literal
+
     from common_python_tasks.utils import (
         fatal,
         get_dirty_files,
@@ -676,6 +683,7 @@ def release(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    assets: str | None = None,
 ) -> None:
     """Run a full release flow for package (and containers when included).
 
@@ -691,9 +699,14 @@ def release(
     from common_python_tasks.utils import (
         build_image,
         ensure_on_default_branch,
+        get_github_release_asset_paths,
         get_release_tag_from_poetry_version,
         is_task_tag_included,
-        publish_github_release,
+    )
+    from common_python_tasks.utils import (
+        publish_github_release as publish_github_release_helper,
+    )
+    from common_python_tasks.utils import (
         run_command,
     )
 
@@ -727,8 +740,6 @@ def release(
             )
         return
 
-    run_command(["git", "push", "origin", "--tags"])
-
     build_package(clean_dist=True)
     publish_package(build_first=False)
 
@@ -741,10 +752,26 @@ def release(
         )
         push_image(debug=debug)
 
-    publish_github_release(
-        get_release_tag_from_poetry_version(),
-        prerelease=normalized_stage is not None,
-    )
+    release_tag = get_release_tag_from_poetry_version()
+    asset_paths = get_github_release_asset_paths(assets)
+
+    run_command(["git", "push", "origin", release_tag])
+    try:
+        publish_github_release_helper(
+            release_tag,
+            prerelease=normalized_stage is not None,
+            assets=asset_paths,
+        )
+    except SystemExit:
+        LOGGER.warning(
+            "GitHub Release publication failed after pushing %s; attempting to remove remote tag",
+            release_tag,
+        )
+        run_command(
+            ["git", "push", "origin", "--delete", release_tag],
+            acceptable_returncodes={0, 1},
+        )
+        raise
 
 
 @tasks.script(

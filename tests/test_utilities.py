@@ -792,7 +792,7 @@ class TestReleaseTask:
                 component="minor", stage="beta", dry_run=False
             )
             mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "--tags"]
+                ["git", "push", "origin", "v1.2.3"]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
@@ -802,6 +802,7 @@ class TestReleaseTask:
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
                 prerelease=True,
+                assets=[],
             )
 
     def test_release_runs_container_steps_when_containers_included(self):
@@ -836,7 +837,7 @@ class TestReleaseTask:
                 component="patch", stage=None, dry_run=False
             )
             mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "--tags"]
+                ["git", "push", "origin", "v1.2.3"]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
@@ -851,6 +852,7 @@ class TestReleaseTask:
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
                 prerelease=False,
+                assets=[],
             )
 
     def test_release_dry_run_only_bumps_version(self):
@@ -940,7 +942,7 @@ class TestReleaseTask:
                 component="patch", stage=None, dry_run=False
             )
             mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "--tags"]
+                ["git", "push", "origin", "v1.2.3"]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
@@ -948,6 +950,7 @@ class TestReleaseTask:
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
                 prerelease=False,
+                assets=[],
             )
 
     def test_release_fails_when_not_on_default_branch(self):

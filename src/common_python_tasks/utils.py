@@ -1,5 +1,6 @@
 import json
 import logging
+import mimetypes
 import os
 import re
 import subprocess
@@ -877,6 +878,332 @@ def get_github_api_base_url() -> str:
     return f"{server_url}/api/v3"
 
 
+def get_github_upload_api_base_url() -> str:
+    """Return the GitHub upload API base URL.
+
+    For GitHub.com uploads, this is a dedicated uploads host. For Enterprise
+    installations, use the same API base URL.
+    """
+    api_base = get_github_api_base_url()
+    if api_base == "https://api.github.com":
+        return "https://uploads.github.com"
+    return api_base
+
+
+class GitHubClient:
+    """Encapsulate GitHub API and upload request behavior."""
+
+    def __init__(self, repository: str | None = None, token: str | None = None):
+        self.repository = repository or get_github_repository()
+        self.token = token or get_github_token()
+
+    @property
+    def is_available(self) -> bool:
+        return self.repository is not None and self.token is not None
+
+    def _build_headers(self, content_type: str | None = None) -> dict[str, str]:
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {self.token}",
+            "User-Agent": "common-python-tasks",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if content_type is not None:
+            headers["Content-Type"] = content_type
+        return headers
+
+    def _build_url(self, path: str, upload: bool = False) -> str:
+        base_url = (
+            get_github_upload_api_base_url() if upload else get_github_api_base_url()
+        )
+        return f"{base_url}/repos/{self.repository}{path}"
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: bytes | None = None,
+        upload: bool = False,
+        content_type: str | None = None,
+        allow_404_release_tag: bool = False,
+    ) -> dict[str, Any] | None:
+        if self.repository is None:
+            return None
+        if self.token is None:
+            if upload:
+                fatal(
+                    "GITHUB_TOKEN or GH_TOKEN environment variable must be set to publish GitHub Release assets"
+                )
+            return None
+
+        request = urllib.request.Request(
+            self._build_url(path, upload=upload),
+            data=payload,
+            method=method,
+            headers=self._build_headers(content_type),
+        )
+
+        try:
+            with urllib.request.urlopen(request) as response:
+                body = response.read().decode("utf-8").strip()
+        except urllib.error.HTTPError as exc:
+            if (
+                allow_404_release_tag
+                and method == "GET"
+                and exc.code == 404
+                and path.startswith("/releases/tags/")
+            ):
+                return None
+            raise
+
+        if not body:
+            return None
+        return json.loads(body)
+
+    def api_request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        allow_404_release_tag: bool = False,
+    ) -> dict[str, Any] | None:
+        request_payload = (
+            None if payload is None else json.dumps(payload).encode("utf-8")
+        )
+        content_type = "application/json" if payload is not None else None
+        return self._request(
+            method,
+            path,
+            payload=request_payload,
+            upload=False,
+            content_type=content_type,
+            allow_404_release_tag=allow_404_release_tag,
+        )
+
+    def upload_request(
+        self,
+        method: str,
+        path: str,
+        payload: bytes | None = None,
+        content_type: str | None = None,
+    ) -> dict[str, Any] | None:
+        if content_type is None and payload is not None:
+            content_type = "application/octet-stream"
+        return self._request(
+            method,
+            path,
+            payload=payload,
+            upload=True,
+            content_type=content_type,
+        )
+
+
+def github_api_request(
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Perform a GitHub API request and return the decoded JSON response.
+
+    Args:
+        method: HTTP method (e.g. `GET`, `POST`, `PATCH`).
+        path: API path relative to `/repos/{owner}/{repo}`.
+        payload: Optional JSON-serialisable request body.
+
+    Returns:
+        Parsed JSON response body, or `None` if there is no body or the
+        required credentials are unavailable.
+    """
+    return GitHubClient().api_request(method, path, payload=payload)
+
+
+def publish_github_release(
+    tag_name: str,
+    release_name: str | None = None,
+    body: str | None = None,
+    prerelease: bool = False,
+    draft: bool = False,
+    assets: list[Path | str] | None = None,
+) -> dict[str, Any] | None:
+    """Create or update a GitHub Release for the given tag.
+
+    Args:
+        tag_name: Git tag name for this release.
+        release_name: Display name of the release. Defaults to `tag_name`.
+        body: Release description text. Defaults to `Release {tag_name}`.
+        prerelease: Mark the release as a pre-release.
+        draft: Mark the release as a draft.
+        assets: Optional list of paths to upload as release assets.
+
+    Returns:
+        The GitHub API response for the created or updated release, or `None`
+        when publication is disabled or credentials are unavailable.
+    """
+    if not should_publish_github_release():
+        LOGGER.debug(
+            "Skipping GitHub Release publication because SKIP_GITHUB_RELEASE is set"
+        )
+        return
+
+    repository = get_github_repository()
+    token = get_github_token()
+    if repository is None:
+        LOGGER.debug(
+            "Skipping GitHub Release publication because this is not a GitHub repository"
+        )
+        return None
+    if token is None:
+        fatal(
+            "GITHUB_TOKEN or GH_TOKEN environment variable must be set to publish GitHub Release"
+        )
+
+    release_name = release_name or tag_name
+    release_body = body if body is not None else f"Release {tag_name}"
+    payload = {
+        "tag_name": tag_name,
+        "name": release_name,
+        "body": release_body,
+        "draft": draft,
+        "prerelease": prerelease,
+    }
+
+    client = GitHubClient(repository=repository, token=token)
+    encoded_tag_name = urllib.parse.quote(tag_name, safe="")
+    existing_release = client.api_request(
+        "GET",
+        f"/releases/tags/{encoded_tag_name}",
+        allow_404_release_tag=True,
+    )
+    if existing_release and isinstance(existing_release.get("id"), int):
+        LOGGER.info("Updating GitHub Release for tag %s", tag_name)
+        release = client.api_request(
+            "PATCH",
+            f"/releases/{existing_release['id']}",
+            payload=payload,
+        )
+    else:
+        LOGGER.info("Creating GitHub Release for tag %s", tag_name)
+        release = client.api_request("POST", "/releases", payload=payload)
+
+    if assets is None:
+        assets = get_github_release_asset_paths()
+    assets_to_upload = [
+        Path(asset) if not isinstance(asset, Path) else asset for asset in assets
+    ]
+    if assets_to_upload:
+        if release is None or not isinstance(release.get("id"), int):
+            fatal("GitHub Release was not created successfully; cannot upload assets.")
+        upload_github_release_assets(release["id"], assets_to_upload)
+    else:
+        LOGGER.info("No GitHub Release assets found to upload for tag %s", tag_name)
+
+    return release
+
+
+def github_upload_request(
+    method: str,
+    path: str,
+    payload: bytes | None = None,
+    content_type: str | None = None,
+) -> dict[str, Any] | None:
+    """Perform a GitHub upload request and return the decoded JSON response."""
+    return GitHubClient().upload_request(
+        method,
+        path,
+        payload=payload,
+        content_type=content_type,
+    )
+
+
+def get_github_release_asset_paths(asset_sources: str | None = None) -> list[Path]:
+    """Return asset paths to upload for a GitHub Release.
+
+    Args:
+        asset_sources: Optional colon-separated list of paths or glob patterns.
+            If not provided, the default value is `dist/*`.
+
+    Returns:
+        A sorted list of existing asset paths.
+    """
+    sources = (
+        asset_sources
+        if asset_sources is not None
+        else os.getenv("GITHUB_RELEASE_ASSETS", "dist/*")
+    )
+    explicit_assets = asset_sources is not None or os.getenv("GITHUB_RELEASE_ASSETS")
+
+    asset_paths: list[Path] = []
+    for part in (p.strip() for p in sources.split(":") if p.strip()):
+        if any(char in part for char in "*?[]"):
+            asset_paths.extend(
+                sorted(
+                    [path for path in Path(".").glob(part) if path.is_file()],
+                    key=lambda p: str(p),
+                )
+            )
+            continue
+
+        path = Path(part)
+        if path.is_file():
+            asset_paths.append(path)
+        elif path.exists():
+            LOGGER.warning("Ignoring non-file GitHub release asset path: %s", path)
+
+    if not asset_paths and explicit_assets:
+        fatal(
+            f"No GitHub Release assets were found for the configured asset paths: {sources}"
+        )
+
+    return sorted(dict.fromkeys(asset_paths), key=lambda p: str(p))
+
+
+def get_github_release_assets(release_id: int) -> list[dict[str, Any]]:
+    """Get existing assets for a GitHub Release."""
+    return github_api_request("GET", f"/releases/{release_id}/assets") or []
+
+
+def delete_github_release_asset(asset_id: int) -> None:
+    """Delete a GitHub Release asset by ID."""
+    github_upload_request("DELETE", f"/releases/assets/{asset_id}")
+
+
+def upload_github_release_asset(
+    release_id: int, asset_path: Path
+) -> dict[str, Any] | None:
+    """Upload a single asset to a GitHub Release."""
+    if not asset_path.is_file():
+        fatal("GitHub Release asset not found: %s", asset_path)
+
+    existing_assets = get_github_release_assets(release_id)
+    for asset in existing_assets:
+        if asset.get("name") == asset_path.name and isinstance(asset.get("id"), int):
+            LOGGER.info("Deleting existing GitHub release asset %s", asset_path.name)
+            delete_github_release_asset(asset["id"])
+            break
+
+    content_type, _ = mimetypes.guess_type(str(asset_path))
+    content_type = content_type or "application/octet-stream"
+    return github_upload_request(
+        "POST",
+        f"/releases/{release_id}/assets?name={urllib.parse.quote(asset_path.name, safe='')}",
+        payload=asset_path.read_bytes(),
+        content_type=content_type,
+    )
+
+
+def upload_github_release_assets(
+    release_id: int, asset_paths: list[Path]
+) -> list[dict[str, Any]]:
+    """Upload multiple assets to a GitHub Release."""
+    uploaded_assets: list[dict[str, Any]] = []
+    for asset_path in asset_paths:
+        LOGGER.info("Uploading GitHub Release asset: %s", asset_path)
+        uploaded = upload_github_release_asset(release_id, asset_path)
+        if uploaded is not None:
+            uploaded_assets.append(uploaded)
+    return uploaded_assets
+
+
 def get_project_version_from_poetry() -> str:
     """Return the project version parsed from `poetry version` output.
 
@@ -1561,344 +1888,6 @@ def exec_script(script_path: Path | str, env: dict[str, str] | None = None) -> N
     os.execvpe("/bin/sh", ["/bin/sh", str(script_path)], env or os.environ)
 
 
-def build_image(
-    dockerfile_path: Path | None = None,
-    dockerfile_text: str | None = None,
-    context_path: Path | None = None,
-    debug: bool = False,
-    no_cache: bool = False,
-    plain: bool = False,
-    single_arch: bool = False,
-    omit_target: bool = False,
-    image_name: str | None = None,
-    extra_build_args: dict[str, str] | None = None,
-) -> tuple[str, str]:
-    """Build a Docker image and return its (version_tag, commit_tag).
-
-    Args:
-        dockerfile_path: Path to an existing Dockerfile. Mutually exclusive with
-            `dockerfile_text`.
-        dockerfile_text: Inline Dockerfile content. Mutually exclusive with
-            `dockerfile_path`.
-        context_path: Docker build context directory. Defaults to the current
-            working directory.
-        debug: Build the debug image stage.
-        no_cache: Pass `--no-cache` to the Docker build command.
-        plain: Pass `--progress plain` to the Docker build command.
-        single_arch: Build for a single architecture (current host) instead of
-            multi-arch.
-        omit_target: Omit the `--target` flag (used for extension builds that
-            have no named stage).
-        image_name: Override the image name derived from the package name.
-        extra_build_args: Additional build arguments to pass to the Docker build.
-
-    Returns:
-        A 2-tuple of `(version_tag, commit_tag)` for the built image.
-    """
-    import platform
-
-    from common_python_tasks.tasks import clean
-
-    dist_path = Path("dist")
-    if dist_path.exists() and any(dist_path.iterdir()):
-        clean(dist_only=True)
-
-    if context_path is None:
-        context_path = Path(".")
-
-    temp_file_path = None
-    if dockerfile_path is None:
-        if dockerfile_text is None:
-            fatal("Either dockerfile_path or dockerfile_text must be provided.")
-        import tempfile
-
-        tf = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            delete=False,
-            prefix="Dockerfile.",
-            suffix=".generated",
-        )
-        temp_file_path = tf.name
-        with open(temp_file_path, "w", encoding="utf-8") as f:
-            f.write(dockerfile_text)
-        dockerfile_path = Path(temp_file_path)
-
-    dockerignore_path = context_path / ".dockerignore"
-    temp_dockerignore_created = False
-    if not dockerignore_path.exists():
-        LOGGER.debug("No .dockerignore found; using built-in .dockerignore")
-        builtin_dockerignore_content = load_data_file(".dockerignore")[1]
-        dockerignore_path.write_text(builtin_dockerignore_content, encoding="utf-8")
-        temp_dockerignore_created = True
-
-    delete_temp_file = False
-    try:
-        # TODO: Revisit this in regards to more architectures
-        archs = ["linux/amd64", "linux/arm64"] if not single_arch else None
-        files_to_ignore = [Path(".dockerignore")] if temp_dockerignore_created else []
-        version_string = get_image_tag(ignore=files_to_ignore)
-
-        if debug:
-            suffix = "-debug"
-            target = "debug"
-            tag = "debug"
-        else:
-            suffix = ""
-            target = "runtime"
-            # Only tag as 'latest' if there are no tags later in history
-            tag = "latest" if not has_tags_later_in_history() else None
-
-        version_tag = f"{version_string}{suffix}"
-        commit_tag = f"{run_command(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True).stdout.strip()}{'-dirty' if get_dirty_files(ignore=files_to_ignore) else ''}{suffix}"
-        python_version = platform.python_version()
-        poetry_version = get_poetry_version()
-
-        build_args = {
-            k: v
-            for k, v in {
-                "PYTHON_VERSION": python_version,
-                "POETRY_VERSION": poetry_version,
-                "POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION": get_installed_requirement_version(
-                    "poetry-dynamic-versioning[plugin]"
-                ),
-                "POETRY_PLUGIN_EXPORT_VERSION": get_installed_requirement_version(
-                    "poetry-plugin-export"
-                ),
-                "TOMLKIT_VERSION": get_installed_requirement_version("tomlkit"),
-                "PACKAGE_NAME": get_package_name(use_underscores=True),
-                "AUTHORS": ",".join(
-                    [f"{name} <{email}>" for name, email in get_authors()]
-                ),
-                "GIT_COMMIT": commit_tag,
-                "CUSTOM_ENTRYPOINT": os.getenv("CUSTOM_IMAGE_ENTRYPOINT"),
-            }.items()
-            if v is not None
-        }
-        # Merge in caller-supplied build-args (used by extension builds)
-        if extra_build_args:
-            for k, v in extra_build_args.items():
-                if v is not None:
-                    build_args[k] = v
-        tags_to_use = [t for t in (tag, version_tag, commit_tag) if t is not None]
-        LOGGER.debug("Building image with tags: %s", ", ".join(tags_to_use))
-        # Allow override of image name for extension builds
-        image_short_name = image_name if image_name is not None else get_package_name()
-        orig_full_name = get_full_image_name()
-        if image_name is None:
-            image_full_name = orig_full_name
-        else:
-            if "/" in orig_full_name:
-                prefix = orig_full_name.rsplit("/", 1)[0]
-                image_full_name = f"{prefix}/{image_name}"
-            else:
-                image_full_name = image_name
-        build_cmd = [
-            "docker",
-            "build",
-            str(context_path),
-            "-f",
-            str(dockerfile_path),
-            "--target" if not omit_target else None,
-            target if not omit_target else None,
-            *[
-                item
-                for k, v in build_args.items()
-                for item in ("--build-arg", f"{k}={v if v is not None else ''}")
-            ],
-            "--platform" if archs else None,
-            ",".join(archs) if archs else None,
-            "--no-cache" if no_cache else None,
-            *[item for t in tags_to_use for item in ("-t", f"{image_short_name}:{t}")],
-        ]
-        for t in tags_to_use:
-            build_cmd += ["-t", f"{image_full_name}:{t}"]
-
-        if plain:
-            build_cmd += ["--progress", "plain"]
-        run_command(build_cmd)
-        delete_temp_file = True
-    finally:
-        if temp_file_path is not None and delete_temp_file:
-            try:
-                dockerfile_path.unlink()
-            except FileNotFoundError:
-                pass
-        if temp_dockerignore_created:
-            try:
-                dockerignore_path.unlink()
-            except FileNotFoundError:
-                pass
-    return version_tag, commit_tag
-
-
-def build_extension_image(
-    base_full_name: str,
-    base_version_tag: str,
-    extension_content: str,
-    context_path: Path | None = None,
-    image_name_override: str | None = None,
-    debug: bool = False,
-    no_cache: bool = False,
-    plain: bool = False,
-    single_arch: bool = False,
-    extra_build_args: dict[str, str] | None = None,
-) -> tuple[str, str]:
-    """Build an image that starts `FROM` the primary image and returns its tags.
-
-    The created Dockerfile will begin with `FROM {base_full_name}:{base_version_tag}`
-    followed by the provided extension content.
-
-    Args:
-        base_full_name: Full name of the base image (e.g. `docker.io/org/app`).
-        base_version_tag: Tag of the base image to extend.
-        extension_content: Dockerfile content appended after the `FROM` line.
-        context_path: Docker build context directory. Defaults to `.`.
-        image_name_override: Override the image name for the extension image.
-        debug: Build the debug image stage.
-        no_cache: Pass `--no-cache` to the Docker build command.
-        plain: Pass `--progress plain` to the Docker build command.
-        single_arch: Build for the current host architecture only.
-        extra_build_args: Additional build arguments to pass to the Docker build.
-
-    Returns:
-        A 2-tuple of `(version_tag, commit_tag)` for the built extension image.
-    """
-    if context_path is None:
-        context_path = Path(".")
-
-    LOGGER.debug(
-        "Building extension image based on %s:%s with override name '%s'",
-        base_full_name,
-        base_version_tag,
-        image_name_override,
-    )
-    return build_image(
-        dockerfile_path=None,
-        dockerfile_text=(
-            f"FROM {base_full_name}:{base_version_tag}\n\n{extension_content}\n"
-        ),
-        context_path=context_path,
-        debug=debug,
-        no_cache=no_cache,
-        plain=plain,
-        single_arch=single_arch,
-        omit_target=True,
-        image_name=image_name_override or get_package_name(),
-        extra_build_args=extra_build_args,
-    )
-
-
-def github_api_request(
-    method: str,
-    path: str,
-    payload: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    """Perform a GitHub API request and return the decoded JSON response.
-
-    Args:
-        method: HTTP method (e.g. `GET`, `POST`, `PATCH`).
-        path: API path relative to `/repos/{owner}/{repo}`.
-        payload: Optional JSON-serialisable request body.
-
-    Returns:
-        Parsed JSON response body, or `None` if there is no body or the
-        required credentials are unavailable.
-    """
-    repository = get_github_repository()
-    token = get_github_token()
-    if repository is None or token is None:
-        return None
-
-    request_payload = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        f"{get_github_api_base_url()}/repos/{repository}{path}",
-        data=request_payload,
-        method=method,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": "common-python-tasks",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-
-    try:
-        with urllib.request.urlopen(request) as response:
-            body = response.read().decode("utf-8").strip()
-    except urllib.error.HTTPError as exc:
-        if method == "GET" and exc.code == 404 and path.startswith("/releases/tags/"):
-            return None
-        raise
-
-    if not body:
-        return None
-    return json.loads(body)
-
-
-def publish_github_release(
-    tag_name: str,
-    release_name: str | None = None,
-    body: str | None = None,
-    prerelease: bool = False,
-    draft: bool = False,
-) -> dict[str, Any] | None:
-    """Create or update a GitHub Release for the given tag.
-
-    Args:
-        tag_name: Git tag name for this release.
-        release_name: Display name of the release. Defaults to `tag_name`.
-        body: Release description text. Defaults to `Release {tag_name}`.
-        prerelease: Mark the release as a pre-release.
-        draft: Mark the release as a draft.
-
-    Returns:
-        The GitHub API response for the created or updated release, or `None`
-        when publication is disabled or credentials are unavailable.
-    """
-    if not should_publish_github_release():
-        LOGGER.debug(
-            "Skipping GitHub Release publication because SKIP_GITHUB_RELEASE is set"
-        )
-        return
-
-    repository = get_github_repository()
-    token = get_github_token()
-    if repository is None:
-        LOGGER.debug(
-            "Skipping GitHub Release publication because this is not a GitHub repository"
-        )
-        return None
-    if token is None:
-        fatal(
-            "GITHUB_TOKEN or GH_TOKEN environment variable must be set to publish GitHub Release"
-        )
-
-    release_name = release_name or tag_name
-    release_body = body if body is not None else f"Release {tag_name}"
-    payload = {
-        "tag_name": tag_name,
-        "name": release_name,
-        "body": release_body,
-        "draft": draft,
-        "prerelease": prerelease,
-    }
-
-    encoded_tag_name = urllib.parse.quote(tag_name, safe="")
-    existing_release = github_api_request("GET", f"/releases/tags/{encoded_tag_name}")
-    if existing_release and isinstance(existing_release.get("id"), int):
-        LOGGER.info("Updating GitHub Release for tag %s", tag_name)
-        return github_api_request(
-            "PATCH",
-            f"/releases/{existing_release['id']}",
-            payload=payload,
-        )
-
-    LOGGER.info("Creating GitHub Release for tag %s", tag_name)
-    return github_api_request("POST", "/releases", payload=payload)
-
-
 def build(
     has_containers: bool,
     debug: bool = False,
@@ -2154,142 +2143,3 @@ def build_extension_image(
         image_name=image_name_override or get_package_name(),
         extra_build_args=extra_build_args,
     )
-
-
-def github_api_request(
-    method: str,
-    path: str,
-    payload: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    """Perform a GitHub API request and return the decoded JSON response.
-
-    Args:
-        method: HTTP method (e.g. `GET`, `POST`, `PATCH`).
-        path: API path relative to `/repos/{owner}/{repo}`.
-        payload: Optional JSON-serialisable request body.
-
-    Returns:
-        Parsed JSON response body, or `None` if there is no body or the
-        required credentials are unavailable.
-    """
-    repository = get_github_repository()
-    token = get_github_token()
-    if repository is None or token is None:
-        return None
-
-    request_payload = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        f"{get_github_api_base_url()}/repos/{repository}{path}",
-        data=request_payload,
-        method=method,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": "common-python-tasks",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-
-    try:
-        with urllib.request.urlopen(request) as response:
-            body = response.read().decode("utf-8").strip()
-    except urllib.error.HTTPError as exc:
-        if method == "GET" and exc.code == 404 and path.startswith("/releases/tags/"):
-            return None
-        raise
-
-    if not body:
-        return None
-    return json.loads(body)
-
-
-def publish_github_release(
-    tag_name: str,
-    release_name: str | None = None,
-    body: str | None = None,
-    prerelease: bool = False,
-    draft: bool = False,
-) -> dict[str, Any] | None:
-    """Create or update a GitHub Release for the given tag.
-
-    Args:
-        tag_name: Git tag name for this release.
-        release_name: Display name of the release. Defaults to `tag_name`.
-        body: Release description text. Defaults to `Release {tag_name}`.
-        prerelease: Mark the release as a pre-release.
-        draft: Mark the release as a draft.
-
-    Returns:
-        The GitHub API response for the created or updated release, or `None`
-        when publication is disabled or credentials are unavailable.
-    """
-    if not should_publish_github_release():
-        LOGGER.debug(
-            "Skipping GitHub Release publication because SKIP_GITHUB_RELEASE is set"
-        )
-        return
-
-    repository = get_github_repository()
-    token = get_github_token()
-    if repository is None:
-        LOGGER.debug(
-            "Skipping GitHub Release publication because this is not a GitHub repository"
-        )
-        return None
-    if token is None:
-        fatal(
-            "GITHUB_TOKEN or GH_TOKEN environment variable must be set to publish GitHub Release"
-        )
-
-    release_name = release_name or tag_name
-    release_body = body if body is not None else f"Release {tag_name}"
-    payload = {
-        "tag_name": tag_name,
-        "name": release_name,
-        "body": release_body,
-        "draft": draft,
-        "prerelease": prerelease,
-    }
-
-    encoded_tag_name = urllib.parse.quote(tag_name, safe="")
-    existing_release = github_api_request("GET", f"/releases/tags/{encoded_tag_name}")
-    if existing_release and isinstance(existing_release.get("id"), int):
-        LOGGER.info("Updating GitHub Release for tag %s", tag_name)
-        return github_api_request(
-            "PATCH",
-            f"/releases/{existing_release['id']}",
-            payload=payload,
-        )
-
-    LOGGER.info("Creating GitHub Release for tag %s", tag_name)
-    return github_api_request("POST", "/releases", payload=payload)
-
-
-def build(
-    has_containers: bool,
-    debug: bool = False,
-    no_cache: bool = False,
-    plain: bool = False,
-    single_arch: bool = False,
-) -> None:
-    """Build the package and optionally the container image.
-
-    Args:
-        has_containers: When `True`, also build the Docker image after the
-            package.
-        debug: Build the debug container image stage.
-        no_cache: Pass `--no-cache` to the Docker build command.
-        plain: Pass `--progress plain` to the Docker build command.
-        single_arch: Build the container for the current host architecture only.
-    """
-    from common_python_tasks.tasks import build_package
-
-    build_package()
-    if has_containers:
-        build_image(
-            debug=debug,
-            no_cache=no_cache,
-            plain=plain,
-            single_arch=single_arch,
-        )
