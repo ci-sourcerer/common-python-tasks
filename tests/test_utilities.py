@@ -1,6 +1,7 @@
 import json
 import urllib.error
 from importlib import metadata
+from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
@@ -62,6 +63,54 @@ def test_is_package_installed_caches_results(mock_find_spec):
     is_package_installed("black")
 
     assert mock_find_spec.call_count == 1
+
+
+def test_inject_auto_build_args_from_env_adds_value(monkeypatch):
+    from common_python_tasks.utils import inject_auto_build_args_from_env
+
+    monkeypatch.setenv("WORKDIR_PATH", "/app")
+
+    result = inject_auto_build_args_from_env({})
+
+    assert result["WORKDIR_PATH"] == "/app"
+
+
+def test_inject_auto_build_args_from_env_preserves_explicit_value(monkeypatch):
+    from common_python_tasks.utils import inject_auto_build_args_from_env
+
+    monkeypatch.setenv("WORKDIR_PATH", "/app")
+
+    result = inject_auto_build_args_from_env({"WORKDIR_PATH": "/custom"})
+
+    assert result["WORKDIR_PATH"] == "/custom"
+
+
+def test_get_compose_env_includes_workdir_path_default(monkeypatch):
+    from common_python_tasks.utils import get_compose_env
+
+    monkeypatch.delenv("WORKDIR_PATH", raising=False)
+
+    env = get_compose_env()
+
+    assert env["WORKDIR_PATH"] == "/workspace"
+
+
+def test_get_compose_env_uses_workdir_path_from_env(monkeypatch):
+    from common_python_tasks.utils import get_compose_env
+
+    monkeypatch.setenv("WORKDIR_PATH", "/app")
+
+    env = get_compose_env()
+
+    assert env["WORKDIR_PATH"] == "/app"
+
+
+def test_get_required_vars_for_files_includes_workdir_path_for_compose_db():
+    from common_python_tasks.utils import get_required_vars_for_files
+
+    vars_required = get_required_vars_for_files("fastapi", [Path("compose-db.yml")])
+
+    assert "WORKDIR_PATH" in vars_required
 
 
 def test_get_installed_requirement_version_strips_extras_and_normalizes_name():

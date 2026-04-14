@@ -15,6 +15,10 @@ from poethepoet_tasks import TaskCollection
 
 LOGGER = logging.getLogger(__name__)
 
+WORKDIR_PATH_ENV_VAR = "WORKDIR_PATH"
+WORKDIR_PATH_DEFAULT = "/workspace"
+_AUTO_INJECTED_BUILD_ARG_ENV_VARS = (WORKDIR_PATH_ENV_VAR,)
+
 
 def env_truthy(env_var: str) -> bool:
     """Return `True` if the environment variable is set to a truthy value.
@@ -93,6 +97,37 @@ def require_package(package_name: str) -> None:
 def log_dry_run(message: str, *args: object) -> None:
     """Log a dry-run informational message with a yellow prefix."""
     LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
+
+
+def get_workdir_path() -> str:
+    """Return the configured container workdir path.
+
+    Returns:
+        The workdir path from `WORKDIR_PATH`, or the project default.
+    """
+    return os.getenv(WORKDIR_PATH_ENV_VAR, WORKDIR_PATH_DEFAULT)
+
+
+def inject_auto_build_args_from_env(
+    build_args: dict[str, str] | None,
+) -> dict[str, str]:
+    """Inject configured env vars into Docker build args when present.
+
+    Environment-driven build args are only injected if they are set, and never
+    override explicitly provided build args.
+
+    Args:
+        build_args: Existing Docker build args from CLI/env parsing.
+
+    Returns:
+        A build-arg dictionary with auto-injected env values merged in.
+    """
+    merged_build_args = dict(build_args or {})
+    for env_var in _AUTO_INJECTED_BUILD_ARG_ENV_VARS:
+        env_value = os.getenv(env_var)
+        if env_value is not None:
+            merged_build_args.setdefault(env_var, env_value)
+    return merged_build_args
 
 
 def build_release_hook_environment(
@@ -2098,6 +2133,7 @@ _COMPOSE_VAR_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
             "PYTHON_VERSION",
             "POETRY_VERSION",
             "POSTGRES_VERSION",
+            "WORKDIR_PATH",
         },
         "compose-debug": {
             "PACKAGE_NAME",
@@ -2188,6 +2224,7 @@ def get_compose_env(
         "IMAGE_TAG": image_tag or "latest",
         "PACKAGE_NAME": package_name,
         "PACKAGE_UNDERSCORE_NAME": package_name_to_underscore(package_name),
+        "WORKDIR_PATH": get_workdir_path(),
         "POETRY_VERSION": get_poetry_version(),
         "POSTGRES_VERSION": os.getenv("POSTGRES_VERSION", "17"),
         "PYTHON_VERSION": platform.python_version(),

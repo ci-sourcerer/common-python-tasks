@@ -9,6 +9,7 @@ x-common-build-args: &common-build-args
   PACKAGE_NAME: ${PACKAGE_NAME}
   PYTHON_VERSION: ${PYTHON_VERSION}
   POETRY_VERSION: ${POETRY_VERSION}
+  WORKDIR_PATH: ${WORKDIR_PATH}
 
 services:
   api:
@@ -68,7 +69,7 @@ services:
     restart: "no"
     configs:
       - source: alembic_config
-        target: /workspace/alembic.ini
+        target: ${WORKDIR_PATH}/alembic.ini
 
 volumes:
   {{ PACKAGE_NAME }}-db-data:

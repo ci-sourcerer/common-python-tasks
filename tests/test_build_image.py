@@ -992,6 +992,69 @@ def test_build_image_accepts_build_args_param_for_real_docker_arg(
     assert not any("POETRY_VERSION=1.8.0" in str(a) for a in base_build_cmd)
 
 
+def test_build_image_includes_workdir_path_from_env(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("WORKDIR_PATH", "/app")
+    monkeypatch.delenv("CONTAINER_BUILD_ARGS", raising=False)
+
+    build_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    assert len(build_calls) == 1
+    base_build_cmd = build_calls[0]
+    assert any("WORKDIR_PATH=/app" in str(a) for a in base_build_cmd)
+
+
+def test_build_image_explicit_workdir_path_build_arg_overrides_env(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("WORKDIR_PATH", "/app")
+    monkeypatch.delenv("CONTAINER_BUILD_ARGS", raising=False)
+
+    build_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image(build_args="WORKDIR_PATH=/custom")
+
+    assert len(build_calls) == 1
+    base_build_cmd = build_calls[0]
+    assert any("WORKDIR_PATH=/custom" in str(a) for a in base_build_cmd)
+    assert not any("WORKDIR_PATH=/app" in str(a) for a in base_build_cmd)
+
+
 def test_fastapi_stack_up_passes_container_build_options(
     temp_project_dir,
     mock_load_data_file,

@@ -1,11 +1,12 @@
 # syntax=docker/dockerfile:1
 
-# It is wise to use the Python version you are developing with. The `build-image` task
-# passes that properly here.
+# It is wise to use the Python version you are developing with and not blindly choose
+# the latest. The `build-image` task passes the version properly here
 ARG PYTHON_VERSION=3
 # Variant for the runtime image, e.g. slim, alpine, etc.
-# See https://hub.docker.com/_/python for available variants.
+# See https://hub.docker.com/_/python for available variants
 ARG PYTHON_VARIANT=slim
+ARG WORKDIR_PATH=/workspace
 
 FROM python:${PYTHON_VERSION} AS builder
 
@@ -42,7 +43,9 @@ FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS runtime
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-ARG USERNAME=py
+ARG NONROOT_USERNAME=py
+ARG NONROOT_UID=1000
+ARG NONROOT_GID=1000
 
 {% if CONTAINER_ENV_VARS %}
 # Inject custom builder stage environment variables
@@ -73,19 +76,20 @@ RUN set -eux; \
 SCRIPT
 {% endif %}
 
-# Create a named non-root user with a writable home directory.
+# Create a named non-root user with a writable home directory
+# Written to cover all Python image variants
 RUN set -eux; \
-    mkdir -p /workspace; \
     if adduser --help 2>&1 | grep -q -- '--disabled-password'; then \
-        addgroup --gid 1000 py; \
-        adduser --uid 1000 --gid 1000 --home /workspace --shell /bin/sh --disabled-password --gecos '' py; \
+        addgroup --gid "${NONROOT_GID}" "${NONROOT_USERNAME}"; \
+        adduser --uid "${NONROOT_UID}" --gid "${NONROOT_GID}" --home "${WORKDIR_PATH}" --shell /bin/sh --disabled-password --gecos '' "${NONROOT_USERNAME}"; \
     else \
-        addgroup -g 1000 py 2>/dev/null || true; \
-        adduser -D -u 1000 -G py -h /workspace -s /bin/sh py; \
+        addgroup -g "${NONROOT_GID}" "${NONROOT_USERNAME}" && \
+        adduser -D -u "${NONROOT_UID}" -G "${NONROOT_USERNAME}" -h "${WORKDIR_PATH}" -s /bin/sh "${NONROOT_USERNAME}"; \
     fi; \
-    chown -R py:py /workspace
-ENV HOME=/workspace
-WORKDIR /workspace
+    mkdir -p "${WORKDIR_PATH}"; \
+    chown -R "${NONROOT_USERNAME}":"${NONROOT_USERNAME}" "${WORKDIR_PATH}"
+
+WORKDIR ${WORKDIR_PATH}
 
 # Grab package from builder image
 COPY --from=builder /tmp/build/dist/*.whl /tmp/
@@ -115,7 +119,9 @@ RUN echo "#!/bin/sh\n\n{{ ENTRYPOINT_COMMAND|default('python') }} \"\$@\"" >/pkg
 
 USER py
 
-{{ EXTENSION_CONTENT|default('') }}
+{% if EXTENSION_CONTENT %}
+{{ EXTENSION_CONTENT }}
+{% endif %}
 
 {% if HAS_DEBUG_DEPS %}
 # Optional debug stage: only installs debug deps if they were exported. This stage will not

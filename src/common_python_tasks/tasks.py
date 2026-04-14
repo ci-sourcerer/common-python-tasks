@@ -313,6 +313,7 @@ def build_image(
         get_package_name,
         get_prune_keep,
         has_debug_dependency_group,
+        inject_auto_build_args_from_env,
         load_container_env_tokens,
         load_data_file,
         parse_container_deps_mappings,
@@ -375,6 +376,7 @@ def build_image(
         for k, v in (parsed_build_args or {}).items()
         if k not in {"APT_PACKAGES", "CUSTOM_ENTRYPOINT"}
     }
+    top_level_build_args = inject_auto_build_args_from_env(top_level_build_args)
 
     combined_content = ""
     merged_build_args = top_level_build_args or None
