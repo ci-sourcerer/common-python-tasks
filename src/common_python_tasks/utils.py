@@ -1129,6 +1129,38 @@ def render_container_deps_move_script(mappings: dict[str, str]) -> str:
     return textwrap.dedent("\n".join(script_lines)).strip()
 
 
+def get_container_deps_move_script() -> str | None:
+    """Return the container dependency move script from env or path.
+
+    Supports either inline executable script content via
+    `CONTAINER_DEPS_MOVE_SCRIPT` or a host-side script file path via
+    `CONTAINER_DEPS_MOVE_SCRIPT_PATH`.
+    """
+    script_path_value = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT_PATH")
+    inline_script = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT")
+
+    if script_path_value and script_path_value.strip():
+        if inline_script and inline_script.strip():
+            LOGGER.warning(
+                "Both CONTAINER_DEPS_MOVE_SCRIPT_PATH and CONTAINER_DEPS_MOVE_SCRIPT are set; using CONTAINER_DEPS_MOVE_SCRIPT_PATH."
+            )
+        script_path = Path(script_path_value)
+        if not script_path.exists():
+            fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH not found: {script_path}")
+        if not script_path.is_file():
+            fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is not a file: {script_path}")
+        content = script_path.read_text(encoding="utf-8")
+        if not content.strip():
+            fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is empty: {script_path}")
+        return content.rstrip("\n")
+
+    if inline_script is None:
+        return None
+
+    inline_script = inline_script.strip()
+    return inline_script if inline_script else None
+
+
 def build_deps_image(
     deps_content: str | None = None,
     deps_dockerfile_path: Path | list[Path] | None = None,

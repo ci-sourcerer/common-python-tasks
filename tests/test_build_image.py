@@ -1515,7 +1515,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN python - <<'PYCODE'\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nPYCODE\n{% endif %}\n",
+                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1529,7 +1529,7 @@ class TestBuildImageWithDeps:
 
         build_image(single_arch=True)
 
-        assert "RUN python - <<'PYCODE'" in captured.get("content", "")
+        assert "cat >/tmp/container-deps-move-script" in captured.get("content", "")
         assert "shutil.move" in captured.get("content", "")
         assert "'dep1': '/opt/dep1'" in captured.get("content", "")
 
@@ -1570,7 +1570,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN python - <<'PYCODE'\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nPYCODE\n{% endif %}\n",
+                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1586,6 +1586,66 @@ class TestBuildImageWithDeps:
 
         assert "print('custom-move')" in captured.get("content", "")
         assert "shutil.move" not in captured.get("content", "")
+        assert "chmod +x /tmp/container-deps-move-script" in captured.get("content", "")
+
+    def test_uses_container_deps_move_script_path(
+        self,
+        monkeypatch,
+        temp_project_dir,
+        mock_run_command,
+        mock_load_data_file,
+        mock_get_image_tag,
+        mock_get_authors,
+        mock_get_package_name,
+    ):
+        from common_python_tasks.tasks import build_image
+
+        script_path = temp_project_dir / "move-deps.sh"
+        script_path.write_text(
+            "#!/usr/bin/env sh\necho moving deps >/tmp/deps/marker\n",
+            encoding="utf-8",
+        )
+
+        captured: dict[str, str] = {}
+        original_side_effect = mock_run_command.side_effect
+
+        def tracking(command, *args, **kwargs):
+            result = original_side_effect(command, *args, **kwargs)
+            if isinstance(command, list) and len(command) >= 4:
+                cmd = [str(c) for c in command if c is not None]
+                if cmd[:2] == ["docker", "build"] and "-f" in cmd:
+                    dockerfile_path = cmd[cmd.index("-f") + 1]
+                    try:
+                        captured["content"] = Path(dockerfile_path).read_text(
+                            encoding="utf-8"
+                        )
+                    except FileNotFoundError:
+                        captured["content"] = ""
+            return result
+
+        original_load_data_file = mock_load_data_file.side_effect
+
+        def load_data_file_side_effect(
+            filename, type_identifier="generic", fatal_on_missing=True
+        ):
+            if filename == "Dockerfile.j2":
+                return (
+                    "/fake/path/Dockerfile.j2",
+                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
+                )
+            return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+        mock_load_data_file.side_effect = load_data_file_side_effect
+        mock_run_command.side_effect = tracking
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "RUN apt-get install -y curl")
+        monkeypatch.setenv("CONTAINER_DEPS_MOVE_SCRIPT_PATH", str(script_path))
+        monkeypatch.setenv("CONTAINER_DEPS_MOVE_SCRIPT", "print('ignored')")
+
+        build_image(single_arch=True)
+
+        assert "#!/usr/bin/env sh" in captured.get("content", "")
+        assert "chmod +x /tmp/container-deps-move-script" in captured.get("content", "")
+        assert "echo moving deps" in captured.get("content", "")
 
     def test_container_deps_move_script_env_overrides_mappings(
         self,
@@ -1624,7 +1684,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN python - <<'PYCODE'\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nPYCODE\n{% endif %}\n",
+                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1644,6 +1704,7 @@ class TestBuildImageWithDeps:
 
         assert "print('custom-move')" in captured.get("content", "")
         assert "'dep1'" not in captured.get("content", "")
+        assert "chmod +x /tmp/container-deps-move-script" in captured.get("content", "")
 
     def test_logs_container_deps_move_script_in_debug_mode(
         self,
@@ -1666,7 +1727,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN python - <<'PYCODE'\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nPYCODE\n{% endif %}\n",
+                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1724,7 +1785,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN python - <<'PYCODE'\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nPYCODE\n{% endif %}\n",
+                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1740,7 +1801,7 @@ class TestBuildImageWithDeps:
         assert "COPY --from=custom/deps /tmp/deps /tmp/deps" in captured.get(
             "content", ""
         )
-        assert "RUN python - <<'PYCODE'" in captured.get("content", "")
+        assert "cat >/tmp/container-deps-move-script" in captured.get("content", "")
         assert "'dep1': '/opt/dep1'" in captured.get("content", "")
 
     def test_no_deps_image_when_env_unset(

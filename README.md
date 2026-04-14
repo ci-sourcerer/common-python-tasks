@@ -185,16 +185,25 @@ The following environment variables configure package and container behavior.
 - `DOCKERHUB_USERNAME` specifies the Docker Hub username for image tagging (default is current local user)
 - `CONTAINER_REGISTRY_URL` specifies the registry URL (default is `docker.io/{username}`)
 - `CONTAINER_BUILD_ARGS` provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
+- `CONTAINER_EXTENSION_FILES` specifies colon-delimited local extension Dockerfile paths to include in the rendered build.
+- `CONTAINER_EXTENSIONS` specifies colon-delimited extension bundle names or parameterized bundle values to include in the rendered build.
 - `CONTAINER_ENV` provides colon-delimited `KEY=VALUE` declarations to inject into the builder stage of the rendered Dockerfile.
-- `--container-envfile` may be passed to `build_image` with a colon-separated list of files. Each file is loaded in order and contributes declarations to the builder stage.
 - `.containerenv` can also supply the same declarations from a file in the project root. It is the fallback source when neither `container_envfile` nor `CONTAINER_ENV` is provided.
 - `CONTAINER_PRUNE_KEEP` controls image pruning after builds (`-1` keep all, `0` keep latest only, `N` keep latest + `N` previous)
 - `CUSTOM_IMAGE_ENTRYPOINT` specifies a custom entrypoint script name for containers
 - `CONTAINER_DEPS_CONTENT` supplies inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`
 - `CONTAINER_DEPS_FILE` points to one or more explicit Dockerfiles to build the dependency image. It may be a colon-delimited list of file paths and is used only when `CONTAINER_DEPS_CONTENT` is unset.
-- `CONTAINER_DEPS_MAPPINGS` maps copied dependency names from `/tmp/deps` into destination paths, as whitespace-separated `name:/target/path` entries. This is only used when `CONTAINER_DEPS_MOVE_SCRIPT` is not set.
-- `CONTAINER_DEPS_MOVE_SCRIPT` supplies a raw Python move script to run after `/tmp/deps` is copied into the image. When both this and `CONTAINER_DEPS_MAPPINGS` are set, `CONTAINER_DEPS_MOVE_SCRIPT` takes precedence and a warning is emitted.
+- `CONTAINER_DEPS_MAPPINGS` maps copied dependency names from `/tmp/deps` into destination paths, as whitespace-separated `name:/target/path` entries. This is only used when `CONTAINER_DEPS_MOVE_SCRIPT` or `CONTAINER_DEPS_MOVE_SCRIPT_PATH` is not set.
+- `CONTAINER_DEPS_MOVE_SCRIPT` supplies a raw executable script to run after `/tmp/deps` is copied into the image. The script is written to `/tmp/container-deps-move-script` and executed with its own shebang.
+- `CONTAINER_DEPS_MOVE_SCRIPT_PATH` supplies a host path to a script file to run after `/tmp/deps` is copied into the image. This path takes precedence over `CONTAINER_DEPS_MOVE_SCRIPT` when both are set.
 - `GITHUB_RELEASE_ASSETS` colon-separated list of file paths or glob patterns to attach to the GitHub Release (default: `dist/*`)
+- `SKIP_GITHUB_RELEASE` truthy value to skip GitHub Release publication.
+- `GITHUB_TOKEN` or `GH_TOKEN` GitHub authentication token used to publish releases and upload assets.
+- `GITHUB_REPOSITORY` optional override for the repository slug used when publishing a GitHub Release.
+- `GITHUB_API_URL` and `GITHUB_SERVER_URL` configure the GitHub API host for GitHub Enterprise environments.
+- `GITHUB_RELEASE_TAG` optional tag name to publish for the GitHub Release.
+- `GITHUB_RELEASE_NAME` optional release title to use for the GitHub Release.
+- `GITHUB_RELEASE_BODY` optional release body text to use for the GitHub Release.
 - `RELEASE_PRE_SCRIPT` optional shell command to run before the release steps.
 - `RELEASE_POST_SCRIPT` optional shell command to run after the release completes.
 - Hook commands receive the following env vars: `RELEASE_TAG`, `RELEASE_VERSION`, `RELEASE_STAGE`, `RELEASE_COMPONENT`, and `RELEASE_DRY_RUN`.

@@ -65,9 +65,12 @@ ARG DEPS_IMAGE
 COPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps
 {% endif %}
 {% if CONTAINER_DEPS_MOVE_SCRIPT %}
-RUN python - <<'PYCODE'
+RUN set -eux; \
+    cat >/tmp/container-deps-move-script <<'SCRIPT' && \
+    chmod +x /tmp/container-deps-move-script && \
+    /tmp/container-deps-move-script
 {{ CONTAINER_DEPS_MOVE_SCRIPT }}
-PYCODE
+SCRIPT
 {% endif %}
 
 # Create a named non-root user with a writable home directory.

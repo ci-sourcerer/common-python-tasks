@@ -308,6 +308,7 @@ def build_image(
         build_image,
         fatal,
         get_cache_id_suffix,
+        get_container_deps_move_script,
         get_full_image_name,
         get_package_name,
         get_prune_keep,
@@ -422,14 +423,12 @@ def build_image(
         )
 
     deps_image_tag = external_deps_image or ""
-    container_deps_move_script = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT")
-    if container_deps_move_script is not None:
-        container_deps_move_script = container_deps_move_script.strip()
+    container_deps_move_script = get_container_deps_move_script()
 
     if container_deps_move_script:
         if deps_mappings:
             LOGGER.warning(
-                "Both CONTAINER_DEPS_MOVE_SCRIPT and CONTAINER_DEPS_MAPPINGS are set; using CONTAINER_DEPS_MOVE_SCRIPT."
+                "Both CONTAINER_DEPS_MOVE_SCRIPT(_PATH) and CONTAINER_DEPS_MAPPINGS are set; using CONTAINER_DEPS_MOVE_SCRIPT(_PATH)."
             )
     else:
         container_deps_move_script = render_container_deps_move_script(
