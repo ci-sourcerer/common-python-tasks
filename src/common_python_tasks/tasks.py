@@ -286,6 +286,8 @@ def build_image(
     plain: bool = False,
     single_arch: bool = False,
     build_args: str | None = None,
+    container_env: str | None = None,
+    container_envfile: str | None = None,
 ) -> None:
     """Build the container image for this project using the Dockerfile template.
 
@@ -295,21 +297,30 @@ def build_image(
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
         build_args: Additional build arguments (format: "KEY=VAL:OTHER=VAL"). Overrides CONTAINER_BUILD_ARGS env var if provided.
+        container_env: Colon-delimited `KEY=VALUE` declarations to inject into the builder stage.
+        container_envfile: Optional colon-separated list of files containing builder-stage env declarations.
+
+    Precedence for container env declarations is: `.containerenv`, `container_envfile`, `CONTAINER_ENV`, then `container_env`.
+    All supported sources are stacked in that order.
     """
     from common_python_tasks.utils import (
         build_deps_image,
         build_image,
         fatal,
+        get_cache_id_suffix,
         get_full_image_name,
         get_package_name,
         get_prune_keep,
+        has_debug_dependency_group,
+        load_container_env_tokens,
         load_data_file,
         parse_container_deps_mappings,
         parse_container_deps_source,
         parse_container_extensions,
         prune_images_keep,
-        render_deps_move_script,
+        render_container_deps_move_script,
         render_template_text,
+        resolve_container_entrypoint_command,
         resolve_extension_content,
     )
 
@@ -339,8 +350,33 @@ def build_image(
             else:
                 LOGGER.warning("Ignoring invalid build-arg token: %s", part)
 
+    has_debug_deps = has_debug_dependency_group()
+    if debug and not has_debug_deps:
+        fatal(
+            "Debug image requested, but no non-empty [dependency-groups].debug was found in pyproject.toml"
+        )
+
+    apt_packages = (parsed_build_args or {}).get("APT_PACKAGES", "").strip()
+    entrypoint_command = resolve_container_entrypoint_command(
+        (parsed_build_args or {}).get("CUSTOM_ENTRYPOINT")
+    )
+    container_env_vars = load_container_env_tokens(
+        container_env,
+        container_envfile,
+    )
+    if container_env_vars:
+        LOGGER.debug(
+            "Injecting builder-stage env vars: %s",
+            ", ".join(container_env_vars),
+        )
+    top_level_build_args = {
+        k: v
+        for k, v in (parsed_build_args or {}).items()
+        if k not in {"APT_PACKAGES", "CUSTOM_ENTRYPOINT"}
+    }
+
     combined_content = ""
-    merged_build_args = parsed_build_args
+    merged_build_args = top_level_build_args or None
     if extensions:
         combined_content = "\n\n".join(
             c for c in [f.rstrip() for f in resolved_fragments] if c
@@ -371,19 +407,43 @@ def build_image(
                     break
 
         # Merge top-level build-args with any extension-specific build-args
-        merged_build_args = {**(parsed_build_args or {})}
+        merged_build_args = {**top_level_build_args}
         merged_build_args.update(extra_build_args)
 
     # Optionally build a deps collector image
     deps_dockerfile_path, deps_content = parse_container_deps_source()
     deps_mappings = parse_container_deps_mappings()
-    if deps_mappings and not (deps_content or deps_dockerfile_path):
+    external_deps_image = (top_level_build_args or {}).get("DEPS_IMAGE")
+    if deps_mappings and not (
+        deps_content or deps_dockerfile_path or external_deps_image
+    ):
         fatal(
-            "CONTAINER_DEPS_MAPPINGS is set but no CONTAINER_DEPS_CONTENT or CONTAINER_DEPS_FILE was provided"
+            "CONTAINER_DEPS_MAPPINGS is set but no CONTAINER_DEPS_CONTENT, CONTAINER_DEPS_FILE, or DEPS_IMAGE was provided"
         )
 
-    deps_image_tag = ""
-    deps_move_script = ""
+    deps_image_tag = external_deps_image or ""
+    container_deps_move_script = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT")
+    if container_deps_move_script is not None:
+        container_deps_move_script = container_deps_move_script.strip()
+
+    if container_deps_move_script:
+        if deps_mappings:
+            LOGGER.warning(
+                "Both CONTAINER_DEPS_MOVE_SCRIPT and CONTAINER_DEPS_MAPPINGS are set; using CONTAINER_DEPS_MOVE_SCRIPT."
+            )
+    else:
+        container_deps_move_script = render_container_deps_move_script(
+            deps_mappings or {}
+        )
+
+    if container_deps_move_script:
+        LOGGER.debug(
+            "Rendered container deps move script:\n%s",
+            container_deps_move_script,
+        )
+
+    cache_id_suffix = get_cache_id_suffix(no_cache)
+
     if deps_content or deps_dockerfile_path:
         deps_image_tag = build_deps_image(
             deps_content=deps_content,
@@ -392,19 +452,24 @@ def build_image(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
-            extra_build_args=parsed_build_args,
+            extra_build_args=top_level_build_args or None,
+            cache_id_suffix=cache_id_suffix,
         )
         if merged_build_args is None:
             merged_build_args = {}
         merged_build_args["DEPS_IMAGE"] = deps_image_tag
-        deps_move_script = render_deps_move_script(deps_mappings or {})
 
     dockerfile_text = render_template_text(
         load_data_file("Dockerfile.j2")[1],
         {
             "EXTENSION_CONTENT": combined_content,
             "DEPS_IMAGE": deps_image_tag,
-            "DEPS_MOVE_SCRIPT": deps_move_script,
+            "CONTAINER_DEPS_MOVE_SCRIPT": container_deps_move_script,
+            "HAS_DEBUG_DEPS": has_debug_deps,
+            "APT_PACKAGES": apt_packages,
+            "ENTRYPOINT_COMMAND": entrypoint_command,
+            "CONTAINER_ENV_VARS": container_env_vars,
+            "CACHE_ID_SUFFIX": cache_id_suffix,
         },
     )
 
@@ -736,7 +801,12 @@ def release(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    build_args: str | None = None,
+    container_env: str | None = None,
+    container_envfile: str | None = None,
     assets: str | None = None,
+    pre_script: str | None = None,
+    post_script: str | None = None,
 ) -> None:
     """Run a full release flow for package (and containers when included).
 
@@ -748,9 +818,16 @@ def release(
         no_cache: Do not use cache when building container images.
         plain: Do not pretty-print container build output.
         single_arch: Build container image for a single architecture.
+        build_args: Additional build arguments for the Docker build.
+        container_env: Inline container environment variables.
+        container_envfile: Path to a container environment file.
+        assets: Optional release asset patterns or paths.
+        pre_script: Optional shell command to run before the release steps.
+        post_script: Optional shell command to run after the release completes.
     """
     from common_python_tasks.utils import (
         build_image,
+        build_release_hook_environment,
         ensure_on_default_branch,
         get_github_release_asset_paths,
         get_release_tag_from_poetry_version,
@@ -768,7 +845,14 @@ def release(
     if normalized_stage is not None and normalized_stage.lower() == "none":
         normalized_stage = None
 
+    pre_script = pre_script or os.getenv("RELEASE_PRE_SCRIPT")
+    post_script = post_script or os.getenv("RELEASE_POST_SCRIPT")
+
     ensure_on_default_branch()
+    hook_env = build_release_hook_environment(component, normalized_stage, dry_run)
+    if pre_script:
+        run_command(["sh", "-lc", pre_script], env=hook_env, dry_run=dry_run)
+
     if dry_run:
         log_dry_run("Would clean generated artifacts before release")
     else:
@@ -790,6 +874,8 @@ def release(
             log_dry_run("Would push container image with debug=%s", debug)
         else:
             log_dry_run("Containers tag is not included; would skip image build/push")
+        if post_script:
+            run_command(["sh", "-lc", post_script], env=hook_env, dry_run=dry_run)
         return
 
     build_package(clean_dist=True)
@@ -801,6 +887,9 @@ def release(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
+            build_args=build_args,
+            container_env=container_env,
+            container_envfile=container_envfile,
         )
         push_image(debug=debug)
 
@@ -825,6 +914,9 @@ def release(
         )
         raise
 
+    if post_script:
+        run_command(["sh", "-lc", post_script], env=hook_env, dry_run=dry_run)
+
 
 @tasks.script(
     task_name="build",
@@ -835,6 +927,9 @@ def build_with_containers(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    build_args: str | None = None,
+    container_env: str | None = None,
+    container_envfile: str | None = None,
 ) -> None:
     """Build the project and its containers.
 
@@ -843,15 +938,21 @@ def build_with_containers(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
+        build_args: Additional build arguments for the Docker build.
+        container_env: Inline container environment variables.
+        container_envfile: Path to a container environment file.
     """
     from common_python_tasks.utils import build
 
     build(
-        has_containers=True,
+        True,
         debug=debug,
         no_cache=no_cache,
         plain=plain,
         single_arch=single_arch,
+        build_args=build_args,
+        container_env=container_env,
+        container_envfile=container_envfile,
     )
 
 
@@ -860,7 +961,7 @@ def build_without_containers() -> None:
     """Build the project."""
     from common_python_tasks.utils import build
 
-    build(has_containers=False)
+    build(False)
 
 
 @tasks.script(task_name="stack-up", tags=["web", "containers", "fastapi"])
@@ -869,6 +970,9 @@ def fastapi_stack_up(
     no_cache: bool = False,
     detach: bool = False,
     services: str | None = None,
+    build_args: str | None = None,
+    container_env: str | None = None,
+    container_envfile: str | None = None,
 ) -> None:
     """Bring up the development stack for the application.
 
@@ -878,6 +982,9 @@ def fastapi_stack_up(
         detach: Run the stack in detached mode.
         services: Optional comma-separated list of services to start
             (e.g. `'api,db'`). If not provided, all services will be started.
+        build_args: Additional build arguments for the Docker build.
+        container_env: Inline container environment variables.
+        container_envfile: Path to a container environment file.
     """
     from common_python_tasks.utils import (
         build_exec_script,
@@ -886,15 +993,37 @@ def fastapi_stack_up(
         compose_cmd_prefix,
         ensure_secrets_generated,
         exec_script,
+        fatal,
+        get_cache_id_suffix,
+        has_debug_dependency_group,
         load_and_prepare_compose,
+        load_container_env_tokens,
         load_data_file,
         render_template_text,
+        resolve_container_entrypoint_command,
         run_docker_compose_command,
     )
 
+    has_debug_deps = has_debug_dependency_group()
+    if debug and not has_debug_deps:
+        fatal(
+            "Debug stack requested, but no non-empty [dependency-groups].debug was found in pyproject.toml"
+        )
+
+    container_env_vars = load_container_env_tokens(container_env, container_envfile)
+
+    cache_id_suffix = get_cache_id_suffix(no_cache)
+
     dockerfile_text = render_template_text(
         load_data_file("Dockerfile.j2")[1],
-        {"EXTENSION_CONTENT": ""},
+        {
+            "EXTENSION_CONTENT": "",
+            "HAS_DEBUG_DEPS": has_debug_deps,
+            "APT_PACKAGES": "",
+            "ENTRYPOINT_COMMAND": resolve_container_entrypoint_command(),
+            "CONTAINER_ENV_VARS": container_env_vars,
+            "CACHE_ID_SUFFIX": cache_id_suffix,
+        },
     )
 
     commit_tag = build_image(
@@ -904,6 +1033,9 @@ def fastapi_stack_up(
         debug=debug,
         no_cache=no_cache,
         single_arch=True,
+        build_args=build_args,
+        container_env=container_env,
+        container_envfile=container_envfile,
     )[1]
 
     ensure_secrets_generated()
@@ -1090,7 +1222,7 @@ def fastapi_db_shell() -> None:
 @tasks.script(tags=["containers", "debug"])
 def container_shell(
     tag: str | None = None,
-    shell: str = "/bin/bash",
+    shell: str | None = None,
     root: bool = False,
     no_echo_env: bool = False,
 ) -> None:
@@ -1101,14 +1233,27 @@ def container_shell(
 
     Args:
         tag: Image tag to use. If `None`, use the most-recently-built tag.
-        shell: Shell to use inside the container.
+        shell: Preferred shell name or path. If `None`, use the first available from
+            `zsh`, `fish`, `ksh`, `bash`, and `sh`.
         root: Whether to run the shell as root.
         no_echo_env: Whether to suppress printing environment variables on startup for debugging.
     """
+    from shlex import quote
+
+    shell_candidates = (
+        ["zsh", "fish", "ksh", "bash", "sh"] if shell is None else [shell]
+    )
+
     run_container(
         tag,
         entrypoint="/bin/sh",
-        command=shell,
+        command=(
+            "$("
+            + " || ".join(
+                f"command -v {quote(candidate)}" for candidate in shell_candidates
+            )
+            + ") || exit 127"
+        ),
         root=root,
         echo_env=not no_echo_env,
     )

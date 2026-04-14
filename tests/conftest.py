@@ -131,4 +131,14 @@ authors = [
 
     monkeypatch.chdir(project_dir)
 
+    from common_python_tasks.utils import (
+        has_debug_dependency_group,
+        is_task_tag_included,
+        read_pyproject_toml,
+    )
+
+    has_debug_dependency_group.cache_clear()
+    is_task_tag_included.cache_clear()
+    read_pyproject_toml.cache_clear()
+
     return project_dir

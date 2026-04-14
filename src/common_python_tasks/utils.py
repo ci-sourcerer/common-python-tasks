@@ -95,6 +95,71 @@ def log_dry_run(message: str, *args: object) -> None:
     LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
 
 
+def build_release_hook_environment(
+    component: str,
+    stage: str | None,
+    dry_run: bool,
+) -> dict[str, str]:
+    """Build the environment variables passed into release hook scripts.
+
+    Args:
+        component: The component to bump (major, minor, patch, or auto).
+        stage: The release stage (alpha, beta, rc, or None).
+        dry_run: Whether this is a dry run.
+
+    Returns:
+        A dictionary of environment variables for the release hook.
+    """
+    from dunamai import Version
+
+    component = component.lower()
+    normalized_stage = stage.lower() if stage is not None else None
+
+    if component == "auto":
+        component = infer_bump_component_from_git_cliff()
+
+    current_version_text = get_project_version_from_poetry()
+    current_version = Version.parse(current_version_text)
+
+    if component == "auto" and re.match(r"^0\.", str(current_version.base)):
+        component = "patch"
+
+    valid_components = {"major": 0, "minor": 1, "patch": 2}
+    if component not in valid_components:
+        fatal(
+            f'Invalid component "{component}". Must be one of: {", ".join(valid_components.keys())}.'
+        )
+
+    if normalized_stage is not None and normalized_stage not in {
+        "alpha",
+        "a",
+        "beta",
+        "b",
+        "rc",
+    }:
+        fatal(
+            f'Invalid stage "{normalized_stage}". Must be one of: alpha, beta, rc or empty for none.'
+        )
+
+    bumped = Version.parse(Version.parse(current_version_text).base).bump(
+        valid_components[component]
+    )
+    if normalized_stage is not None:
+        bumped.stage = {"a": "alpha", "b": "beta"}.get(
+            normalized_stage, normalized_stage
+        )
+        bumped.revision = 1
+
+    release_version = bumped.serialize()
+    return {
+        "RELEASE_COMPONENT": component,
+        "RELEASE_STAGE": normalized_stage or "",
+        "RELEASE_VERSION": release_version,
+        "RELEASE_TAG": f"v{release_version}",
+        "RELEASE_DRY_RUN": "1" if dry_run else "0",
+    }
+
+
 def infer_bump_component_from_git_cliff() -> str:
     """Infer the next semantic version bump type using git-cliff.
 
@@ -166,6 +231,35 @@ def infer_bump_component_from_git_cliff() -> str:
         "git-cliff did not infer a version change beyond the current version "
         f"{_serialize_base(current.base)!r}; bumped version was {_serialize_base(bumped.base)!r}."
     )
+
+
+def get_github_release_changelog() -> str | None:
+    """Generate release notes from git-cliff for unreleased commits."""
+    import shutil
+
+    if shutil.which("git-cliff") is None:
+        LOGGER.debug("git-cliff is not available; skipping changelog generation")
+        return None
+
+    try:
+        result = run_command(
+            ["git-cliff", "--unreleased"],
+            capture_output=True,
+            acceptable_returncodes={0},
+        )
+    except Exception as exc:
+        LOGGER.debug(
+            "Unable to generate GitHub Release changelog from git-cliff: %s",
+            exc,
+        )
+        return None
+
+    changelog = result.stdout.strip()
+    if not changelog:
+        LOGGER.debug("git-cliff produced no release notes for unreleased commits")
+        return None
+
+    return changelog
 
 
 def run_available_tools(
@@ -248,7 +342,9 @@ def run_command(
     capture_output: bool = False,
     acceptable_returncodes: Sequence[int] | None = None,
     env: dict[str, str] | None = None,
-) -> subprocess.CompletedProcess:
+    always_show_command: bool = False,
+    dry_run: bool = False,
+) -> subprocess.CompletedProcess | None:
     """Run a command as a subprocess and handle errors.
 
     Args:
@@ -259,9 +355,13 @@ def run_command(
             with a code not in this set, it will be treated as an error.
         env: An optional dictionary of environment variables to set for the command.
             This will be merged with the current environment.
+        always_show_command: If `True`, log the command with INFO when not in dry-run
+            mode.
+        dry_run: If `True`, log the command without executing it.
 
     Returns:
-        The `CompletedProcess` instance from the subprocess run.
+        The `CompletedProcess` instance from the subprocess run, or `None` for dry-run
+        invocations.
     """
     import subprocess
     from shlex import quote
@@ -274,7 +374,14 @@ def run_command(
     bold_command_display = (
         f"\033[1m{' '.join([quote(str(arg)) for arg in command])}\033[0m"
     )
-    LOGGER.debug("Running command: %s", bold_command_display)
+    if always_show_command:
+        LOGGER.info("Running command: %s", bold_command_display)
+    else:
+        LOGGER.debug("Running command: %s", bold_command_display)
+
+    if dry_run:
+        log_dry_run("Would run command: %s", " ".join(command))
+        return None
 
     merged_env = {**os.environ, **env} if env is not None else None
 
@@ -594,6 +701,39 @@ def read_pyproject_toml() -> dict[str, Any]:
     return tomllib.loads(Path("pyproject.toml").read_text())
 
 
+@lru_cache
+def has_debug_dependency_group() -> bool:
+    """Return whether `pyproject.toml` declares a non-empty debug dependency group.
+
+    Returns:
+        True when `[dependency-groups].debug` exists and has entries.
+    """
+    debug_group = read_pyproject_toml().get("dependency-groups", {}).get("debug")
+    if isinstance(debug_group, (list, tuple, set)):
+        return bool(debug_group)
+    return bool(debug_group)
+
+
+def resolve_container_entrypoint_command(custom_entrypoint: str | None = None) -> str:
+    """Resolve the command used in the generated container entrypoint script.
+
+    Args:
+        custom_entrypoint: Optional explicit command override.
+
+    Returns:
+        A command name to place in `/pkg/entrypoint.sh`.
+    """
+    if custom_entrypoint is not None and custom_entrypoint.strip():
+        return custom_entrypoint.strip()
+
+    script_name = get_package_name(use_underscores=True)
+    scripts = read_pyproject_toml().get("project", {}).get("scripts")
+    if isinstance(scripts, dict) and script_name in scripts:
+        return script_name
+
+    return "python"
+
+
 def extract_poe_script_tags(include_script: str, argument_name: str) -> set[str] | None:
     """Extract a tag list argument from a Poe include_script expression.
 
@@ -793,14 +933,99 @@ def render_template_text(
     return Template(template_text).render(**template_vars)
 
 
-def parse_container_deps_source() -> tuple[Path | None, str | None]:
+def get_cache_id_suffix(no_cache: bool) -> str:
+    """Return a cache-break suffix for Docker cache mount IDs.
+
+    If `no_cache` is enabled, this returns a stable random suffix for the
+    current task invocation; otherwise it returns an empty string.
+    """
+    if not no_cache:
+        return ""
+
+    import secrets
+
+    return f"-{secrets.token_hex(8)}"
+
+
+def load_container_env_file(path: str | None = None) -> str | None:
+    """Return the contents of a container env file if it exists and is non-empty."""
+    if path is not None:
+        container_env_path = Path(path)
+        if not container_env_path.is_file():
+            fatal(f"Container env file not found: {path}")
+    else:
+        container_env_path = Path(".containerenv")
+        if not container_env_path.is_file():
+            return None
+
+    container_env = container_env_path.read_text(encoding="utf-8").strip()
+    return container_env if container_env else None
+
+
+def split_colon_delimited_values(value: str) -> list[str]:
+    """Split a colon-delimited string while preserving quoted substrings."""
+    if not value or not value.strip():
+        return []
+
+    from shlex import split as shlex_split
+
+    try:
+        tokens = shlex_split(value.replace(":", " "), comments=True)
+    except ValueError as exc:
+        raise ValueError(f"Unable to parse colon-delimited values: {exc}") from exc
+
+    return [token for token in tokens if token.strip()]
+
+
+def parse_container_env_tokens(value: str | None) -> list[str]:
+    """Parse colon-delimited `KEY=VALUE` container env declarations."""
+    if not value or not value.strip():
+        return []
+
+    tokens = split_colon_delimited_values(value)
+    return [token for token in tokens if token.strip()]
+
+
+def load_container_env_tokens(
+    container_env: str | None = None,
+    container_envfile: str | None = None,
+) -> list[str]:
+    """Load container env declarations from multiple sources in precedence order."""
+    tokens: list[str] = []
+
+    # Lowest precedence: project root file
+    file_value = load_container_env_file()
+    if file_value is not None:
+        tokens.extend(parse_container_env_tokens(file_value))
+
+    # Middle precedence: optional explicit envfile(s)
+    if container_envfile is not None and container_envfile.strip():
+        for path in split_colon_delimited_values(container_envfile):
+            file_value = load_container_env_file(path)
+            if file_value is not None:
+                tokens.extend(parse_container_env_tokens(file_value))
+
+    # Higher precedence: environment variable
+    env_value = os.getenv("CONTAINER_ENV")
+    if env_value and env_value.strip():
+        tokens.extend(parse_container_env_tokens(env_value))
+
+    # Highest precedence: inline CLI value
+    if container_env is not None and container_env.strip():
+        tokens.extend(parse_container_env_tokens(container_env))
+
+    return tokens
+
+
+def parse_container_deps_source() -> tuple[Path | list[Path] | None, str | None]:
     """Return the source for dependency Dockerfile input.
 
     `CONTAINER_DEPS_CONTENT` is preferred and overrides `CONTAINER_DEPS_FILE`.
+    `CONTAINER_DEPS_FILE` may contain a colon-delimited list of file paths.
 
     Returns:
-        A tuple of `(dockerfile_path, inline_content)`. One of the values may be
-        ``None`` when not provided.
+        A tuple of `(dockerfile_path_or_paths, inline_content)`. One of the values
+        may be `None` when not provided.
     """
     content = os.getenv("CONTAINER_DEPS_CONTENT")
     if content and content.strip():
@@ -808,10 +1033,13 @@ def parse_container_deps_source() -> tuple[Path | None, str | None]:
 
     path_raw = os.getenv("CONTAINER_DEPS_FILE")
     if path_raw:
-        p = Path(path_raw.strip())
-        if not p.exists():
-            fatal(f"CONTAINER_DEPS_FILE not found: {p}")
-        return p, None
+        paths = [Path(p.strip()) for p in split_colon_delimited_values(path_raw)]
+        if not paths:
+            return None, None
+        for p in paths:
+            if not p.exists():
+                fatal(f"CONTAINER_DEPS_FILE not found: {p}")
+        return paths[0] if len(paths) == 1 else paths, None
     return None, None
 
 
@@ -824,6 +1052,10 @@ def parse_container_deps() -> str | None:
     if content is not None:
         return content
     if dockerfile_path is not None:
+        if isinstance(dockerfile_path, list):
+            return "\n".join(
+                p.read_text(encoding="utf-8").strip() for p in dockerfile_path
+            ).strip()
         return dockerfile_path.read_text(encoding="utf-8").strip()
     return None
 
@@ -869,7 +1101,7 @@ def parse_container_deps_mappings() -> dict[str, str] | None:
     return mappings
 
 
-def render_deps_move_script(mappings: dict[str, str]) -> str:
+def render_container_deps_move_script(mappings: dict[str, str]) -> str:
     """Render a Python script that moves deps from /tmp/deps into target paths."""
     if not mappings:
         return ""
@@ -899,23 +1131,25 @@ def render_deps_move_script(mappings: dict[str, str]) -> str:
 
 def build_deps_image(
     deps_content: str | None = None,
-    deps_dockerfile_path: Path | None = None,
+    deps_dockerfile_path: Path | list[Path] | None = None,
     context_path: Path | None = None,
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
     extra_build_args: dict[str, str] | None = None,
+    cache_id_suffix: str = "",
 ) -> str:
     """Build the dependency collector image and return its full tag.
 
     Args:
         deps_content: Dockerfile instructions to install deps into `/tmp/deps`.
-        deps_dockerfile_path: Optional path to an explicit deps Dockerfile.
+        deps_dockerfile_path: Optional path or list of paths to explicit deps Dockerfiles.
         context_path: Docker build context directory. Defaults to `.`.
         no_cache: Pass `--no-cache` to the Docker build command.
         plain: Pass `--progress plain` to the Docker build command.
         single_arch: Build for a single architecture only.
         extra_build_args: Additional build arguments.
+        cache_id_suffix: Suffix appended to cache mount IDs to break caching.
 
     Returns:
         The full `<name>:<tag>` identifier of the built deps image.
@@ -932,10 +1166,21 @@ def build_deps_image(
             "build_deps_image may only receive one of deps_content or deps_dockerfile_path"
         )
 
+    if no_cache and not cache_id_suffix:
+        cache_id_suffix = get_cache_id_suffix(True)
+
     if deps_dockerfile_path is not None:
-        if not deps_dockerfile_path.exists():
-            fatal(f"Deps Dockerfile not found: {deps_dockerfile_path}")
-        hash_source = deps_dockerfile_path.read_text(encoding="utf-8")
+        dockerfile_paths = (
+            deps_dockerfile_path
+            if isinstance(deps_dockerfile_path, list)
+            else [deps_dockerfile_path]
+        )
+        for path in dockerfile_paths:
+            if not path.exists():
+                fatal(f"Deps Dockerfile not found: {path}")
+        hash_source = "\n".join(
+            path.read_text(encoding="utf-8").strip() for path in dockerfile_paths
+        )
     elif deps_content is not None:
         hash_source = deps_content
     else:
@@ -966,7 +1211,30 @@ def build_deps_image(
 
         dockerfile_path = Path(temp_file_path)
     else:
-        dockerfile_path = deps_dockerfile_path
+        if isinstance(deps_dockerfile_path, list):
+            if len(deps_dockerfile_path) == 1:
+                dockerfile_path = deps_dockerfile_path[0]
+            else:
+                dockerfile_text = "\n".join(
+                    path.read_text(encoding="utf-8").strip()
+                    for path in deps_dockerfile_path
+                )
+                import tempfile
+
+                tf = tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    delete=False,
+                    prefix="Dockerfile.deps.",
+                    suffix=".generated",
+                )
+                temp_file_path = tf.name
+                with open(temp_file_path, "w", encoding="utf-8") as f:
+                    f.write(dockerfile_text)
+
+                dockerfile_path = Path(temp_file_path)
+        else:
+            dockerfile_path = deps_dockerfile_path
 
     python_version = platform.python_version()
     archs = ["linux/amd64", "linux/arm64"] if not single_arch else None
@@ -974,6 +1242,8 @@ def build_deps_image(
     build_args: dict[str, str] = {"PYTHON_VERSION": python_version}
     if extra_build_args:
         build_args.update({k: v for k, v in extra_build_args.items() if v is not None})
+    if cache_id_suffix:
+        build_args["CACHE_ID_SUFFIX"] = cache_id_suffix
 
     full_tag = f"{deps_image_name}:{deps_tag}"
     build_cmd = [
@@ -986,6 +1256,7 @@ def build_deps_image(
         "--platform" if archs else None,
         ",".join(archs) if archs else None,
         "--no-cache" if no_cache else None,
+        "--pull" if no_cache else None,
         "-t",
         full_tag,
     ]
@@ -1356,7 +1627,10 @@ def publish_github_release(
         )
 
     release_name = release_name or tag_name
-    release_body = body if body is not None else f"Release {tag_name}"
+    release_body = body if body is not None else get_github_release_changelog()
+    if release_body is None:
+        release_body = f"Release {tag_name}"
+
     payload = {
         "tag_name": tag_name,
         "name": release_name,
@@ -2192,6 +2466,9 @@ def build(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    build_args: str | None = None,
+    container_env: str | None = None,
+    container_envfile: str | None = None,
 ) -> None:
     """Build the package and optionally the container image.
 
@@ -2202,16 +2479,23 @@ def build(
         no_cache: Pass `--no-cache` to the Docker build command.
         plain: Pass `--progress plain` to the Docker build command.
         single_arch: Build the container for the current host architecture only.
+        build_args: Additional build arguments for the Docker build.
+        container_env: Inline container environment variables.
+        container_envfile: Path to a container environment file.
     """
+    from common_python_tasks.tasks import build_image as build_container_image
     from common_python_tasks.tasks import build_package
 
     build_package()
     if has_containers:
-        build_image(
+        build_container_image(
             debug=debug,
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
+            build_args=build_args,
+            container_env=container_env,
+            container_envfile=container_envfile,
         )
 
 
@@ -2293,6 +2577,25 @@ def build_image(
         files_to_ignore = [Path(".dockerignore")] if temp_dockerignore_created else []
         version_string = get_image_tag(ignore=files_to_ignore)
 
+        dockerfile_source = (
+            dockerfile_text
+            if dockerfile_text is not None
+            else dockerfile_path.read_text(encoding="utf-8")
+        )
+        if (
+            debug
+            and not omit_target
+            and not re.search(
+                r"^\s*FROM\s+\S+\s+AS\s+debug\s*$",
+                dockerfile_source,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        ):
+            fatal(
+                "Debug build requested, but the rendered Dockerfile has no debug stage. "
+                "Add a non-empty [dependency-groups].debug in pyproject.toml or build without debug."
+            )
+
         if debug:
             suffix = "-debug"
             target = "debug"
@@ -2325,7 +2628,6 @@ def build_image(
                     [f"{name} <{email}>" for name, email in get_authors()]
                 ),
                 "GIT_COMMIT": commit_tag,
-                "CUSTOM_ENTRYPOINT": os.getenv("CUSTOM_IMAGE_ENTRYPOINT"),
             }.items()
             if v is not None
         }
@@ -2334,6 +2636,7 @@ def build_image(
             for k, v in extra_build_args.items():
                 if v is not None:
                     build_args[k] = v
+
         tags_to_use = [t for t in (tag, version_tag, commit_tag) if t is not None]
         LOGGER.debug("Building image with tags: %s", ", ".join(tags_to_use))
         # Allow override of image name for extension builds
@@ -2363,6 +2666,7 @@ def build_image(
             "--platform" if archs else None,
             ",".join(archs) if archs else None,
             "--no-cache" if no_cache else None,
+            "--pull" if no_cache else None,
             *[item for t in tags_to_use for item in ("-t", f"{image_short_name}:{t}")],
         ]
         for t in tags_to_use:

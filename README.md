@@ -69,7 +69,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `publish-package` | Publish the package to the PyPI server | packaging |
 | `publish-github-release` | Publish or update a GitHub Release and attach built distribution assets | packaging, release |
 | `push-image` | Push the Docker image to the container registry | containers, packaging, release |
-| `release` | Run package release flow and publish containers when `containers` tag is included | packaging, release |
+| `release` | Run package release flow and publish containers when `containers` tag is included. Supports optional `RELEASE_PRE_SCRIPT` and `RELEASE_POST_SCRIPT` hooks. | packaging, release |
 | `reset-db` | Reset the database by deleting the database volume | web, containers, database |
 | `run-container` | Run the Docker image as a container | containers |
 | `run-db-migrations` | Run database migrations | web, containers, database |
@@ -185,12 +185,19 @@ The following environment variables configure package and container behavior.
 - `DOCKERHUB_USERNAME` specifies the Docker Hub username for image tagging (default is current local user)
 - `CONTAINER_REGISTRY_URL` specifies the registry URL (default is `docker.io/{username}`)
 - `CONTAINER_BUILD_ARGS` provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
+- `CONTAINER_ENV` provides colon-delimited `KEY=VALUE` declarations to inject into the builder stage of the rendered Dockerfile.
+- `--container-envfile` may be passed to `build_image` with a colon-separated list of files. Each file is loaded in order and contributes declarations to the builder stage.
+- `.containerenv` can also supply the same declarations from a file in the project root. It is the fallback source when neither `container_envfile` nor `CONTAINER_ENV` is provided.
 - `CONTAINER_PRUNE_KEEP` controls image pruning after builds (`-1` keep all, `0` keep latest only, `N` keep latest + `N` previous)
 - `CUSTOM_IMAGE_ENTRYPOINT` specifies a custom entrypoint script name for containers
 - `CONTAINER_DEPS_CONTENT` supplies inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`
-- `CONTAINER_DEPS_FILE` points to an explicit Dockerfile to build the dependency image. It is used only when `CONTAINER_DEPS_CONTENT` is unset.
-- `CONTAINER_DEPS_MAPPINGS` maps copied dependency names from `/tmp/deps` into destination paths, as whitespace-separated `name:/target/path` entries.
+- `CONTAINER_DEPS_FILE` points to one or more explicit Dockerfiles to build the dependency image. It may be a colon-delimited list of file paths and is used only when `CONTAINER_DEPS_CONTENT` is unset.
+- `CONTAINER_DEPS_MAPPINGS` maps copied dependency names from `/tmp/deps` into destination paths, as whitespace-separated `name:/target/path` entries. This is only used when `CONTAINER_DEPS_MOVE_SCRIPT` is not set.
+- `CONTAINER_DEPS_MOVE_SCRIPT` supplies a raw Python move script to run after `/tmp/deps` is copied into the image. When both this and `CONTAINER_DEPS_MAPPINGS` are set, `CONTAINER_DEPS_MOVE_SCRIPT` takes precedence and a warning is emitted.
 - `GITHUB_RELEASE_ASSETS` colon-separated list of file paths or glob patterns to attach to the GitHub Release (default: `dist/*`)
+- `RELEASE_PRE_SCRIPT` optional shell command to run before the release steps.
+- `RELEASE_POST_SCRIPT` optional shell command to run after the release completes.
+- Hook commands receive the following env vars: `RELEASE_TAG`, `RELEASE_VERSION`, `RELEASE_STAGE`, `RELEASE_COMPONENT`, and `RELEASE_DRY_RUN`.
 
 #### Docker Compose settings
 
