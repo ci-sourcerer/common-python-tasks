@@ -303,27 +303,33 @@ def build_image(
     Precedence for container env declarations is: `.containerenv`, `container_envfile`, `CONTAINER_ENV`, then `container_env`.
     All supported sources are stacked in that order.
     """
-    from common_python_tasks.utils import (
+    from common_python_tasks.docker import (
         build_deps_image,
         build_image,
-        fatal,
+        prune_images_keep,
+    )
+    from common_python_tasks.env import (
         get_cache_id_suffix,
         get_container_deps_move_script,
-        get_full_image_name,
-        get_package_name,
         get_prune_keep,
-        has_debug_dependency_group,
         inject_auto_build_args_from_env,
         load_container_env_tokens,
-        load_data_file,
         parse_container_deps_mappings,
         parse_container_deps_source,
         parse_container_extensions,
-        prune_images_keep,
         render_container_deps_move_script,
-        render_template_text,
-        resolve_container_entrypoint_command,
         resolve_extension_content,
+    )
+    from common_python_tasks.project import (
+        has_debug_dependency_group,
+        resolve_container_entrypoint_command,
+    )
+    from common_python_tasks.utils import (
+        fatal,
+        get_full_image_name,
+        get_package_name,
+        load_data_file,
+        render_template_text,
     )
 
     # Determine extensions up-front so we can log a single, accurate message
@@ -615,10 +621,12 @@ def push_image(debug: bool = False) -> None:
     Args:
         debug: Push the debug image.
     """
-    from common_python_tasks.utils import (
-        get_full_image_name,
+    from common_python_tasks.git import (
         get_image_tag,
         has_tags_later_in_history,
+    )
+    from common_python_tasks.utils import (
+        get_full_image_name,
         run_command,
     )
 
@@ -662,15 +670,15 @@ def publish_github_release(
     assets: str | None = None,
 ) -> None:
     """Publish or update a GitHub Release for the current repository."""
-    from common_python_tasks.utils import (
-        env_truthy,
-        fatal,
+    from common_python_tasks.env import env_truthy
+    from common_python_tasks.github import (
         get_github_release_asset_paths,
-        get_release_tag_from_poetry_version,
     )
-    from common_python_tasks.utils import (
+    from common_python_tasks.github import (
         publish_github_release as publish_github_release_helper,
     )
+    from common_python_tasks.project import get_release_tag_from_poetry_version
+    from common_python_tasks.utils import fatal
 
     resolved_tag_name = tag_name or os.getenv("GITHUB_RELEASE_TAG")
     if resolved_tag_name is None:
@@ -726,12 +734,14 @@ def bump_version(
     """
     from typing import Literal
 
-    from common_python_tasks.utils import (
+    from common_python_tasks.git import (
         ensure_on_default_branch,
-        fatal,
         get_dirty_files,
-        get_project_version_from_poetry,
         infer_bump_component_from_git_cliff,
+    )
+    from common_python_tasks.project import get_project_version_from_poetry
+    from common_python_tasks.utils import (
+        fatal,
         log_dry_run,
         run_command,
     )
@@ -826,19 +836,23 @@ def release(
         pre_script: Optional shell command to run before the release steps.
         post_script: Optional shell command to run after the release completes.
     """
-    from common_python_tasks.utils import (
-        build_image,
+    from common_python_tasks.docker import build_image
+    from common_python_tasks.git import (
         build_release_hook_environment,
         ensure_on_default_branch,
-        get_github_release_asset_paths,
-        get_release_tag_from_poetry_version,
-        is_task_tag_included,
-        log_dry_run,
     )
-    from common_python_tasks.utils import (
+    from common_python_tasks.github import (
+        get_github_release_asset_paths,
+    )
+    from common_python_tasks.github import (
         publish_github_release as publish_github_release_helper,
     )
+    from common_python_tasks.project import (
+        get_release_tag_from_poetry_version,
+        is_task_tag_included,
+    )
     from common_python_tasks.utils import (
+        log_dry_run,
         run_command,
     )
 
@@ -943,7 +957,7 @@ def build_with_containers(
         container_env: Inline container environment variables.
         container_envfile: Path to a container environment file.
     """
-    from common_python_tasks.utils import build
+    from common_python_tasks.docker import build
 
     build(
         True,
@@ -960,7 +974,7 @@ def build_with_containers(
 @tasks.script(task_name="build", tags=["packaging"])
 def build_without_containers() -> None:
     """Build the project."""
-    from common_python_tasks.utils import build
+    from common_python_tasks.docker import build
 
     build(False)
 
@@ -987,22 +1001,28 @@ def fastapi_stack_up(
         container_env: Inline container environment variables.
         container_envfile: Path to a container environment file.
     """
-    from common_python_tasks.utils import (
+    from common_python_tasks.compose import (
         build_exec_script,
-        build_image,
         cleanup_temp_files,
         compose_cmd_prefix,
         ensure_secrets_generated,
         exec_script,
-        fatal,
-        get_cache_id_suffix,
-        has_debug_dependency_group,
         load_and_prepare_compose,
+        run_docker_compose_command,
+    )
+    from common_python_tasks.docker import build_image
+    from common_python_tasks.env import (
+        get_cache_id_suffix,
         load_container_env_tokens,
+    )
+    from common_python_tasks.project import (
+        has_debug_dependency_group,
+        resolve_container_entrypoint_command,
+    )
+    from common_python_tasks.utils import (
+        fatal,
         load_data_file,
         render_template_text,
-        resolve_container_entrypoint_command,
-        run_docker_compose_command,
     )
 
     has_debug_deps = has_debug_dependency_group()
@@ -1123,7 +1143,7 @@ def fastapi_stack_up(
 @tasks.script(task_name="stack-down", tags=["web", "containers", "fastapi"])
 def fastapi_stack_down() -> None:
     """Bring down the development stack for the application."""
-    from common_python_tasks.utils import (
+    from common_python_tasks.compose import (
         cleanup_temp_files,
         load_and_prepare_compose,
         run_docker_compose_command,
@@ -1150,9 +1170,9 @@ def fastapi_stack_down() -> None:
 @tasks.script(task_name="reset-db", tags=["web", "containers", "database", "fastapi"])
 def fastapi_reset_db() -> None:
     """Reset the database by deleting the database volume."""
+    from common_python_tasks.compose import load_and_prepare_compose
     from common_python_tasks.utils import (
         get_package_name,
-        load_and_prepare_compose,
         run_command,
     )
 
@@ -1171,7 +1191,7 @@ def fastapi_reset_db() -> None:
 )
 def fastapi_run_db_migrations() -> None:
     """Run database migrations."""
-    from common_python_tasks.utils import (
+    from common_python_tasks.compose import (
         load_and_prepare_compose,
         run_docker_compose_command,
     )
@@ -1191,9 +1211,9 @@ def fastapi_run_db_migrations() -> None:
 @tasks.script(task_name="db-shell", tags=["web", "containers", "database", "fastapi"])
 def fastapi_db_shell() -> None:
     """Open a psql shell to the database container."""
+    from common_python_tasks.compose import load_and_prepare_compose
     from common_python_tasks.utils import (
         get_package_name,
-        load_and_prepare_compose,
         run_command,
     )
 

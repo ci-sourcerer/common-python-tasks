@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 def test_build_exec_script_basic():
     """Script contains the compose command and self-deletes via trap."""
-    from common_python_tasks.utils import build_exec_script
+    from common_python_tasks.compose import build_exec_script
 
     script_path = build_exec_script(
         ["docker", "compose", "up", "--force-recreate"],
@@ -27,7 +27,7 @@ def test_build_exec_script_basic():
 
 def test_build_exec_script_cleanup_paths(tmp_path):
     """Script includes rm commands for each cleanup path."""
-    from common_python_tasks.utils import build_exec_script
+    from common_python_tasks.compose import build_exec_script
 
     fake_files = [tmp_path / "compose-base.abc.yml", tmp_path / "alembic.ini"]
     script_path = build_exec_script(
@@ -46,7 +46,7 @@ def test_build_exec_script_cleanup_paths(tmp_path):
 
 def test_build_exec_script_teardown_command():
     """Script includes an inline teardown command after the main command."""
-    from common_python_tasks.utils import build_exec_script
+    from common_python_tasks.compose import build_exec_script
 
     script_path = build_exec_script(
         ["docker", "compose", "up"],
@@ -67,7 +67,7 @@ def test_build_exec_script_teardown_command():
 
 def test_build_exec_script_is_executable():
     """Generated script file has execute permission."""
-    from common_python_tasks.utils import build_exec_script
+    from common_python_tasks.compose import build_exec_script
 
     script_path = build_exec_script(["docker", "compose", "up"])
     try:
@@ -79,7 +79,7 @@ def test_build_exec_script_is_executable():
 
 def test_build_exec_script_quotes_special_chars(tmp_path):
     """Script properly quotes paths containing spaces or special characters."""
-    from common_python_tasks.utils import build_exec_script
+    from common_python_tasks.compose import build_exec_script
 
     tricky_path = tmp_path / "my compose file.yml"
     script_path = build_exec_script(
@@ -97,9 +97,9 @@ def test_build_exec_script_quotes_special_chars(tmp_path):
 
 def test_exec_script_calls_execvpe():
     """_exec_script calls os.execvpe with /bin/sh and the script path."""
-    from common_python_tasks.utils import exec_script
+    from common_python_tasks.compose import exec_script
 
-    with patch("common_python_tasks.tasks.os.execvpe") as mock_exec:
+    with patch("common_python_tasks.compose.os.execvpe") as mock_exec:
         env = {"PATH": "/usr/bin", "HOME": "/tmp"}
         exec_script("/tmp/test.sh", env)
 
@@ -108,7 +108,7 @@ def test_exec_script_calls_execvpe():
 
 def test_build_exec_script_full_integration(tmp_path):
     """End-to-end: script with all options produces a well-formed shell script."""
-    from common_python_tasks.utils import build_exec_script
+    from common_python_tasks.compose import build_exec_script
 
     cleanup = [tmp_path / "compose-base.abc.yml", tmp_path / "Dockerfile"]
     compose_prefix = [

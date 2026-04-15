@@ -10,7 +10,7 @@ class TestParseContainerExtensions:
     """Tests for _parse_container_extensions parameter parsing."""
 
     def test_plain_bundle_name(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_extensions
+        from common_python_tasks.env import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext")
@@ -22,7 +22,7 @@ class TestParseContainerExtensions:
         assert result[0]["args"] is None
 
     def test_parameterised_bundle(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_extensions
+        from common_python_tasks.env import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl")
@@ -34,7 +34,7 @@ class TestParseContainerExtensions:
         assert result[0]["args"] == "jq curl"
 
     def test_mixed_parameterised_and_plain(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_extensions
+        from common_python_tasks.env import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl wget:plain_ext")
@@ -47,7 +47,7 @@ class TestParseContainerExtensions:
         assert result[1]["args"] is None
 
     def test_empty_args_treated_as_empty_string(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_extensions
+        from common_python_tasks.env import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
         monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=")
@@ -65,7 +65,7 @@ class TestResolveExtensionContent:
     """
 
     def test_template_contains_build_arg_variable(self, mock_load_data_file):
-        from common_python_tasks.utils import resolve_extension_content
+        from common_python_tasks.env import resolve_extension_content
 
         desc = {
             "id": "template_bundle",
@@ -79,7 +79,7 @@ class TestResolveExtensionContent:
         assert "jq curl" not in content
 
     def test_missing_args_do_not_affect_content(self, mock_load_data_file):
-        from common_python_tasks.utils import resolve_extension_content
+        from common_python_tasks.env import resolve_extension_content
 
         desc = {
             "id": "template_bundle",
@@ -94,7 +94,7 @@ class TestResolveExtensionContent:
         assert "APT_PACKAGES" in content
 
     def test_file_extension_without_placeholder_and_no_args(self, tmp_path):
-        from common_python_tasks.utils import resolve_extension_content
+        from common_python_tasks.env import resolve_extension_content
 
         ext_file = tmp_path / "Dockerfile.custom"
         ext_file.write_text("RUN echo hello\n")
@@ -116,7 +116,7 @@ class TestDockerignoreHandling:
     @pytest.fixture(autouse=True)
     def mock_installed_requirement_version(self):
         with patch(
-            "common_python_tasks.utils.get_installed_requirement_version"
+            "common_python_tasks.project.get_installed_requirement_version"
         ) as mock:
             mock.side_effect = lambda name: {
                 "poetry-dynamic-versioning[plugin]": "0.17.0",
@@ -135,7 +135,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that built-in .dockerignore is used when none exists."""
-        from common_python_tasks.utils import build_image
+        from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         assert not dockerignore_path.exists()
@@ -159,7 +159,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that existing .dockerignore is not modified."""
-        from common_python_tasks.utils import build_image
+        from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         original_content = "# Custom dockerignore\n*.log\n"
@@ -184,7 +184,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that temporary .dockerignore is created and removed."""
-        from common_python_tasks.utils import build_image
+        from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         assert not dockerignore_path.exists()
@@ -221,7 +221,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that temporary .dockerignore is cleaned up even on error."""
-        from common_python_tasks.utils import build_image
+        from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
 
@@ -266,7 +266,7 @@ class TestDockerignoreHandling:
         mock_get_package_name: MagicMock,
     ):
         """Test that the correct content is written from built-in .dockerignore."""
-        from common_python_tasks.utils import build_image
+        from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
         expected_content = "*\n!dist/*.whl\n!pyproject.toml\n"
@@ -305,7 +305,7 @@ class TestBuildImageLatestTag:
         mock_get_package_name,
     ):
         """Test that 'latest' tag is used when no tags are later in history."""
-        from common_python_tasks.utils import build_image
+        from common_python_tasks.docker import build_image
 
         build_command = None
         original_side_effect = mock_run_command.side_effect
@@ -342,7 +342,7 @@ class TestBuildImageLatestTag:
         mock_get_package_name,
     ):
         """Test that 'latest' tag is NOT used when tags are later in history."""
-        from common_python_tasks.utils import build_image
+        from common_python_tasks.docker import build_image
 
         build_command = None
         original_side_effect = mock_run_command.side_effect
@@ -900,7 +900,7 @@ def test_build_image_passes_required_dependency_versions(
     os.environ.pop("CONTAINER_BUILD_ARGS", None)
 
     with patch(
-        "common_python_tasks.utils.get_installed_requirement_version",
+        "common_python_tasks.project.get_installed_requirement_version",
         side_effect=lambda name: {
             "poetry-dynamic-versioning[plugin]": "0.17.0",
             "poetry-plugin-export": "1.5.0",
@@ -1069,18 +1069,18 @@ def test_fastapi_stack_up_passes_container_build_options(
         return ("version", "commit")
 
     with (
-        patch("common_python_tasks.utils.build_image", new=fake_build_image),
+        patch("common_python_tasks.docker.build_image", new=fake_build_image),
         patch(
-            "common_python_tasks.utils.load_container_env_tokens", return_value=["X=1"]
+            "common_python_tasks.env.load_container_env_tokens", return_value=["X=1"]
         ),
         patch(
-            "common_python_tasks.utils.ensure_secrets_generated"
+            "common_python_tasks.compose.ensure_secrets_generated"
         ) as mock_secrets,  # noqa: F841
         patch(
-            "common_python_tasks.utils.load_and_prepare_compose",
+            "common_python_tasks.compose.load_and_prepare_compose",
             return_value=([], [], [], {"API_PORT": "8080"}),
         ),
-        patch("common_python_tasks.utils.run_docker_compose_command"),
+        patch("common_python_tasks.compose.run_docker_compose_command"),
     ):
         fastapi_stack_up(
             detach=True,
@@ -1212,20 +1212,20 @@ class TestParseContainerDeps:
     """Tests for parse_container_deps env var handling."""
 
     def test_returns_none_when_unset(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps
+        from common_python_tasks.env import parse_container_deps
 
         monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
         monkeypatch.delenv("CONTAINER_DEPS_FILE", raising=False)
         assert parse_container_deps() is None
 
     def test_returns_content_from_env(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps
+        from common_python_tasks.env import parse_container_deps
 
         monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "RUN apt-get install -y curl")
         assert parse_container_deps() == "RUN apt-get install -y curl"
 
     def test_returns_content_from_file(self, monkeypatch, tmp_path):
-        from common_python_tasks.utils import parse_container_deps
+        from common_python_tasks.env import parse_container_deps
 
         monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
         deps_file = tmp_path / "deps.Dockerfile"
@@ -1234,7 +1234,7 @@ class TestParseContainerDeps:
         assert parse_container_deps() == "RUN pip install boto3"
 
     def test_returns_content_from_multiple_files(self, monkeypatch, tmp_path):
-        from common_python_tasks.utils import parse_container_deps
+        from common_python_tasks.env import parse_container_deps
 
         monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
         deps_file1 = tmp_path / "deps1.Dockerfile"
@@ -1251,7 +1251,7 @@ class TestParseContainerDeps:
         )
 
     def test_file_source_returns_path_when_no_content(self, monkeypatch, tmp_path):
-        from common_python_tasks.utils import parse_container_deps_source
+        from common_python_tasks.env import parse_container_deps_source
 
         deps_file = tmp_path / "deps.Dockerfile"
         deps_file.write_text("FROM FILE\n", encoding="utf-8")
@@ -1263,7 +1263,7 @@ class TestParseContainerDeps:
         assert content is None
 
     def test_file_source_returns_paths_when_multiple_files(self, monkeypatch, tmp_path):
-        from common_python_tasks.utils import parse_container_deps_source
+        from common_python_tasks.env import parse_container_deps_source
 
         deps_file1 = tmp_path / "deps1.Dockerfile"
         deps_file1.write_text("FROM FILE1\n", encoding="utf-8")
@@ -1280,7 +1280,7 @@ class TestParseContainerDeps:
         assert content is None
 
     def test_content_overrides_file_source(self, monkeypatch, tmp_path):
-        from common_python_tasks.utils import parse_container_deps_source
+        from common_python_tasks.env import parse_container_deps_source
 
         deps_file = tmp_path / "deps.Dockerfile"
         deps_file.write_text("FROM FILE\n", encoding="utf-8")
@@ -1292,7 +1292,7 @@ class TestParseContainerDeps:
         assert content == "FROM ENV"
 
     def test_file_missing_raises(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps
+        from common_python_tasks.env import parse_container_deps
 
         monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
         monkeypatch.setenv("CONTAINER_DEPS_FILE", "/nonexistent/deps.Dockerfile")
@@ -1300,7 +1300,7 @@ class TestParseContainerDeps:
             parse_container_deps()
 
     def test_empty_content_returns_none(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps
+        from common_python_tasks.env import parse_container_deps
 
         monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "   ")
         monkeypatch.delenv("CONTAINER_DEPS_FILE", raising=False)
@@ -1311,13 +1311,13 @@ class TestParseContainerDepsMappings:
     """Tests for parse_container_deps_mappings env var handling."""
 
     def test_returns_none_when_unset(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps_mappings
+        from common_python_tasks.env import parse_container_deps_mappings
 
         monkeypatch.delenv("CONTAINER_DEPS_MAPPINGS", raising=False)
         assert parse_container_deps_mappings() is None
 
     def test_parses_simple_mappings(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps_mappings
+        from common_python_tasks.env import parse_container_deps_mappings
 
         monkeypatch.setenv(
             "CONTAINER_DEPS_MAPPINGS",
@@ -1329,7 +1329,7 @@ class TestParseContainerDepsMappings:
         }
 
     def test_parses_quoted_paths(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps_mappings
+        from common_python_tasks.env import parse_container_deps_mappings
 
         monkeypatch.setenv(
             "CONTAINER_DEPS_MAPPINGS",
@@ -1341,14 +1341,14 @@ class TestParseContainerDepsMappings:
         }
 
     def test_invalid_token_raises(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps_mappings
+        from common_python_tasks.env import parse_container_deps_mappings
 
         monkeypatch.setenv("CONTAINER_DEPS_MAPPINGS", "invalid-token")
         with pytest.raises(SystemExit):
             parse_container_deps_mappings()
 
     def test_duplicate_name_raises(self, monkeypatch):
-        from common_python_tasks.utils import parse_container_deps_mappings
+        from common_python_tasks.env import parse_container_deps_mappings
 
         monkeypatch.setenv(
             "CONTAINER_DEPS_MAPPINGS",
@@ -1362,7 +1362,7 @@ class TestRenderDepsMoveScript:
     """Tests for generating the dependency move script."""
 
     def test_script_contains_expected_move_logic(self):
-        from common_python_tasks.utils import render_container_deps_move_script
+        from common_python_tasks.env import render_container_deps_move_script
 
         script = render_container_deps_move_script(
             {"dep1": "/opt/dep1", "dep2": "/usr/local/bin/dep2"}
@@ -1381,7 +1381,7 @@ class TestBuildDepsImage:
         mock_load_data_file,
         mock_get_package_name,
     ):
-        from common_python_tasks.utils import build_deps_image
+        from common_python_tasks.docker import build_deps_image
 
         tag = build_deps_image("RUN apt-get install -y curl", single_arch=True)
         assert tag.startswith("test-package-deps:deps-")
@@ -1400,7 +1400,7 @@ class TestBuildDepsImage:
         mock_load_data_file,
         mock_get_package_name,
     ):
-        from common_python_tasks.utils import build_deps_image
+        from common_python_tasks.docker import build_deps_image
 
         deps_file = tmp_path / "Dockerfile.deps"
         deps_file.write_text(
@@ -1427,7 +1427,7 @@ class TestBuildDepsImage:
         mock_load_data_file,
         mock_get_package_name,
     ):
-        from common_python_tasks.utils import build_deps_image
+        from common_python_tasks.docker import build_deps_image
 
         build_deps_image(
             "RUN apt-get install -y curl",
@@ -1455,7 +1455,7 @@ class TestBuildDepsImage:
         mock_load_data_file,
         mock_get_package_name,
     ):
-        from common_python_tasks.utils import build_deps_image
+        from common_python_tasks.docker import build_deps_image
 
         deps_file1 = tmp_path / "Dockerfile.deps.1"
         deps_file1.write_text(
@@ -1487,7 +1487,7 @@ class TestBuildDepsImage:
         mock_load_data_file,
         mock_get_package_name,
     ):
-        from common_python_tasks.utils import build_deps_image
+        from common_python_tasks.docker import build_deps_image
 
         tag1 = build_deps_image("RUN apt-get install -y curl", single_arch=True)
         tag2 = build_deps_image("RUN apt-get install -y wget", single_arch=True)
@@ -1499,7 +1499,7 @@ class TestBuildDepsImage:
         mock_load_data_file,
         mock_get_package_name,
     ):
-        from common_python_tasks.utils import build_deps_image
+        from common_python_tasks.docker import build_deps_image
 
         content = "RUN apt-get install -y jq"
         tag1 = build_deps_image(content, single_arch=True)

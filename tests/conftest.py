@@ -44,7 +44,7 @@ def mock_load_data_file():
     with (
         patch("common_python_tasks.utils.load_data_file", new=mock),
         patch(
-            "common_python_tasks.utils.get_installed_requirement_version",
+            "common_python_tasks.project.get_installed_requirement_version",
             new=version_mock,
         ),
     ):
@@ -90,8 +90,15 @@ def mock_load_data_file():
 def mock_get_image_tag():
     """Mock _get_image_tag to return a fixed tag."""
     mock = MagicMock()
-    with patch("common_python_tasks.utils.get_image_tag", new=mock):
+    with patch("common_python_tasks.git.get_image_tag", new=mock):
         mock.return_value = "1.0.0"
+        yield mock
+
+
+@pytest.fixture
+def mock_find_spec():
+    """Mock importlib.util.find_spec for package availability testing."""
+    with patch("importlib.util.find_spec") as mock:
         yield mock
 
 
@@ -99,7 +106,7 @@ def mock_get_image_tag():
 def mock_get_authors():
     """Mock _get_authors to return test authors."""
     mock = MagicMock()
-    with patch("common_python_tasks.utils.get_authors", new=mock):
+    with patch("common_python_tasks.project.get_authors", new=mock):
         mock.return_value = [("Test Author", "test@example.com")]
         yield mock
 
@@ -131,7 +138,7 @@ authors = [
 
     monkeypatch.chdir(project_dir)
 
-    from common_python_tasks.utils import (
+    from common_python_tasks.project import (
         has_debug_dependency_group,
         is_task_tag_included,
         read_pyproject_toml,

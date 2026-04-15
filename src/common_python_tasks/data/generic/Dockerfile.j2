@@ -39,6 +39,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }}
 RUN --mount=type=cache,target=/root/.cache/pypoetry,id=pypoetry-cache{{ CACHE_ID_SUFFIX }} poetry build --format=wheel
 
 FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS runtime
+ARG WORKDIR_PATH=/workspace
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
