@@ -803,6 +803,14 @@ def bump_version(
 
 
 @tasks.script(tags=["packaging", "release"])
+def changelog() -> None:
+    """Print the changelog for the current version based on git history and git-cliff."""
+    from common_python_tasks.utils import changelog as _changelog
+
+    print(_changelog())
+
+
+@tasks.script(tags=["packaging", "release"])
 def release(
     component: str = "patch",
     *,

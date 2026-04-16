@@ -1,6 +1,13 @@
+import hashlib
+import platform
 import re
 from pathlib import Path
 from typing import Sequence
+
+from . import git as _git
+from . import project as _project
+from . import utils
+from .env import get_cache_id_suffix, get_workdir_path
 
 
 def build(
@@ -53,18 +60,13 @@ def build_deps_image(
     cache_id_suffix: str = "",
 ) -> str:
     """Build the dependency collector image and return its full tag."""
-    import hashlib
-    import platform
-
-    from . import utils as _utils
-    from .env import get_cache_id_suffix
 
     if context_path is None:
         context_path = Path(".")
 
-    deps_image_name = f"{_utils.get_package_name()}-deps"
+    deps_image_name = f"{utils.get_package_name()}-deps"
     if deps_content is not None and deps_dockerfile_path is not None:
-        _utils.fatal(
+        utils.fatal(
             "build_deps_image may only receive one of deps_content or deps_dockerfile_path"
         )
 
@@ -79,14 +81,14 @@ def build_deps_image(
         )
         for path in dockerfile_paths:
             if not path.exists():
-                _utils.fatal(f"Deps Dockerfile not found: {path}")
+                utils.fatal(f"Deps Dockerfile not found: {path}")
         hash_source = "\n".join(
             path.read_text(encoding="utf-8").strip() for path in dockerfile_paths
         )
     elif deps_content is not None:
         hash_source = deps_content
     else:
-        _utils.fatal(
+        utils.fatal(
             "build_deps_image requires either deps_content or deps_dockerfile_path"
         )
 
@@ -95,8 +97,8 @@ def build_deps_image(
 
     temp_file_path = None
     if deps_dockerfile_path is None:
-        dockerfile_text = _utils.render_template_text(
-            _utils.load_data_file("Dockerfile.deps.j2")[1],
+        dockerfile_text = utils.render_template_text(
+            utils.load_data_file("Dockerfile.deps.j2")[1],
             {"DEPS_CONTENT": deps_content},
         )
 
@@ -167,9 +169,9 @@ def build_deps_image(
     if plain:
         build_cmd += ["--progress", "plain"]
 
-    _utils.LOGGER.info("Building deps image: %s", full_tag)
+    utils.LOGGER.info("Building deps image: %s", full_tag)
     try:
-        _utils.run_command(build_cmd)
+        utils.run_command(build_cmd)
     finally:
         if temp_file_path is not None:
             try:
@@ -187,7 +189,6 @@ def prune_images_keep(
     protect_tags: Sequence[str] | None = None,
 ) -> None:
     """Prune images for `full_name` keeping the most-recent `keep + 1` images."""
-    from . import utils as _utils
 
     if keep < 0:
         return
@@ -196,7 +197,7 @@ def prune_images_keep(
 
     retain_count = keep + 1
 
-    res = _utils.run_command(
+    res = utils.run_command(
         [
             "docker",
             "image",
@@ -210,7 +211,7 @@ def prune_images_keep(
         acceptable_returncodes={0, 1},
     )
     if res.returncode != 0:
-        _utils.LOGGER.exception("Failed to list images for pruning: %s", full_name)
+        utils.LOGGER.exception("Failed to list images for pruning: %s", full_name)
         return
 
     lines = [
@@ -234,12 +235,10 @@ def prune_images_keep(
     for tag in to_delete:
         for img in (f"{package_name}:{tag}", f"{full_name}:{tag}"):
             try:
-                _utils.LOGGER.info("Pruning image %s", img)
-                _utils.run_command(
-                    ["docker", "rmi", img], acceptable_returncodes={0, 1}
-                )
+                utils.LOGGER.info("Pruning image %s", img)
+                utils.run_command(["docker", "rmi", img], acceptable_returncodes={0, 1})
             except SystemExit:
-                _utils.LOGGER.warning(
+                utils.LOGGER.warning(
                     "Failed to remove image %s during pruning; continuing", img
                 )
 
@@ -257,13 +256,7 @@ def build_image(
     extra_build_args: dict[str, str] | None = None,
 ) -> tuple[str, str]:
     """Build a Docker image and return its `(version_tag, commit_tag)`."""
-    import platform
-
     from common_python_tasks.tasks import clean
-
-    from . import git as _git
-    from . import project as _project
-    from . import utils as _utils
 
     dist_path = Path("dist")
     if dist_path.exists() and any(dist_path.iterdir()):
@@ -275,7 +268,7 @@ def build_image(
     temp_file_path = None
     if dockerfile_path is None:
         if dockerfile_text is None:
-            _utils.fatal("Either dockerfile_path or dockerfile_text must be provided.")
+            utils.fatal("Either dockerfile_path or dockerfile_text must be provided.")
         import tempfile
 
         tf = tempfile.NamedTemporaryFile(
@@ -293,8 +286,8 @@ def build_image(
     dockerignore_path = context_path / ".dockerignore"
     temp_dockerignore_created = False
     if not dockerignore_path.exists():
-        _utils.LOGGER.debug("No .dockerignore found; using built-in .dockerignore")
-        builtin_dockerignore_content = _utils.load_data_file(".dockerignore")[1]
+        utils.LOGGER.debug("No .dockerignore found; using built-in .dockerignore")
+        builtin_dockerignore_content = utils.load_data_file(".dockerignore")[1]
         dockerignore_path.write_text(builtin_dockerignore_content, encoding="utf-8")
         temp_dockerignore_created = True
 
@@ -318,7 +311,7 @@ def build_image(
                 re.IGNORECASE | re.MULTILINE,
             )
         ):
-            _utils.fatal(
+            utils.fatal(
                 "Debug build requested, but the rendered Dockerfile has no debug stage. "
                 "Add a non-empty [dependency-groups].debug in pyproject.toml or build without debug."
             )
@@ -333,7 +326,7 @@ def build_image(
             tag = "latest" if not _git.has_tags_later_in_history() else None
 
         version_tag = f"{version_string}{suffix}"
-        commit_tag = f"{_utils.run_command(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True).stdout.strip()}{'-dirty' if _git.get_dirty_files(ignore=files_to_ignore) else ''}{suffix}"
+        commit_tag = f"{utils.run_command(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True).stdout.strip()}{'-dirty' if _git.get_dirty_files(ignore=files_to_ignore) else ''}{suffix}"
         python_version = platform.python_version()
         poetry_version = _project.get_poetry_version()
 
@@ -351,7 +344,7 @@ def build_image(
                 "TOMLKIT_VERSION": _project.get_installed_requirement_version(
                     "tomlkit"
                 ),
-                "PACKAGE_NAME": _utils.get_package_name(use_underscores=True),
+                "PACKAGE_NAME": utils.get_package_name(use_underscores=True),
                 "AUTHORS": ",".join(
                     [f"{name} <{email}>" for name, email in _project.get_authors()]
                 ),
@@ -364,16 +357,14 @@ def build_image(
                 if v is not None:
                     build_args[k] = v
 
-        from .env import get_workdir_path
-
         build_args.setdefault("WORKDIR_PATH", get_workdir_path())
 
         tags_to_use = [t for t in (tag, version_tag, commit_tag) if t is not None]
-        _utils.LOGGER.debug("Building image with tags: %s", ", ".join(tags_to_use))
+        utils.LOGGER.debug("Building image with tags: %s", ", ".join(tags_to_use))
         image_short_name = (
-            image_name if image_name is not None else _utils.get_package_name()
+            image_name if image_name is not None else utils.get_package_name()
         )
-        orig_full_name = _utils.get_full_image_name()
+        orig_full_name = utils.get_full_image_name()
         if image_name is None:
             image_full_name = orig_full_name
         else:
@@ -406,7 +397,7 @@ def build_image(
 
         if plain:
             build_cmd += ["--progress", "plain"]
-        _utils.run_command(build_cmd)
+        utils.run_command(build_cmd)
         delete_temp_file = True
     finally:
         if temp_file_path is not None and delete_temp_file:
@@ -435,12 +426,11 @@ def build_extension_image(
     extra_build_args: dict[str, str] | None = None,
 ) -> tuple[str, str]:
     """Build an image that starts `FROM` the primary image and returns its tags."""
-    from . import utils as _utils
 
     if context_path is None:
         context_path = Path(".")
 
-    _utils.LOGGER.debug(
+    utils.LOGGER.debug(
         "Building extension image based on %s:%s with override name '%s'",
         base_full_name,
         base_version_tag,
@@ -457,6 +447,6 @@ def build_extension_image(
         plain=plain,
         single_arch=single_arch,
         omit_target=True,
-        image_name=image_name_override or _utils.get_package_name(),
+        image_name=image_name_override or utils.get_package_name(),
         extra_build_args=extra_build_args,
     )

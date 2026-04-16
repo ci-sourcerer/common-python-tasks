@@ -1,8 +1,16 @@
 import os
+import platform
+import tempfile
 from pathlib import Path
+from shlex import quote
 from typing import NoReturn, Sequence
 
+from jinja2 import Template
 from poethepoet_tasks import TaskCollection
+
+from . import utils
+from .env import get_workdir_path
+from .project import get_poetry_version
 
 
 def ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
@@ -16,27 +24,23 @@ def ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
         config path and `should_cleanup` indicates whether the file should be
         removed after use.
     """
-    from . import utils as _utils
-
     alembic_ini_path = Path("alembic.ini")
     if alembic_ini_path.exists():
-        _utils.LOGGER.debug("Using existing alembic.ini")
+        utils.LOGGER.debug("Using existing alembic.ini")
         return alembic_ini_path, False
 
-    result = _utils.load_data_file(
+    result = utils.load_data_file(
         "alembic.ini.j2", type_identifier=compose_type, fatal_on_missing=False
     )
     if result is None:
         return None, False
 
-    from jinja2 import Template
-
     _, template_content = result
     rendered = Template(template_content).render(
-        package_name=_utils.get_package_name(use_underscores=True),
+        package_name=utils.get_package_name(use_underscores=True),
     )
     alembic_ini_path.write_text(rendered, encoding="utf-8")
-    _utils.LOGGER.debug("Rendered bundled alembic.ini.j2 to %s", alembic_ini_path)
+    utils.LOGGER.debug("Rendered bundled alembic.ini.j2 to %s", alembic_ini_path)
     return alembic_ini_path, True
 
 
@@ -64,30 +68,24 @@ def render_file(
         A tuple of `(Path, bool)` where the first item is the resolved file path
         and the second item indicates whether the file should be removed later.
     """
-    import tempfile
-
-    from . import utils as _utils
-
-    resolved_path = _utils.get_config_path(
+    resolved_path = utils.get_config_path(
         env_var_name,
         local_filename,
         data_filename,
         type_identifier=type_identifier,
     )
     if resolved_path is None:
-        _utils.fatal(f"No configuration rendered for {data_filename}")
+        utils.fatal(f"No configuration rendered for {data_filename}")
 
     path_obj = Path(resolved_path)
     should_template = render_template or path_obj.suffix == ".j2"
 
     if should_template:
-        from jinja2 import Template
-
-        package_name = _utils.get_package_name()
+        package_name = utils.get_package_name()
         env_prefix = os.getenv(
             "ENV_PREFIX",
             (
-                _utils.package_name_to_underscore(package_name.upper())
+                utils.package_name_to_underscore(package_name.upper())
                 if package_name
                 else ""
             ),
@@ -95,7 +93,7 @@ def render_file(
         template_vars = {
             "PACKAGE_NAME": package_name,
             "PACKAGE_UNDERSCORE_NAME": (
-                _utils.package_name_to_underscore(package_name) if package_name else ""
+                utils.package_name_to_underscore(package_name) if package_name else ""
             ),
             "ENV_PREFIX": env_prefix,
         }
@@ -127,7 +125,6 @@ def read_dotenv(path: Path, error_on_fail: bool = False) -> dict[str, str]:
     Returns:
         A dictionary of environment variables parsed from the file.
     """
-    from . import utils as _utils
 
     env: dict[str, str] = {}
     if not path.exists():
@@ -146,9 +143,9 @@ def read_dotenv(path: Path, error_on_fail: bool = False) -> dict[str, str]:
                 env[key] = value
     except Exception as exc:
         if error_on_fail:
-            _utils.fatal(f"Failed to parse .env file {path}: {exc}")
+            utils.fatal(f"Failed to parse .env file {path}: {exc}")
         else:
-            _utils.LOGGER.debug("Failed to parse .env file %s: %s", path, exc)
+            utils.LOGGER.debug("Failed to parse .env file %s: %s", path, exc)
     return env
 
 
@@ -189,8 +186,6 @@ def get_or_generate_secret(
     """
     import secrets
 
-    from . import utils as _utils
-
     existing = os.getenv(key_name)
     if existing:
         return existing
@@ -205,9 +200,9 @@ def get_or_generate_secret(
     token = secrets.token_hex(length_bytes)
     try:
         append_dotenv(dotenv_path, {key_name: token})
-        _utils.LOGGER.info("Generated %s and stored it in .env", key_name)
+        utils.LOGGER.info("Generated %s and stored it in .env", key_name)
     except Exception as exc:
-        _utils.LOGGER.warning(
+        utils.LOGGER.warning(
             "Failed to persist %s to .env (%s); using in-memory only", key_name, exc
         )
     if set_in_env:
@@ -314,13 +309,7 @@ def get_compose_env(
     Returns:
         `dict` of environment variables for `docker compose`.
     """
-    import platform
-
-    from . import utils as _utils
-    from .env import get_workdir_path
-    from .project import get_poetry_version
-
-    package_name = _utils.get_package_name()
+    package_name = utils.get_package_name()
 
     all_vars = {
         "ADMINER_PORT": os.getenv("ADMINER_PORT", "8081"),
@@ -333,7 +322,7 @@ def get_compose_env(
         "ENVIRONMENT": os.getenv("ENVIRONMENT", "production"),
         "IMAGE_TAG": image_tag or "latest",
         "PACKAGE_NAME": package_name,
-        "PACKAGE_UNDERSCORE_NAME": _utils.package_name_to_underscore(package_name),
+        "PACKAGE_UNDERSCORE_NAME": utils.package_name_to_underscore(package_name),
         "WORKDIR_PATH": get_workdir_path(),
         "POETRY_VERSION": get_poetry_version(),
         "POSTGRES_VERSION": os.getenv("POSTGRES_VERSION", "17"),
@@ -379,11 +368,10 @@ def load_compose_files(
         They must persist for the lifetime of the stack and should only be
         cleaned up **after** `docker compose` down`.
     """
-    from . import utils as _utils
 
     compose_files_env = os.getenv("COMPOSE_FILE")
     if compose_files_env:
-        _utils.LOGGER.debug(
+        utils.LOGGER.debug(
             "Using compose files from environment variable COMPOSE_FILE: %s",
             compose_files_env,
         )
@@ -397,7 +385,7 @@ def load_compose_files(
     compose_addons_str = os.getenv("COMPOSE_ADDONS", "")
     compose_addons = [a.strip() for a in compose_addons_str.split(":") if a.strip()]
 
-    _utils.LOGGER.debug(
+    utils.LOGGER.debug(
         "Loading compose files for type '%s' with addons: %s%s",
         compose_type,
         compose_addons if compose_addons else "none",
@@ -466,7 +454,7 @@ def load_compose_files(
     overlay_files_str = os.getenv("COMPOSE_OVERLAY_FILES", "")
     if overlay_files_str:
         overlay_files = [f.strip() for f in overlay_files_str.split(":") if f.strip()]
-        _utils.LOGGER.debug("Adding overlay compose files: %s", overlay_files)
+        utils.LOGGER.debug("Adding overlay compose files: %s", overlay_files)
         for overlay_file in overlay_files:
             files_and_cleanups.append((Path(overlay_file), False))
 
@@ -515,9 +503,8 @@ def run_docker_compose_command(
         compose_files: List of compose file paths.
         compose_env: Environment variables for the command.
     """
-    from . import utils as _utils
 
-    _utils.run_command(
+    utils.run_command(
         [
             *compose_cmd_prefix(compose_files),
             *[arg for arg in args if arg is not None],
@@ -586,9 +573,6 @@ def build_exec_script(
     Returns:
         Absolute path to the temporary script file.
     """
-    import tempfile
-    from shlex import quote
-
     script_fd = tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
@@ -636,7 +620,6 @@ def exec_script(script_path: Path | str, env: dict[str, str] | None = None) -> N
     Returns:
         This function never returns; it replaces the current process.
     """
-    from . import utils as _utils
 
-    _utils.LOGGER.debug("Exec handoff to script: %s", script_path)
+    utils.LOGGER.debug("Exec handoff to script: %s", script_path)
     os.execvpe("/bin/sh", ["/bin/sh", str(script_path)], env or os.environ)

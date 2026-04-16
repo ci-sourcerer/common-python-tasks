@@ -1,9 +1,17 @@
+import importlib.util
 import logging
 import os
 import subprocess
+import sys
 from functools import lru_cache
+from getpass import getuser
+from importlib.resources import files
 from pathlib import Path
+from shlex import quote
 from typing import Callable, Sequence
+
+from common_python_tasks import utils
+from jinja2 import Template
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,9 +38,9 @@ def is_package_installed(package_name: str) -> bool:
     Returns:
         `True` if the package is installed, `False` otherwise.
     """
-    from importlib.util import find_spec
-
-    is_installed = find_spec(package_name_to_underscore(package_name)) is not None
+    is_installed = (
+        importlib.util.find_spec(package_name_to_underscore(package_name)) is not None
+    )
     if not is_installed:
         LOGGER.debug("%s is not installed", package_name)
 
@@ -46,8 +54,6 @@ def fatal(message: str, exit_code: int = 1) -> None:
         message: The error message to log.
         exit_code: The exit code to use when terminating the program.
     """
-    import sys
-
     LOGGER.critical(message)
     sys.exit(exit_code)
 
@@ -113,7 +119,6 @@ def run_command(
         invocations.
     """
     import subprocess
-    from shlex import quote
 
     if acceptable_returncodes is None:
         acceptable_returncodes = {0}
@@ -175,8 +180,6 @@ def load_data_file(
         A tuple containing the `Path` to the data file and its contents as a string, or
             `None` if the file is not found and fatal_on_missing is `False`.
     """
-    from importlib.resources import files
-
     try:
         data_files = files("common_python_tasks") / "data" / type_identifier
         data_file = data_files / file_name
@@ -194,8 +197,6 @@ def get_dockerhub_username() -> str:
     Returns:
         The Docker Hub username as a string.
     """
-    from getpass import getuser
-
     return os.getenv("DOCKERHUB_USERNAME") or getuser()
 
 
@@ -296,7 +297,19 @@ def render_template_text(
     extra_template_vars: dict[str, str] | None = None,
 ) -> str:
     """Render a Jinja2 template string with optional template variables."""
-    from jinja2 import Template
-
     template_vars = {**extra_template_vars} if extra_template_vars else {}
     return Template(template_text).render(**template_vars)
+
+
+def changelog() -> str | None:
+    """Generate release notes from git-cliff for unreleased commits."""
+    result = utils.run_command(
+        ["git-cliff", "--unreleased"],
+        capture_output=True,
+        acceptable_returncodes={0},
+    )
+    changelog = result.stdout.strip()
+    if not changelog:
+        LOGGER.warning("git-cliff produced no release notes for unreleased commits")
+
+    return changelog

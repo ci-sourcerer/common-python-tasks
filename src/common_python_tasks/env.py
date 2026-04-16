@@ -1,6 +1,10 @@
 import logging
 import os
+import secrets
 from pathlib import Path
+from shlex import split as shlex_split
+
+from . import utils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -118,24 +122,23 @@ def resolve_extension_content(descriptor: dict[str, str | None]) -> str:
     Returns:
         The Dockerfile fragment text to use for the extension.
     """
-    from . import utils as _utils
 
     if descriptor["source"] == "file":
         p = Path(descriptor["path"] or "")
         if not p.exists():
-            _utils.fatal(f"Extension Dockerfile not found: {p}")
+            utils.fatal(f"Extension Dockerfile not found: {p}")
         return p.read_text(encoding="utf-8")
     if descriptor["source"] == "bundle":
         bundle_name = descriptor["bundle_name"]
-        out = _utils.load_data_file(
+        out = utils.load_data_file(
             f"{bundle_name}/Dockerfile",
             type_identifier="dockerfile_extensions",
             fatal_on_missing=False,
         )
         if out is None:
-            _utils.fatal(f"Extension bundle not found: {bundle_name}")
+            utils.fatal(f"Extension bundle not found: {bundle_name}")
         return out[1]
-    _utils.fatal(f"Unknown extension descriptor source: {descriptor['source']}")
+    utils.fatal(f"Unknown extension descriptor source: {descriptor['source']}")
 
 
 def get_cache_id_suffix(no_cache: bool) -> str:
@@ -147,19 +150,16 @@ def get_cache_id_suffix(no_cache: bool) -> str:
     if not no_cache:
         return ""
 
-    import secrets
-
     return f"-{secrets.token_hex(8)}"
 
 
 def load_container_env_file(path: str | None = None) -> str | None:
     """Return the contents of a container env file if it exists and is non-empty."""
-    from . import utils as _utils
 
     if path is not None:
         container_env_path = Path(path)
         if not container_env_path.is_file():
-            _utils.fatal(f"Container env file not found: {path}")
+            utils.fatal(f"Container env file not found: {path}")
     else:
         container_env_path = Path(".containerenv")
         if not container_env_path.is_file():
@@ -173,8 +173,6 @@ def split_colon_delimited_values(value: str) -> list[str]:
     """Split a colon-delimited string while preserving quoted substrings."""
     if not value or not value.strip():
         return []
-
-    from shlex import split as shlex_split
 
     try:
         tokens = shlex_split(value.replace(":", " "), comments=True)
@@ -230,7 +228,6 @@ def parse_container_deps_source() -> tuple[Path | list[Path] | None, str | None]
         A tuple of `(dockerfile_path_or_paths, inline_content)`. One of the values
         may be `None` when not provided.
     """
-    from . import utils as _utils
 
     content = os.getenv("CONTAINER_DEPS_CONTENT")
     if content and content.strip():
@@ -243,7 +240,7 @@ def parse_container_deps_source() -> tuple[Path | list[Path] | None, str | None]
             return None, None
         for p in paths:
             if not p.exists():
-                _utils.fatal(f"CONTAINER_DEPS_FILE not found: {p}")
+                utils.fatal(f"CONTAINER_DEPS_FILE not found: {p}")
         return paths[0] if len(paths) == 1 else paths, None
     return None, None
 
@@ -274,7 +271,6 @@ def parse_container_deps_mappings() -> dict[str, str] | None:
     Returns:
         A dict of dependency names to destination paths, or `None` when unset.
     """
-    from . import utils as _utils
 
     raw = os.getenv("CONTAINER_DEPS_MAPPINGS")
     if not raw or not raw.strip():
@@ -285,12 +281,12 @@ def parse_container_deps_mappings() -> dict[str, str] | None:
     try:
         tokens = shlex.split(raw)
     except ValueError as exc:
-        _utils.fatal(f"Invalid CONTAINER_DEPS_MAPPINGS: {exc}")
+        utils.fatal(f"Invalid CONTAINER_DEPS_MAPPINGS: {exc}")
 
     mappings: dict[str, str] = {}
     for token in tokens:
         if ":" not in token:
-            _utils.fatal(
+            utils.fatal(
                 "CONTAINER_DEPS_MAPPINGS must contain pairs like 'name:/target/path'; invalid token: %s",
                 token,
             )
@@ -298,11 +294,11 @@ def parse_container_deps_mappings() -> dict[str, str] | None:
         name = name.strip()
         dest = dest.strip()
         if not name or not dest:
-            _utils.fatal(
+            utils.fatal(
                 "CONTAINER_DEPS_MAPPINGS must provide both a dependency name and a destination path"
             )
         if name in mappings:
-            _utils.fatal(f"Duplicate dependency mapping for: {name}")
+            utils.fatal(f"Duplicate dependency mapping for: {name}")
         mappings[name] = dest
 
     return mappings
@@ -343,7 +339,6 @@ def get_container_deps_move_script() -> str | None:
     `CONTAINER_DEPS_MOVE_SCRIPT` or a host-side script file path via
     `CONTAINER_DEPS_MOVE_SCRIPT_PATH`.
     """
-    from . import utils as _utils
 
     script_path_value = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT_PATH")
     inline_script = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT")
@@ -355,14 +350,12 @@ def get_container_deps_move_script() -> str | None:
             )
         script_path = Path(script_path_value)
         if not script_path.exists():
-            _utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH not found: {script_path}")
+            utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH not found: {script_path}")
         if not script_path.is_file():
-            _utils.fatal(
-                f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is not a file: {script_path}"
-            )
+            utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is not a file: {script_path}")
         content = script_path.read_text(encoding="utf-8")
         if not content.strip():
-            _utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is empty: {script_path}")
+            utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is empty: {script_path}")
         return content.rstrip("\n")
 
     if inline_script is None:

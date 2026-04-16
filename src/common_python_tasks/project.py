@@ -1,7 +1,11 @@
 import re
+import tomllib
 from functools import lru_cache
+from importlib import metadata
 from pathlib import Path
 from typing import Any
+
+from . import utils
 
 
 def get_authors() -> list[tuple[str, str]]:
@@ -10,8 +14,6 @@ def get_authors() -> list[tuple[str, str]]:
     Returns:
         A list of tuples containing the name and email of each author.
     """
-    import tomllib
-
     return [
         ((a.get("name") or "").strip(), (a.get("email") or "").strip().strip("<>"))
         for a in tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
@@ -29,7 +31,6 @@ def get_local_poetry_plugin_version(package_name: str) -> str | None:
     Returns:
         The version of the local Poetry plugin if present, None otherwise.
     """
-    from . import utils as _utils
 
     plugins_dir = Path(".poetry/plugins")
     if not plugins_dir.is_dir():
@@ -37,7 +38,7 @@ def get_local_poetry_plugin_version(package_name: str) -> str | None:
 
     candidates = {
         package_name,
-        _utils.package_name_to_underscore(package_name),
+        utils.package_name_to_underscore(package_name),
         package_name.replace("_", "-"),
     }
 
@@ -69,10 +70,8 @@ def get_poetry_version() -> str:
     Returns:
         The Poetry version parsed from the output of `poetry --version`.
     """
-    from . import utils as _utils
-
     return (
-        _utils.run_command(["poetry", "--version"], capture_output=True)
+        utils.run_command(["poetry", "--version"], capture_output=True)
         .stdout.strip()
         .split()[-1]
     )[0:-1]
@@ -97,14 +96,12 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
     Returns:
         The installed version string, or `None` if the package cannot be resolved.
     """
-    from importlib import metadata
-
-    from . import utils as _utils
+    package_name = requirement_name.split("[", 1)[0]
 
     package_name = requirement_name.split("[", 1)[0]
     candidates = {
         package_name,
-        _utils.package_name_to_underscore(package_name),
+        utils.package_name_to_underscore(package_name),
         package_name.replace("_", "-"),
     }
 
@@ -115,7 +112,7 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
             pass
 
     def _query_poetry_runtime_version(candidate: str) -> str | None:
-        result = _utils.run_command(
+        result = utils.run_command(
             [
                 "poetry",
                 "run",
@@ -154,7 +151,7 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
         ["poetry", "show", package_name],
         ["poetry", "self", "show", package_name],
     ):
-        result = _utils.run_command(
+        result = utils.run_command(
             cmd,
             capture_output=True,
             acceptable_returncodes={0, 1},
@@ -173,8 +170,6 @@ def read_pyproject_toml() -> dict[str, Any]:
     Returns:
         A dictionary representing the contents of the `pyproject.toml` file.
     """
-    import tomllib
-
     return tomllib.loads(Path("pyproject.toml").read_text())
 
 
@@ -200,12 +195,11 @@ def resolve_container_entrypoint_command(custom_entrypoint: str | None = None) -
     Returns:
         A command name to place in `/pkg/entrypoint.sh`.
     """
-    from . import utils as _utils
 
     if custom_entrypoint is not None and custom_entrypoint.strip():
         return custom_entrypoint.strip()
 
-    script_name = _utils.get_package_name(use_underscores=True)
+    script_name = utils.get_package_name(use_underscores=True)
     scripts = read_pyproject_toml().get("project", {}).get("scripts")
     if isinstance(scripts, dict) and script_name in scripts:
         return script_name
@@ -226,8 +220,6 @@ def extract_poe_script_tags(include_script: str, argument_name: str) -> set[str]
     """
     import ast
 
-    from . import utils as _utils
-
     match = re.search(rf"{argument_name}\s*=\s*(\[[^\]]*\])", include_script)
     if match is None:
         return None
@@ -235,7 +227,7 @@ def extract_poe_script_tags(include_script: str, argument_name: str) -> set[str]
     try:
         parsed = ast.literal_eval(match.group(1))
     except (ValueError, SyntaxError):
-        _utils.LOGGER.warning(
+        utils.LOGGER.warning(
             "Failed to parse %s from tool.poe.include_script: %s",
             argument_name,
             include_script,
@@ -281,19 +273,17 @@ def get_project_version_from_poetry() -> str:
     Returns:
         The parsed project version string.
     """
-    from . import utils as _utils
-
-    poetry_version_output = _utils.run_command(
+    poetry_version_output = utils.run_command(
         ["poetry", "version"],
         capture_output=True,
         acceptable_returncodes={0},
     ).stdout.strip()
     if not poetry_version_output:
-        _utils.fatal("Unable to determine project version from poetry version")
+        utils.fatal("Unable to determine project version from poetry version")
 
     parts = poetry_version_output.rsplit(" ", 1)
     if len(parts) != 2 or not parts[1].strip():
-        _utils.fatal(
+        utils.fatal(
             "Unexpected poetry version output format: " f"{poetry_version_output!r}"
         )
     return parts[1].strip()

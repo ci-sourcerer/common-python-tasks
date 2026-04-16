@@ -9,38 +9,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from common_python_tasks.utils import changelog as _changelog
+
+from . import utils
+from .env import env_truthy
+
 LOGGER = logging.getLogger(__name__)
-
-
-def get_github_release_changelog() -> str | None:
-    """Generate release notes from git-cliff for unreleased commits."""
-    import shutil
-
-    from . import utils as _utils
-
-    if shutil.which("git-cliff") is None:
-        LOGGER.debug("git-cliff is not available; skipping changelog generation")
-        return None
-
-    try:
-        result = _utils.run_command(
-            ["git-cliff", "--unreleased"],
-            capture_output=True,
-            acceptable_returncodes={0},
-        )
-    except Exception as exc:
-        LOGGER.debug(
-            "Unable to generate GitHub Release changelog from git-cliff: %s",
-            exc,
-        )
-        return None
-
-    changelog = result.stdout.strip()
-    if not changelog:
-        LOGGER.debug("git-cliff produced no release notes for unreleased commits")
-        return None
-
-    return changelog
 
 
 def should_publish_github_release() -> bool:
@@ -49,8 +23,6 @@ def should_publish_github_release() -> bool:
     Returns:
         True if GitHub Release publishing is enabled, False if it is skipped.
     """
-    from .env import env_truthy
-
     return not env_truthy("SKIP_GITHUB_RELEASE")
 
 
@@ -61,15 +33,13 @@ def get_github_repository() -> str | None:
         The GitHub repository slug in the form `owner/repo`, or `None` if it
         cannot be determined.
     """
-    from . import utils as _utils
-
     repository = os.getenv("GITHUB_REPOSITORY", "").strip()
     if repository:
         if re.fullmatch(r"[^/]+/[^/]+", repository):
             return repository
         LOGGER.warning("Ignoring invalid GITHUB_REPOSITORY value: %s", repository)
 
-    result = _utils.run_command(
+    result = utils.run_command(
         ["git", "remote", "get-url", "origin"],
         capture_output=True,
         acceptable_returncodes={0, 128},
@@ -175,13 +145,12 @@ class GitHubClient:
         content_type: str | None = None,
         allow_404_release_tag: bool = False,
     ) -> dict[str, Any] | None:
-        from . import utils as _utils
 
         if self.repository is None:
             return None
         if self.token is None:
             if upload:
-                _utils.fatal(
+                utils.fatal(
                     "GITHUB_TOKEN or GH_TOKEN environment variable must be set to publish GitHub Release assets"
                 )
             return None
@@ -289,8 +258,6 @@ def publish_github_release(
         The GitHub API response for the created or updated release, or `None`
         when publication is disabled or credentials are unavailable.
     """
-    from . import utils as _utils
-
     if not should_publish_github_release():
         LOGGER.debug(
             "Skipping GitHub Release publication because SKIP_GITHUB_RELEASE is set"
@@ -306,12 +273,12 @@ def publish_github_release(
         )
         return None
     if token is None:
-        _utils.fatal(
+        utils.fatal(
             "GITHUB_TOKEN or GH_TOKEN environment variable must be set to publish GitHub Release"
         )
 
     release_name = release_name or tag_name
-    release_body = body if body is not None else get_github_release_changelog()
+    release_body = body if body is not None else _changelog()
     if release_body is None:
         release_body = f"Release {tag_name}"
 
@@ -348,7 +315,7 @@ def publish_github_release(
     ]
     if assets_to_upload:
         if release is None or not isinstance(release.get("id"), int):
-            _utils.fatal(
+            utils.fatal(
                 "GitHub Release was not created successfully; cannot upload assets."
             )
         upload_github_release_assets(release["id"], assets_to_upload)
@@ -383,7 +350,6 @@ def get_github_release_asset_paths(asset_sources: str | None = None) -> list[Pat
     Returns:
         A sorted list of existing asset paths.
     """
-    from . import utils as _utils
 
     sources = (
         asset_sources
@@ -410,7 +376,7 @@ def get_github_release_asset_paths(asset_sources: str | None = None) -> list[Pat
             LOGGER.warning("Ignoring non-file GitHub release asset path: %s", path)
 
     if not asset_paths and explicit_assets:
-        _utils.fatal(
+        utils.fatal(
             f"No GitHub Release assets were found for the configured asset paths: {sources}"
         )
 
@@ -431,10 +397,8 @@ def upload_github_release_asset(
     release_id: int, asset_path: Path
 ) -> dict[str, Any] | None:
     """Upload a single asset to a GitHub Release."""
-    from . import utils as _utils
-
     if not asset_path.is_file():
-        _utils.fatal("GitHub Release asset not found: %s", asset_path)
+        utils.fatal("GitHub Release asset not found: %s", asset_path)
 
     existing_assets = get_github_release_assets(release_id)
     for asset in existing_assets:

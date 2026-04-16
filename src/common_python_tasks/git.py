@@ -1,6 +1,11 @@
 import re
+import shutil
 from pathlib import Path
 from typing import Any
+
+from dunamai import Style, Version
+
+from . import project, utils
 
 
 def build_release_hook_environment(
@@ -18,18 +23,13 @@ def build_release_hook_environment(
     Returns:
         A dictionary of environment variables for the release hook.
     """
-    from dunamai import Version
-
-    from . import utils as _utils
-    from .project import get_project_version_from_poetry
-
     component = component.lower()
     normalized_stage = stage.lower() if stage is not None else None
 
     if component == "auto":
         component = infer_bump_component_from_git_cliff()
 
-    current_version_text = get_project_version_from_poetry()
+    current_version_text = project.get_project_version_from_poetry()
     current_version = Version.parse(current_version_text)
 
     if component == "auto" and re.match(r"^0\.", str(current_version.base)):
@@ -37,7 +37,7 @@ def build_release_hook_environment(
 
     valid_components = {"major": 0, "minor": 1, "patch": 2}
     if component not in valid_components:
-        _utils.fatal(
+        utils.fatal(
             f'Invalid component "{component}". Must be one of: {", ".join(valid_components.keys())}.'
         )
 
@@ -48,7 +48,7 @@ def build_release_hook_environment(
         "b",
         "rc",
     }:
-        _utils.fatal(
+        utils.fatal(
             f'Invalid stage "{normalized_stage}". Must be one of: alpha, beta, rc or empty for none.'
         )
 
@@ -77,27 +77,20 @@ def infer_bump_component_from_git_cliff() -> str:
     Returns:
         One of "major", "minor", or "patch".
     """
-    import shutil
-
-    from dunamai import Version
-
-    from . import utils as _utils
-    from .project import get_project_version_from_poetry
-
     if shutil.which("git-cliff") is None:
-        _utils.fatal(
+        utils.fatal(
             "git-cliff is required for auto version bump inference. "
             "Install git-cliff or pass one of: major, minor, patch."
         )
 
-    result = _utils.run_command(
+    result = utils.run_command(
         ["git-cliff", "--bumped-version", "--unreleased"],
         capture_output=True,
         acceptable_returncodes={0},
     )
     version_text = result.stdout.strip()
     if not version_text:
-        _utils.fatal(
+        utils.fatal(
             "git-cliff did not return a bumped version. "
             "Ensure there are unreleased commits and git-cliff is configured correctly."
         )
@@ -106,13 +99,13 @@ def infer_bump_component_from_git_cliff() -> str:
     try:
         bumped = Version.parse(normalized_version)
     except Exception:
-        _utils.fatal(f"Unable to parse bumped version from git-cliff: {version_text!r}")
+        utils.fatal(f"Unable to parse bumped version from git-cliff: {version_text!r}")
 
-    current_version = get_project_version_from_poetry()
+    current_version = project.get_project_version_from_poetry()
     try:
         current = Version.parse(current_version)
     except Exception:
-        _utils.fatal(
+        utils.fatal(
             "Unable to parse current version from Poetry output: "
             f"{current_version!r}"
         )
@@ -122,7 +115,7 @@ def infer_bump_component_from_git_cliff() -> str:
             version_value = str(version_value)
         match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version_value)
         if match is None:
-            _utils.fatal(
+            utils.fatal(
                 f"Unable to parse semantic version from: {version_value!r}. "
                 "Expected a version like X.Y.Z."
             )
@@ -141,7 +134,7 @@ def infer_bump_component_from_git_cliff() -> str:
     if bumped_patch != current_patch:
         return "patch"
 
-    _utils.fatal(
+    utils.fatal(
         "git-cliff did not infer a version change beyond the current version "
         f"{_serialize_base(current.base)!r}; bumped version was {_serialize_base(bumped.base)!r}."
     )
@@ -156,7 +149,6 @@ def get_dirty_files(ignore: list[Path] | None = None) -> list[Path]:
     Returns:
         A list of `Path` objects representing the dirty files.
     """
-    from . import utils as _utils
 
     if ignore is None:
         ignore = []
@@ -167,7 +159,7 @@ def get_dirty_files(ignore: list[Path] | None = None) -> list[Path]:
         file_path
         for file_path in [
             Path(line[3:])
-            for line in _utils.run_command(
+            for line in utils.run_command(
                 ["git", "status", "--porcelain"], capture_output=True
             ).stdout.splitlines()
             if line
@@ -185,15 +177,11 @@ def get_version(ignore: list[Path] | None = None) -> str:
     Returns:
         The current version as a string.
     """
-    from dunamai import Style, Version
-
-    from . import utils as _utils
-
     if ignore is None:
         ignore = []
 
     dirty_files = get_dirty_files(ignore=ignore)
-    _utils.LOGGER.debug("Dirty files: %s", dirty_files)
+    utils.LOGGER.debug("Dirty files: %s", dirty_files)
 
     return Version.from_git().serialize(
         style=Style.Pep440,
@@ -227,9 +215,8 @@ def has_tags_later_in_history() -> bool:
     Returns:
         `True` if tags are later in history, else `False`.
     """
-    from . import utils as _utils
 
-    result = _utils.run_command(
+    result = utils.run_command(
         ["git", "tag"],
         capture_output=True,
         acceptable_returncodes={0, 128},
@@ -238,7 +225,7 @@ def has_tags_later_in_history() -> bool:
         return False
 
     for tag in result.stdout.strip().split("\n"):
-        check_result = _utils.run_command(
+        check_result = utils.run_command(
             ["git", "merge-base", "--is-ancestor", "HEAD", tag],
             capture_output=True,
             acceptable_returncodes={0, 1},
@@ -251,9 +238,8 @@ def has_tags_later_in_history() -> bool:
 
 def ensure_on_default_branch() -> None:
     """Fail if the current branch is not the repository default branch."""
-    from . import utils as _utils
 
-    result = _utils.run_command(
+    result = utils.run_command(
         ["git", "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
         capture_output=True,
         acceptable_returncodes={0, 1},
@@ -263,20 +249,20 @@ def ensure_on_default_branch() -> None:
     if result.returncode == 0 and result.stdout.strip():
         default_branch = result.stdout.strip().rsplit("/", 1)[-1]
 
-    current_branch_result = _utils.run_command(
+    current_branch_result = utils.run_command(
         ["git", "branch", "--show-current"],
         capture_output=True,
         acceptable_returncodes={0},
     )
     current_branch = current_branch_result.stdout.strip()
     if not current_branch:
-        _utils.fatal(
+        utils.fatal(
             "Unable to determine current git branch. "
             "Release may only be run from the repository default branch."
         )
 
     if current_branch != default_branch:
-        _utils.fatal(
+        utils.fatal(
             "Release may only be run from the default branch. "
             f"Current branch is '{current_branch}'; expected '{default_branch}'."
         )
