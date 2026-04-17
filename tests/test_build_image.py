@@ -752,7 +752,7 @@ def test_build_image_container_env_precedence_overrides_file_with_env_and_cli(
 
     mock_run_command.side_effect = tracking
 
-    build_image(container_env="SOURCE=cli")
+    build_image(container_env=["SOURCE=cli"])
 
     assert len(build_calls) == 1
     assert "ENV SOURCE=containerenv" in captured_dockerfile["content"]
@@ -813,7 +813,7 @@ def test_build_image_reads_container_envfile_path_overrides_dotcontainerenv(
 
     mock_run_command.side_effect = tracking
 
-    build_image(container_envfile=str(envfile_path))
+    build_image(container_envfile=[str(envfile_path)])
 
     assert len(build_calls) == 1
     assert "ENV SOURCE=containerenv" in captured_dockerfile["content"]
@@ -871,7 +871,7 @@ def test_build_image_reads_multiple_container_envfiles_in_order(
 
     mock_run_command.side_effect = tracking
 
-    build_image(container_envfile=f"{envfile_path_1}:{envfile_path_2}")
+    build_image(container_envfile=[str(envfile_path_1), str(envfile_path_2)])
 
     assert len(build_calls) == 1
     assert "ENV A=one" in captured_dockerfile["content"]
@@ -984,7 +984,7 @@ def test_build_image_accepts_build_args_param_for_real_docker_arg(
 
     mock_run_command.side_effect = tracking
 
-    build_image(build_args="POETRY_VERSION=9.9.9")
+    build_image(build_args=["POETRY_VERSION=9.9.9"])
 
     assert len(build_calls) == 1
     base_build_cmd = build_calls[0]
@@ -1047,7 +1047,7 @@ def test_build_image_explicit_workdir_path_build_arg_overrides_env(
 
     mock_run_command.side_effect = tracking
 
-    build_image(build_args="WORKDIR_PATH=/custom")
+    build_image(build_args=["WORKDIR_PATH=/custom"])
 
     assert len(build_calls) == 1
     base_build_cmd = build_calls[0]
@@ -1084,15 +1084,15 @@ def test_fastapi_stack_up_passes_container_build_options(
     ):
         fastapi_stack_up(
             detach=True,
-            build_args="FOO=bar",
-            container_env="X=1",
-            container_envfile="env1.env",
+            build_args=["FOO=bar"],
+            container_env=["X=1"],
+            container_envfile=["env1.env"],
         )
 
     assert len(build_image_calls) == 1
-    assert build_image_calls[0]["build_args"] == "FOO=bar"
-    assert build_image_calls[0]["container_env"] == "X=1"
-    assert build_image_calls[0]["container_envfile"] == "env1.env"
+    assert build_image_calls[0]["build_args"] == ["FOO=bar"]
+    assert build_image_calls[0]["container_env"] == ["X=1"]
+    assert build_image_calls[0]["container_envfile"] == ["env1.env"]
 
 
 def test_build_image_fails_for_debug_without_dependency_group(
@@ -1859,7 +1859,7 @@ class TestBuildImageWithDeps:
         )
         mock_run_command.side_effect = tracking
 
-        build_image(single_arch=True, build_args="DEPS_IMAGE=custom/deps")
+        build_image(single_arch=True, build_args=["DEPS_IMAGE=custom/deps"])
 
         assert "COPY --from=custom/deps /tmp/deps /tmp/deps" in captured.get(
             "content", ""

@@ -47,6 +47,32 @@ tasks = TaskCollection(
 )
 
 
+def _parse_build_args(
+    cli_build_args: list[str] | None,
+    env_build_args: str | None,
+) -> dict[str, str] | None:
+    if cli_build_args is not None:
+        build_arg_tokens = [
+            token.strip() for token in cli_build_args if token and token.strip()
+        ]
+    elif env_build_args:
+        build_arg_tokens = [
+            token.strip() for token in env_build_args.split(":") if token.strip()
+        ]
+    else:
+        return None
+
+    parsed_build_args: dict[str, str] = {}
+    for token in build_arg_tokens:
+        if "=" not in token:
+            LOGGER.warning("Ignoring invalid build-arg token: %s", token)
+            continue
+        key, value = token.split("=", 1)
+        parsed_build_args[key.strip()] = value.strip()
+
+    return parsed_build_args or None
+
+
 @tasks.script(task_name="_black", tags=["format", "internal"])
 def black() -> None:
     """Run black formatting."""
@@ -285,9 +311,9 @@ def build_image(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: str | None = None,
-    container_env: str | None = None,
-    container_envfile: str | None = None,
+    build_args: list[str] | None = None,
+    container_env: list[str] | None = None,
+    container_envfile: list[str] | None = None,
 ) -> None:
     """Build the container image for this project using the Dockerfile template.
 
@@ -296,9 +322,12 @@ def build_image(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
-        build_args: Additional build arguments (format: "KEY=VAL:OTHER=VAL"). Overrides CONTAINER_BUILD_ARGS env var if provided.
-        container_env: Colon-delimited `KEY=VALUE` declarations to inject into the builder stage.
-        container_envfile: Optional colon-separated list of files containing builder-stage env declarations.
+        build_args: Additional build arguments as repeated `KEY=VALUE` values.
+            Overrides `CONTAINER_BUILD_ARGS` if provided.
+        container_env: Builder-stage environment declarations as repeated
+            `KEY=VALUE` values.
+        container_envfile: Optional repeated list of files containing builder-stage
+            environment declarations.
 
     Precedence for container env declarations is: `.containerenv`, `container_envfile`, `CONTAINER_ENV`, then `container_env`.
     All supported sources are stacked in that order.
@@ -344,19 +373,7 @@ def build_image(
     # bundles or files and avoid calling resolution logic multiple times.
     resolved_fragments = [resolve_extension_content(desc) for desc in extensions]
 
-    # Parse build-args (CLI param overrides environment). Format: "KEY=VAL:OTHER=VAL"
-    raw_build_args = (
-        build_args if build_args is not None else os.getenv("CONTAINER_BUILD_ARGS")
-    )
-    parsed_build_args: dict[str, str] | None = None
-    if raw_build_args:
-        parsed_build_args = {}
-        for part in (p.strip() for p in raw_build_args.split(":") if p.strip()):
-            if "=" in part:
-                k, v = part.split("=", 1)
-                parsed_build_args[k.strip()] = v.strip()
-            else:
-                LOGGER.warning("Ignoring invalid build-arg token: %s", part)
+    parsed_build_args = _parse_build_args(build_args, os.getenv("CONTAINER_BUILD_ARGS"))
 
     has_debug_deps = has_debug_dependency_group()
     if debug and not has_debug_deps:
@@ -604,7 +621,7 @@ def run_container(
             "-c" if command else None,
             (
                 (
-                    "echo '=== Container Environment Variables ===' && env && echo '===================================' && exec "
+                    "echo '=== Container environment variables ===' && env | sort && echo '========================================' && exec "
                     + command
                 )
                 if echo_env and command
@@ -667,7 +684,7 @@ def publish_github_release(
     body: str | None = None,
     prerelease: bool = False,
     draft: bool = False,
-    assets: str | None = None,
+    assets: list[str] | None = None,
 ) -> None:
     """Publish or update a GitHub Release for the current repository."""
     from common_python_tasks.env import env_truthy
@@ -820,10 +837,10 @@ def release(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: str | None = None,
-    container_env: str | None = None,
-    container_envfile: str | None = None,
-    assets: str | None = None,
+    build_args: list[str] | None = None,
+    container_env: list[str] | None = None,
+    container_envfile: list[str] | None = None,
+    assets: list[str] | None = None,
     pre_script: str | None = None,
     post_script: str | None = None,
 ) -> None:
@@ -837,10 +854,12 @@ def release(
         no_cache: Do not use cache when building container images.
         plain: Do not pretty-print container build output.
         single_arch: Build container image for a single architecture.
-        build_args: Additional build arguments for the Docker build.
-        container_env: Inline container environment variables.
-        container_envfile: Path to a container environment file.
-        assets: Optional release asset patterns or paths.
+        build_args: Additional build arguments for the Docker build as repeated
+            `KEY=VALUE` values.
+        container_env: Inline container environment variables as repeated
+            `KEY=VALUE` values.
+        container_envfile: Repeated list of container environment files.
+        assets: Optional repeated list of release asset patterns or paths.
         pre_script: Optional shell command to run before the release steps.
         post_script: Optional shell command to run after the release completes.
     """
@@ -950,9 +969,9 @@ def build_with_containers(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: str | None = None,
-    container_env: str | None = None,
-    container_envfile: str | None = None,
+    build_args: list[str] | None = None,
+    container_env: list[str] | None = None,
+    container_envfile: list[str] | None = None,
 ) -> None:
     """Build the project and its containers.
 
@@ -961,9 +980,11 @@ def build_with_containers(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
-        build_args: Additional build arguments for the Docker build.
-        container_env: Inline container environment variables.
-        container_envfile: Path to a container environment file.
+        build_args: Additional build arguments for the Docker build as repeated
+            `KEY=VALUE` values.
+        container_env: Inline container environment variables as repeated
+            `KEY=VALUE` values.
+        container_envfile: Repeated list of container environment files.
     """
     from common_python_tasks.docker import build
 
@@ -992,10 +1013,10 @@ def fastapi_stack_up(
     debug: bool = False,
     no_cache: bool = False,
     detach: bool = False,
-    services: str | None = None,
-    build_args: str | None = None,
-    container_env: str | None = None,
-    container_envfile: str | None = None,
+    services: list[str] | None = None,
+    build_args: list[str] | None = None,
+    container_env: list[str] | None = None,
+    container_envfile: list[str] | None = None,
 ) -> None:
     """Bring up the development stack for the application.
 
@@ -1003,11 +1024,13 @@ def fastapi_stack_up(
         debug: Enable debug mode (auto-loads all `*-debug.yml` compose files).
         no_cache: Do not use cache when building the image.
         detach: Run the stack in detached mode.
-        services: Optional comma-separated list of services to start
-            (e.g. `'api,db'`). If not provided, all services will be started.
-        build_args: Additional build arguments for the Docker build.
-        container_env: Inline container environment variables.
-        container_envfile: Path to a container environment file.
+        services: Optional repeated list of services to start. If not provided,
+            all services will be started.
+        build_args: Additional build arguments for the Docker build as repeated
+            `KEY=VALUE` values.
+        container_env: Inline container environment variables as repeated
+            `KEY=VALUE` values.
+        container_envfile: Repeated list of container environment files.
     """
     from common_python_tasks.compose import (
         build_exec_script,
@@ -1093,7 +1116,7 @@ def fastapi_stack_up(
         "--force-recreate",
         "--remove-orphans",
         *(["-d"] if detach else []),
-        *(services.split(",") if services else []),
+        *([service for service in (services or []) if service.strip()]),
     ]
 
     try:

@@ -16,9 +16,9 @@ def build(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: str | None = None,
-    container_env: str | None = None,
-    container_envfile: str | None = None,
+    build_args: list[str] | None = None,
+    container_env: list[str] | None = None,
+    container_envfile: list[str] | None = None,
 ) -> None:
     """Build the package and optionally the container image.
 
@@ -29,9 +29,11 @@ def build(
         no_cache: Pass `--no-cache` to the Docker build command.
         plain: Pass `--progress plain` to the Docker build command.
         single_arch: Build the container for the current host architecture only.
-        build_args: Additional build arguments for the Docker build.
-        container_env: Inline container environment variables.
-        container_envfile: Path to a container environment file.
+        build_args: Additional build arguments for the Docker build as repeated
+            `KEY=VALUE` values.
+        container_env: Inline container environment variables as repeated
+            `KEY=VALUE` values.
+        container_envfile: Repeated list of container environment files.
     """
     from common_python_tasks.tasks import build_image as build_container_image
     from common_python_tasks.tasks import build_package

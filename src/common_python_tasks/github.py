@@ -340,26 +340,41 @@ def github_upload_request(
     )
 
 
-def get_github_release_asset_paths(asset_sources: str | None = None) -> list[Path]:
+def get_github_release_asset_paths(
+    asset_sources: str | list[str] | None = None,
+) -> list[Path]:
     """Return asset paths to upload for a GitHub Release.
 
     Args:
-        asset_sources: Optional colon-separated list of paths or glob patterns.
+        asset_sources: Optional list of paths or glob patterns. When a string is
+            provided (including via `GITHUB_RELEASE_ASSETS`), values are
+            interpreted as colon-separated paths or glob patterns.
             If not provided, the default value is `dist/*`.
 
     Returns:
         A sorted list of existing asset paths.
     """
 
-    sources = (
-        asset_sources
-        if asset_sources is not None
-        else os.getenv("GITHUB_RELEASE_ASSETS", "dist/*")
-    )
-    explicit_assets = asset_sources is not None or os.getenv("GITHUB_RELEASE_ASSETS")
+    if asset_sources is not None:
+        explicit_assets = True
+        if isinstance(asset_sources, list):
+            source_items = [item.strip() for item in asset_sources if item.strip()]
+        else:
+            source_items = [
+                item.strip() for item in asset_sources.split(":") if item.strip()
+            ]
+    else:
+        env_asset_sources = os.getenv("GITHUB_RELEASE_ASSETS")
+        explicit_assets = bool(env_asset_sources)
+        if env_asset_sources:
+            source_items = [
+                item.strip() for item in env_asset_sources.split(":") if item.strip()
+            ]
+        else:
+            source_items = ["dist/*"]
 
     asset_paths: list[Path] = []
-    for part in (p.strip() for p in sources.split(":") if p.strip()):
+    for part in source_items:
         if any(char in part for char in "*?[]"):
             asset_paths.extend(
                 sorted(
@@ -377,7 +392,8 @@ def get_github_release_asset_paths(asset_sources: str | None = None) -> list[Pat
 
     if not asset_paths and explicit_assets:
         utils.fatal(
-            f"No GitHub Release assets were found for the configured asset paths: {sources}"
+            "No GitHub Release assets were found for the configured asset paths: "
+            + ":".join(source_items)
         )
 
     return sorted(dict.fromkeys(asset_paths), key=lambda p: str(p))

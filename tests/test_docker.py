@@ -41,9 +41,9 @@ def test_build_forwards_container_build_options():
             no_cache=True,
             plain=True,
             single_arch=True,
-            build_args="FOO=bar",
-            container_env="X=1",
-            container_envfile="env1.env:env2.env",
+            build_args=["FOO=bar"],
+            container_env=["X=1"],
+            container_envfile=["env1.env", "env2.env"],
         )
 
     mock_build_package.assert_called_once_with()
@@ -52,9 +52,9 @@ def test_build_forwards_container_build_options():
         no_cache=True,
         plain=True,
         single_arch=True,
-        build_args="FOO=bar",
-        container_env="X=1",
-        container_envfile="env1.env:env2.env",
+        build_args=["FOO=bar"],
+        container_env=["X=1"],
+        container_envfile=["env1.env", "env2.env"],
     )
 
 

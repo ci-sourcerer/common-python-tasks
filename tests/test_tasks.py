@@ -520,13 +520,13 @@ class TestReleaseTask:
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
-            patch("common_python_tasks.tasks.build_package") as mock_build_package,
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch("common_python_tasks.tasks.build_package"),
+            patch("common_python_tasks.tasks.publish_package"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch(
                 "common_python_tasks.project.is_task_tag_included",
                 return_value=False,
-            ) as mock_has_tag,
+            ),
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="0.0.1",
@@ -539,9 +539,7 @@ class TestReleaseTask:
                 "common_python_tasks.github.get_github_release_asset_paths",
                 return_value=[],
             ),
-            patch(
-                "common_python_tasks.github.publish_github_release"
-            ) as mock_publish_github_release,
+            patch("common_python_tasks.github.publish_github_release"),
         ):
             release(
                 component="patch",
@@ -595,7 +593,7 @@ class TestReleaseTask:
             patch(
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
-            patch("common_python_tasks.utils.run_command") as mock_run_command,
+            patch("common_python_tasks.utils.run_command"),
         ):
             release(component="patch", dry_run=True)
 
@@ -748,7 +746,7 @@ class TestGitHubReleasePublishing:
             patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
                 return_value=[],
-            ),
+            ) as mock_get_assets,
             patch(
                 "common_python_tasks.github.urllib.request.urlopen",
                 side_effect=urlopen_side_effect,
@@ -758,9 +756,11 @@ class TestGitHubReleasePublishing:
                 "v1.2.3",
                 release_name="v1.2.3",
                 body="Release v1.2.3",
+                assets=["dist/*.whl"],
             )
 
         assert result == {"id": 123, "tag_name": "v1.2.3"}
+        mock_get_assets.assert_called_once_with(["dist/*.whl"])
         assert [request["method"] for request in requests] == ["GET", "POST"]
         assert json.loads(requests[1]["data"].decode("utf-8")) == {
             "tag_name": "v1.2.3",

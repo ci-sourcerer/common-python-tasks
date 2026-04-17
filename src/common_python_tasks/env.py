@@ -182,18 +182,36 @@ def split_colon_delimited_values(value: str) -> list[str]:
     return [token for token in tokens if token.strip()]
 
 
-def parse_container_env_tokens(value: str | None) -> list[str]:
-    """Parse colon-delimited `KEY=VALUE` container env declarations."""
-    if not value or not value.strip():
+def parse_container_env_tokens(value: str | list[str] | None) -> list[str]:
+    """Parse `KEY=VALUE` container env declarations from string or list input."""
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        return [token.strip() for token in value if token and token.strip()]
+
+    if not value.strip():
         return []
 
     tokens = split_colon_delimited_values(value)
     return [token for token in tokens if token.strip()]
 
 
+def _parse_container_envfile_paths(
+    container_envfile: str | list[str] | None,
+) -> list[str]:
+    if container_envfile is None:
+        return []
+    if isinstance(container_envfile, list):
+        return [path.strip() for path in container_envfile if path and path.strip()]
+    if not container_envfile.strip():
+        return []
+    return split_colon_delimited_values(container_envfile)
+
+
 def load_container_env_tokens(
-    container_env: str | None = None,
-    container_envfile: str | None = None,
+    container_env: str | list[str] | None = None,
+    container_envfile: str | list[str] | None = None,
 ) -> list[str]:
     """Load container env declarations from multiple sources in precedence order."""
     tokens: list[str] = []
@@ -202,18 +220,16 @@ def load_container_env_tokens(
     if file_value is not None:
         tokens.extend(parse_container_env_tokens(file_value))
 
-    if container_envfile is not None and container_envfile.strip():
-        for path in split_colon_delimited_values(container_envfile):
-            file_value = load_container_env_file(path)
-            if file_value is not None:
-                tokens.extend(parse_container_env_tokens(file_value))
+    for path in _parse_container_envfile_paths(container_envfile):
+        file_value = load_container_env_file(path)
+        if file_value is not None:
+            tokens.extend(parse_container_env_tokens(file_value))
 
     env_value = os.getenv("CONTAINER_ENV")
     if env_value and env_value.strip():
         tokens.extend(parse_container_env_tokens(env_value))
 
-    if container_env is not None and container_env.strip():
-        tokens.extend(parse_container_env_tokens(container_env))
+    tokens.extend(parse_container_env_tokens(container_env))
 
     return tokens
 
