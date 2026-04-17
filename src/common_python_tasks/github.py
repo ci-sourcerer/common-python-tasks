@@ -107,6 +107,14 @@ class GitHubClient:
     """Encapsulate GitHub API and upload request behavior."""
 
     def __init__(self, repository: str | None = None, token: str | None = None):
+        """Create a GitHub API client.
+
+        Args:
+            repository: Optional repository slug (owner/repo). If not provided
+                it will be inferred from git remotes.
+            token: Optional GitHub token. If not provided it will be read from
+                environment variables.
+        """
         if repository is None:
             repository = get_github_repository()
         if token is None:
@@ -131,6 +139,15 @@ class GitHubClient:
         return headers
 
     def _build_url(self, path: str, upload: bool = False) -> str:
+        """Construct the full GitHub API URL for a given repository path.
+
+        Args:
+            path: API path relative to the repository (e.g. '/releases').
+            upload: Whether to use the uploads host for file uploads.
+
+        Returns:
+            The full URL for the API request.
+        """
         base_url = (
             get_github_upload_api_base_url() if upload else get_github_api_base_url()
         )
@@ -145,7 +162,6 @@ class GitHubClient:
         content_type: str | None = None,
         allow_404_release_tag: bool = False,
     ) -> dict[str, Any] | None:
-
         if self.repository is None:
             return None
         if self.token is None:
@@ -206,6 +222,19 @@ class GitHubClient:
         payload: bytes | None = None,
         content_type: str | None = None,
     ) -> dict[str, Any] | None:
+        """Perform a GitHub upload request and decode the JSON response.
+
+        Args:
+            method: HTTP method name (e.g. 'POST', 'DELETE').
+            path: API path relative to the repository.
+            payload: Optional raw bytes to upload as the request body.
+            content_type: Optional MIME type for the request body.
+
+        Returns:
+            The decoded JSON response as a dictionary, or `None` when there is
+            no response body.
+        """
+
         if content_type is None and payload is not None:
             content_type = "application/octet-stream"
         return self._request(
@@ -331,7 +360,20 @@ def github_upload_request(
     payload: bytes | None = None,
     content_type: str | None = None,
 ) -> dict[str, Any] | None:
-    """Perform a GitHub upload request and return the decoded JSON response."""
+    """Perform a GitHub upload request and return the decoded JSON response.
+
+    Args:
+        method: HTTP method (e.g. `POST`, `DELETE`).
+        path: API path relative to `/repos/{owner}/{repo}`.
+        payload: Optional raw bytes to upload as the request body.
+        content_type: Optional MIME type of the uploaded content. Defaults to
+            `application/octet-stream` when `payload` is provided.
+
+    Returns:
+        The decoded JSON response from the GitHub API, or `None` if the request
+        fails.
+    """
+
     return GitHubClient().upload_request(
         method,
         path,
@@ -354,7 +396,6 @@ def get_github_release_asset_paths(
     Returns:
         A sorted list of existing asset paths.
     """
-
     if asset_sources is not None:
         explicit_assets = True
         if isinstance(asset_sources, list):
@@ -400,19 +441,39 @@ def get_github_release_asset_paths(
 
 
 def get_github_release_assets(release_id: int) -> list[dict[str, Any]]:
-    """Get existing assets for a GitHub Release."""
+    """Get existing assets for a GitHub Release.
+
+    Args:
+        release_id: The numeric ID of the GitHub Release.
+
+    Returns:
+        A list of asset dictionaries as returned by the GitHub API.
+    """
     return github_api_request("GET", f"/releases/{release_id}/assets") or []
 
 
 def delete_github_release_asset(asset_id: int) -> None:
-    """Delete a GitHub Release asset by ID."""
+    """Delete a GitHub Release asset by ID.
+
+    Args:
+        asset_id: The numeric ID of the asset to delete.
+    """
     github_upload_request("DELETE", f"/releases/assets/{asset_id}")
 
 
 def upload_github_release_asset(
     release_id: int, asset_path: Path
 ) -> dict[str, Any] | None:
-    """Upload a single asset to a GitHub Release."""
+    """Upload a single asset to a GitHub Release.
+
+    Args:
+        release_id: The numeric ID of the release to upload to.
+        asset_path: Path to the file to upload.
+
+    Returns:
+        The decoded JSON response for the uploaded asset, or `None` on failure.
+    """
+
     if not asset_path.is_file():
         utils.fatal("GitHub Release asset not found: %s", asset_path)
 
@@ -436,7 +497,15 @@ def upload_github_release_asset(
 def upload_github_release_assets(
     release_id: int, asset_paths: list[Path]
 ) -> list[dict[str, Any]]:
-    """Upload multiple assets to a GitHub Release."""
+    """Upload multiple assets to a GitHub Release.
+
+    Args:
+        release_id: The numeric ID of the release to upload to.
+        asset_paths: A list of Paths to files to upload as assets.
+
+    Returns:
+        A list of decoded JSON responses for the uploaded assets.
+    """
     uploaded_assets: list[dict[str, Any]] = []
     for asset_path in asset_paths:
         LOGGER.info("Uploading GitHub Release asset: %s", asset_path)
