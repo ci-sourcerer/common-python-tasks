@@ -930,6 +930,13 @@ def release(
             log_dry_run("Would push container image with debug=%s", debug)
         else:
             log_dry_run("Containers tag is not included; would skip image build/push")
+        release_tag = get_release_tag_from_poetry_version()
+        asset_paths = get_github_release_asset_paths(assets)
+        log_dry_run(
+            "Would publish GitHub Release %s with assets=%s",
+            release_tag,
+            asset_paths,
+        )
         if post_script:
             run_command(["sh", "-lc", post_script], env=hook_env, dry_run=dry_run)
         return

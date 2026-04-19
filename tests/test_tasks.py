@@ -630,6 +630,11 @@ class TestReleaseTask:
                 "\033[93m[DRY RUN]\033[0m Would push container image with debug=%s",
                 False,
             )
+            mock_logger.info.assert_any_call(
+                "\033[93m[DRY RUN]\033[0m Would publish GitHub Release %s with assets=%s",
+                "v1.2.2",
+                [],
+            )
 
     def test_release_accepts_none_stage_string(self):
         from common_python_tasks.tasks import release
