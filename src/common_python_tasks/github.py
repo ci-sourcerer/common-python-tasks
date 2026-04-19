@@ -17,6 +17,30 @@ from .env import env_truthy
 LOGGER = logging.getLogger(__name__)
 
 
+def _is_unreleased_placeholder(notes: str) -> bool:
+    """Return whether release notes are only an unreleased placeholder."""
+    normalized_lines = [line.strip() for line in notes.splitlines() if line.strip()]
+    if not normalized_lines:
+        return True
+
+    normalized = "\n".join(normalized_lines).lower()
+    return normalized in {"[unreleased]", "## [unreleased]", "## unreleased"}
+
+
+def _latest_tagged_changelog() -> str | None:
+    """Return release notes for the latest tagged release from git-cliff."""
+    result = utils.run_command(
+        ["git-cliff", "--latest"],
+        capture_output=True,
+        acceptable_returncodes={0},
+    )
+    changelog = result.stdout.strip()
+    if not changelog:
+        LOGGER.warning("git-cliff produced no release notes for the latest tag")
+        return None
+    return changelog
+
+
 def should_publish_github_release() -> bool:
     """Return whether GitHub Releases publication is enabled.
 
@@ -308,6 +332,11 @@ def publish_github_release(
 
     release_name = release_name or tag_name
     release_body = body if body is not None else _changelog()
+    if release_body is not None and _is_unreleased_placeholder(release_body):
+        LOGGER.info(
+            "git-cliff returned an unreleased placeholder; using latest tagged release notes instead"
+        )
+        release_body = _latest_tagged_changelog()
     if release_body is None:
         release_body = f"Release {tag_name}"
 

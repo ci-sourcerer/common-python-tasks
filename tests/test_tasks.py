@@ -857,6 +857,83 @@ class TestGitHubReleasePublishing:
             "prerelease": False,
         }
 
+    def test_publish_github_release_falls_back_to_latest_tagged_notes_when_unreleased_is_placeholder(
+        self,
+    ):
+        from common_python_tasks.tasks import publish_github_release
+
+        requests = []
+        unreleased_placeholder = "[unreleased]\n"
+        latest_tagged_notes = "## v1.2.3\n- Fix critical bug\n"
+
+        class FakeResponse:
+            def __init__(self, payload: dict[str, object]):
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return self._payload
+
+        def urlopen_side_effect(request):
+            requests.append(
+                {
+                    "method": request.get_method(),
+                    "url": request.full_url,
+                    "data": request.data,
+                }
+            )
+            if request.get_method() == "GET":
+                raise urllib.error.HTTPError(
+                    request.full_url, 404, "Not Found", None, None
+                )
+            return FakeResponse({"id": 123, "tag_name": "v1.2.3"})
+
+        with (
+            patch(
+                "common_python_tasks.github.should_publish_github_release",
+                return_value=True,
+            ),
+            patch(
+                "common_python_tasks.github.get_github_repository",
+                return_value="ci-sourcerer/common-python-tasks",
+            ),
+            patch("common_python_tasks.github.get_github_token", return_value="token"),
+            patch(
+                "common_python_tasks.utils.run_command",
+                side_effect=[
+                    MagicMock(stdout=unreleased_placeholder, returncode=0),
+                    MagicMock(stdout=latest_tagged_notes, returncode=0),
+                ],
+            ),
+            patch(
+                "common_python_tasks.github.get_github_release_asset_paths",
+                return_value=[],
+            ),
+            patch(
+                "common_python_tasks.github.urllib.request.urlopen",
+                side_effect=urlopen_side_effect,
+            ),
+        ):
+            result = publish_github_release(
+                "v1.2.3",
+                release_name="v1.2.3",
+            )
+
+        assert result == {"id": 123, "tag_name": "v1.2.3"}
+        assert [request["method"] for request in requests] == ["GET", "POST"]
+        assert json.loads(requests[1]["data"].decode("utf-8")) == {
+            "tag_name": "v1.2.3",
+            "name": "v1.2.3",
+            "body": latest_tagged_notes.strip(),
+            "draft": False,
+            "prerelease": False,
+        }
+
     def test_publish_github_release_updates_existing_release(self):
         from common_python_tasks.tasks import publish_github_release
 
