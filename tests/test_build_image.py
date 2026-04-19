@@ -1151,6 +1151,104 @@ def test_container_shell_selects_most_recent_tag(
     ]
 
 
+def test_run_container_passes_docker_runtime_options(
+    temp_project_dir,
+    mock_run_command,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """`run_container` should forward env, envfile, privileged, and volumes to docker run."""
+    from common_python_tasks import utils
+    from common_python_tasks.tasks import run_container
+
+    monkeypatch.setattr(utils, "get_full_image_name", lambda: "docker.io/test-package")
+
+    run_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "inspect"]:
+            result = original(command, *args, **kwargs)
+            result.returncode = 0
+            return result
+        if len(command) >= 2 and command[:2] == ["docker", "run"]:
+            run_calls.append([str(part) for part in command if part is not None])
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    run_container(
+        "custom-tag",
+        entrypoint="/bin/sh",
+        command="echo hi",
+        root=True,
+        echo_env=False,
+        env=["FOO=bar", "BAZ"],
+        envfile=[".env", ".env2"],
+        privileged=True,
+        volumes=["/tmp:/tmp", "/var/log:/var/log"],
+    )
+
+    assert len(run_calls) == 1
+    run_call = run_calls[0]
+    pairs = [run_call[i : i + 2] for i in range(len(run_call) - 1)]
+    assert ["-e", "FOO=bar"] in pairs
+    assert ["-e", "BAZ"] in pairs
+    assert ["--env-file", ".env"] in pairs
+    assert ["--env-file", ".env2"] in pairs
+    assert ["-v", "/tmp:/tmp"] in pairs
+    assert ["-v", "/var/log:/var/log"] in pairs
+    assert "--privileged" in run_call
+    assert run_call[-2:] == ["-c", "echo hi"]
+
+
+def test_container_shell_forwards_docker_run_runtime_flags(
+    temp_project_dir,
+    mock_run_command,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """`container_shell` should forward docker run env, envfile, privileged, and volumes options."""
+    from common_python_tasks import utils
+    from common_python_tasks.tasks import container_shell
+
+    monkeypatch.setattr(utils, "get_full_image_name", lambda: "docker.io/test-package")
+
+    run_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original(command, *args, **kwargs)
+            result.stdout = "docker.io/test-package:abc123\n"
+            return result
+        if len(command) >= 2 and command[:2] == ["docker", "run"]:
+            run_calls.append([str(part) for part in command if part is not None])
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    container_shell(
+        tag="custom",
+        shell="bash",
+        root=False,
+        no_echo_env=True,
+        env=["HELLO=WORLD"],
+        envfile=["/tmp/envfile"],
+        privileged=True,
+        volumes=["/tmp:/tmp"],
+    )
+
+    assert len(run_calls) == 1
+    run_call = run_calls[0]
+    pairs = [run_call[i : i + 2] for i in range(len(run_call) - 1)]
+    assert ["-e", "HELLO=WORLD"] in pairs
+    assert ["--env-file", "/tmp/envfile"] in pairs
+    assert ["-v", "/tmp:/tmp"] in pairs
+    assert "--privileged" in run_call
+    assert run_call[-2:] == ["-c", "$(command -v bash) || exit 127"]
+
+
 def test_container_shell_wraps_fallback_shell_with_env_dump(
     temp_project_dir,
     mock_run_command,

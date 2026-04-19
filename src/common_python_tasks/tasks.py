@@ -528,6 +528,10 @@ def run_container(
     command: str | None = None,
     root: bool = False,
     echo_env: bool = False,
+    env: list[str] | None = None,
+    envfile: list[str] | None = None,
+    privileged: bool = False,
+    volumes: list[str] | None = None,
 ) -> None:
     """Run the Docker image as a container for this project.
 
@@ -540,6 +544,10 @@ def run_container(
         command: Optional command to pass to the entrypoint.
         root: Whether to run as root (only relevant with a shell entrypoint).
         echo_env: Whether to prepend an env dump to the command.
+        env: Repeated `KEY=VALUE` or `KEY` values to pass with `-e`.
+        envfile: Repeated envfile paths to pass with `--env-file`.
+        privileged: Whether to run the container with `--privileged`.
+        volumes: Repeated volume mounts to pass with `-v`.
     """
     from common_python_tasks.utils import (
         fatal,
@@ -606,29 +614,35 @@ def run_container(
             )
 
     LOGGER.info("Running container %s", selected_image)
-    run_command(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-i",
-            "-t",
-            "--entrypoint" if entrypoint else None,
-            entrypoint,
-            "--user" if root else None,
-            "root" if root else None,
-            selected_image,
-            "-c" if command else None,
+    run_args = ["docker", "run", "--rm", "-i", "-t"]
+    if privileged:
+        run_args.append("--privileged")
+    if env:
+        for env_token in env:
+            run_args.extend(["-e", env_token])
+    if envfile:
+        for envfile_path in envfile:
+            run_args.extend(["--env-file", envfile_path])
+    if volumes:
+        for volume in volumes:
+            run_args.extend(["-v", volume])
+    if entrypoint:
+        run_args.extend(["--entrypoint", entrypoint])
+    if root:
+        run_args.extend(["--user", "root"])
+    run_args.append(selected_image)
+    if command is not None:
+        wrapped_command = (
             (
-                (
-                    "echo '=== Container environment variables ===' && env | sort && echo '========================================' && exec "
-                    + command
-                )
-                if echo_env and command
-                else command
-            ),
-        ]
-    )
+                "echo '=== Container environment variables ===' && env | sort && echo '========================================' && exec "
+                + command
+            )
+            if echo_env and command
+            else command
+        )
+        run_args.extend(["-c", wrapped_command])
+
+    run_command(run_args)
 
 
 @tasks.script(tags=["containers", "packaging", "release"])
@@ -1277,6 +1291,10 @@ def container_shell(
     shell: str | None = None,
     root: bool = False,
     no_echo_env: bool = False,
+    env: list[str] | None = None,
+    envfile: list[str] | None = None,
+    privileged: bool = False,
+    volumes: list[str] | None = None,
 ) -> None:
     """Run the debug image with an interactive shell.
 
@@ -1289,6 +1307,10 @@ def container_shell(
             `zsh`, `fish`, `ksh`, `bash`, and `sh`.
         root: Whether to run the shell as root.
         no_echo_env: Whether to suppress printing environment variables on startup for debugging.
+        env: Repeated `KEY=VALUE` or `KEY` values to pass with `-e`.
+        envfile: Repeated envfile paths to pass with `--env-file`.
+        privileged: Whether to run the container with `--privileged`.
+        volumes: Repeated volume mounts to pass with `-v`.
     """
     from shlex import quote
 
@@ -1308,4 +1330,8 @@ def container_shell(
         ),
         root=root,
         echo_env=not no_echo_env,
+        env=env,
+        envfile=envfile,
+        privileged=privileged,
+        volumes=volumes,
     )
