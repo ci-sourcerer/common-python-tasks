@@ -587,6 +587,14 @@ class TestReleaseTask:
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
             ),
+            patch(
+                "common_python_tasks.project.get_release_tag_from_poetry_version",
+                return_value="v1.2.2",
+            ),
+            patch(
+                "common_python_tasks.github.get_github_release_asset_paths",
+                return_value=[],
+            ),
             patch("common_python_tasks.docker.build_image") as mock_build_image,
             patch("common_python_tasks.tasks.push_image") as mock_push_image,
             patch("common_python_tasks.utils.LOGGER") as mock_logger,
