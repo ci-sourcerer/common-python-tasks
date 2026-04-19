@@ -1,0 +1,185 @@
+import importlib.metadata as metadata
+from unittest.mock import MagicMock, patch
+
+from common_python_tasks.project import (
+    get_installed_requirement_version,
+    is_task_tag_included,
+)
+
+
+def test_get_installed_requirement_version_strips_extras_and_normalizes_name():
+    def version_side_effect(name):
+        if name == "poetry-dynamic-versioning":
+            return "0.17.0"
+        raise metadata.PackageNotFoundError
+
+    get_installed_requirement_version.cache_clear()
+    with patch("importlib.metadata.version", side_effect=version_side_effect):
+        assert (
+            get_installed_requirement_version("poetry-dynamic-versioning[plugin]")
+            == "0.17.0"
+        )
+
+
+def test_get_installed_requirement_version_uses_poetry_show_when_not_available_in_metadata():
+    def version_side_effect(name):
+        raise metadata.PackageNotFoundError
+
+    poetry_show_output = """
+ name         : poetry-dynamic-versioning
+ version      : 1.8.2
+ description  : Plugin for Poetry to enable dynamic versioning based on VCS tags
+"""
+
+    get_installed_requirement_version.cache_clear()
+
+    def run_command_side_effect(
+        cmd, capture_output=True, acceptable_returncodes=None, env=None
+    ):
+        if cmd[:3] == ["poetry", "run", "python"]:
+            return MagicMock(stdout="", returncode=1)
+        if cmd == ["poetry", "show", "poetry-dynamic-versioning"]:
+            return MagicMock(stdout=poetry_show_output, returncode=0)
+        return MagicMock(stdout="", returncode=1)
+
+    with (
+        patch("importlib.metadata.version", side_effect=version_side_effect),
+        patch(
+            "common_python_tasks.project.get_local_poetry_plugin_version",
+            return_value=None,
+        ),
+        patch(
+            "common_python_tasks.utils.run_command",
+            side_effect=run_command_side_effect,
+        ),
+    ):
+        assert (
+            get_installed_requirement_version("poetry-dynamic-versioning[plugin]")
+            == "1.8.2"
+        )
+
+
+def test_get_installed_requirement_version_uses_poetry_self_show_when_poetry_show_fails():
+    def version_side_effect(name):
+        raise metadata.PackageNotFoundError
+
+    poetry_self_show_output = """
+ name         : poetry-dynamic-versioning
+ version      : 1.8.3
+ description  : Plugin for Poetry to enable dynamic versioning based on VCS tags
+"""
+
+    get_installed_requirement_version.cache_clear()
+
+    def run_command_side_effect(
+        cmd, capture_output=True, acceptable_returncodes=None, env=None
+    ):
+        if cmd[:3] == ["poetry", "run", "python"]:
+            return MagicMock(stdout="", returncode=1)
+        if cmd == ["poetry", "show", "poetry-dynamic-versioning"]:
+            return MagicMock(stdout="", returncode=1)
+        if cmd == ["poetry", "self", "show", "poetry-dynamic-versioning"]:
+            return MagicMock(stdout=poetry_self_show_output, returncode=0)
+        return MagicMock(stdout="", returncode=1)
+
+    with (
+        patch("importlib.metadata.version", side_effect=version_side_effect),
+        patch(
+            "common_python_tasks.project.get_local_poetry_plugin_version",
+            return_value=None,
+        ),
+        patch(
+            "common_python_tasks.utils.run_command",
+            side_effect=run_command_side_effect,
+        ),
+    ):
+        assert (
+            get_installed_requirement_version("poetry-dynamic-versioning[plugin]")
+            == "1.8.3"
+        )
+
+
+def test_get_installed_requirement_version_uses_poetry_run_python_when_metadata_fails():
+    def version_side_effect(name):
+        raise metadata.PackageNotFoundError
+
+    get_installed_requirement_version.cache_clear()
+    with (
+        patch("importlib.metadata.version", side_effect=version_side_effect),
+        patch(
+            "common_python_tasks.project.get_local_poetry_plugin_version",
+            return_value=None,
+        ),
+        patch(
+            "common_python_tasks.utils.run_command",
+            return_value=MagicMock(stdout="1.9.0\n", returncode=0),
+        ),
+    ):
+        assert get_installed_requirement_version("poetry-plugin-export") == "1.9.0"
+
+
+def test_get_installed_requirement_version_uses_local_poetry_plugins_directory(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    metadata_dir = (
+        tmp_path / ".poetry" / "plugins" / "poetry_plugin_export-1.10.0.dist-info"
+    )
+    metadata_dir.mkdir(parents=True)
+    metadata_dir.joinpath("METADATA").write_text(
+        "Name: poetry-plugin-export\nVersion: 1.10.0\n", encoding="utf-8"
+    )
+
+    def version_side_effect(name):
+        raise metadata.PackageNotFoundError
+
+    get_installed_requirement_version.cache_clear()
+    with patch("importlib.metadata.version", side_effect=version_side_effect):
+        assert get_installed_requirement_version("poetry-plugin-export") == "1.10.0"
+
+
+def test_get_installed_requirement_version_returns_none_when_not_installed():
+    def version_side_effect(name):
+        raise metadata.PackageNotFoundError
+
+    get_installed_requirement_version.cache_clear()
+    with patch("importlib.metadata.version", side_effect=version_side_effect):
+        assert get_installed_requirement_version("no-such-package") is None
+
+
+def test_is_task_tag_included_with_include_tags():
+    is_task_tag_included.cache_clear()
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        mock_toml.return_value = {
+            "tool": {
+                "poe": {
+                    "include_script": "common_python_tasks:tasks(include_tags=['format', 'containers'])"
+                }
+            }
+        }
+
+        assert is_task_tag_included("containers") is True
+
+
+def test_is_task_tag_included_with_exclude_tags():
+    is_task_tag_included.cache_clear()
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        mock_toml.return_value = {
+            "tool": {
+                "poe": {
+                    "include_script": "common_python_tasks:tasks(exclude_tags=['containers', 'fastapi'])"
+                }
+            }
+        }
+
+        assert is_task_tag_included("containers") is False
+
+
+def test_is_task_tag_included_defaults_true_without_filters():
+    is_task_tag_included.cache_clear()
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        mock_toml.return_value = {
+            "tool": {"poe": {"include_script": "common_python_tasks:tasks()"}}
+        }
+
+        assert is_task_tag_included("containers") is True

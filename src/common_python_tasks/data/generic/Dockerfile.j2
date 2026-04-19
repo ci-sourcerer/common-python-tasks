@@ -1,0 +1,145 @@
+# syntax=docker/dockerfile:1
+
+# It is wise to use the Python version you are developing with and not blindly choose
+# the latest. The `build-image` task passes the version properly here
+ARG PYTHON_VERSION=3
+# Variant for the runtime image, e.g. slim, alpine, etc.
+# See https://hub.docker.com/_/python for available variants
+ARG PYTHON_VARIANT=slim
+ARG WORKDIR_PATH=/workspace
+
+FROM python:${PYTHON_VERSION} AS builder
+
+ARG POETRY_VERSION
+ARG POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION
+ARG POETRY_PLUGIN_EXPORT_VERSION
+ARG TOMLKIT_VERSION
+
+# Install Poetry and required Poetry plugins for build
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} pip install --root-user-action=ignore \
+    "poetry==$POETRY_VERSION" \
+    "poetry-dynamic-versioning[plugin]==$POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION" \
+    "poetry-plugin-export==$POETRY_PLUGIN_EXPORT_VERSION" \
+    "tomlkit==$TOMLKIT_VERSION"
+
+# Build package
+WORKDIR /tmp/build
+COPY . /tmp/build/
+
+{% if HAS_DEBUG_DEPS %}
+# Export debug requirements when the project defines a debug dependency group
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} \
+    poetry export --only debug --without-hashes -f requirements.txt --output requirements-debug.txt
+{% endif %}
+
+# Build the wheel, caching Poetry's cache directory to speed up subsequent builds.
+# If running this in a CI system, you must be using a persistent builder to take
+# advantage of the cache mount, and you should configure your CI to persist the
+# cache directory between builds
+RUN --mount=type=cache,target=/root/.cache/pypoetry,id=pypoetry-cache{{ CACHE_ID_SUFFIX }} poetry build --format=wheel
+
+FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS runtime
+ARG WORKDIR_PATH=/workspace
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+ARG NONROOT_USERNAME=py
+ARG NONROOT_UID=1000
+ARG NONROOT_GID=1000
+
+{% if CONTAINER_ENV_VARS %}
+# Inject custom builder stage environment variables
+{% for env_var in CONTAINER_ENV_VARS -%}
+ENV {{ env_var }}
+{% endfor %}
+{%- endif %}
+
+ENV DEBIAN_FRONTEND=noninteractive
+{% if APT_PACKAGES %}
+# Install optional runtime apt packages selected by Python-side template rendering
+RUN --mount=type=cache,target=/var/cache/apt,id=apt-cache{{ CACHE_ID_SUFFIX }} \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked,id=apt-lists{{ CACHE_ID_SUFFIX }} \
+    apt-get update && apt-get install -y --no-install-recommends {{ APT_PACKAGES }}
+{% endif %}
+{% if DEPS_IMAGE %}
+
+# Pull external dependencies from the pre-built deps image
+ARG DEPS_IMAGE
+COPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps
+{% endif %}
+{% if CONTAINER_DEPS_MOVE_SCRIPT %}
+RUN set -eux; \
+    cat >/tmp/container-deps-move-script <<'SCRIPT' && \
+    chmod +x /tmp/container-deps-move-script && \
+    /tmp/container-deps-move-script
+{{ CONTAINER_DEPS_MOVE_SCRIPT }}
+SCRIPT
+{% endif %}
+
+# Create a named non-root user with a writable home directory
+# Written to cover all Python image variants
+RUN set -eux; \
+    if adduser --help 2>&1 | grep -q -- '--disabled-password'; then \
+        addgroup --gid "${NONROOT_GID}" "${NONROOT_USERNAME}"; \
+        adduser --uid "${NONROOT_UID}" --gid "${NONROOT_GID}" --home "${WORKDIR_PATH}" --shell /bin/sh --disabled-password --gecos '' "${NONROOT_USERNAME}"; \
+    else \
+        addgroup -g "${NONROOT_GID}" "${NONROOT_USERNAME}" && \
+        adduser -D -u "${NONROOT_UID}" -G "${NONROOT_USERNAME}" -h "${WORKDIR_PATH}" -s /bin/sh "${NONROOT_USERNAME}"; \
+    fi; \
+    mkdir -p "${WORKDIR_PATH}"; \
+    chown -R "${NONROOT_USERNAME}":"${NONROOT_USERNAME}" "${WORKDIR_PATH}"
+
+WORKDIR ${WORKDIR_PATH}
+
+# Grab package from builder image
+COPY --from=builder /tmp/build/dist/*.whl /tmp/
+
+# Install package
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} pip install --root-user-action=ignore /tmp/*.whl
+# Create symlinks for the package
+ARG PACKAGE_NAME
+ENV PACKAGE_NAME=${PACKAGE_NAME}
+RUN ln -s "$(python -c "import os; from importlib import resources; print(resources.files(os.environ['PACKAGE_NAME']))")" "/_$PACKAGE_NAME" \
+    && ln -s "/_$PACKAGE_NAME" "/pkg" \
+    && rm -rf "/_$PACKAGE_NAME/__pycache__"
+
+ENTRYPOINT ["/pkg/entrypoint.sh"]
+
+ARG AUTHORS
+ARG GIT_COMMIT
+LABEL org.opencontainers.image.authors=${AUTHORS}
+LABEL git.commit=${GIT_COMMIT}
+
+# Set custom entrypoint if provided
+# This entrypoint is deliberately not configurable via environment variables in order to
+# ensure that the container always uses the entrypoint selected at build time. If the
+# current package does not provide a console script, the entrypoint will default to `python`
+RUN echo "#!/bin/sh\n\n{{ ENTRYPOINT_COMMAND|default('python') }} \"\$@\"" >/pkg/entrypoint.sh \
+    && chmod +x /pkg/entrypoint.sh
+
+USER py
+
+{% if EXTENSION_CONTENT %}
+{{ EXTENSION_CONTENT }}
+{% endif %}
+
+{% if HAS_DEBUG_DEPS %}
+# Optional debug stage: only installs debug deps if they were exported. This stage will not
+# be built by default (the final stage below is the runtime image), and it will safely do
+# nothing if there are no debug requirements
+FROM runtime AS debug
+
+USER root
+
+COPY --from=builder /tmp/build /tmp/build
+
+RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} pip install --root-user-action=ignore -r /tmp/build/requirements-debug.txt
+
+USER py
+{% endif %}
+
+# Final (default) image: explicitly use runtime as the final target so debug is not used unless requested
+FROM runtime AS final
+
+USER py

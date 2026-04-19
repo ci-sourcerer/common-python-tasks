@@ -2,7 +2,7 @@
 name = "common-python-tasks"
 description = "Opinionated Poe the Poet tasks for Python package development."
 readme = "README.md"
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.11,<4.0"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Joseph Asbury", email = "ci_sourcerer@yahoo.com" }]
@@ -10,7 +10,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -27,6 +26,8 @@ dependencies = [
     "pytest-cov (>=7.0.0,<8.0.0)",
     "pytest (>=9.0.1,<10.0.0)",
     "tomlkit (>=0.13.3,<0.14.0)",
+    "jinja2 (>=3.1.6,<4.0.0)",
+    "git-cliff (>=2.12.0,<3.0.0)",
 ]
 dynamic = ["version"]
 
@@ -36,7 +37,7 @@ Source = "http://github.com/ci-sourcerer/common-python-tasks.git"
 Issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
 
 [tool.poe]
-include_script = "common_python_tasks:tasks(exclude_tags=['containers'])"
+include_script = "common_python_tasks:tasks(exclude_tags=['fastapi'])"
 
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }

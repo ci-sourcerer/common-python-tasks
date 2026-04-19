@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # This script adds the common-python-tasks package to the current project
-# and updates the pyproject.toml file to include the requested tasks
+# and updates the pyproject.toml file to include the requested tasks.
 
 set -e
 

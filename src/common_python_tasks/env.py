@@ -1,0 +1,406 @@
+import logging
+import os
+import secrets
+from pathlib import Path
+from shlex import split as shlex_split
+
+from . import utils
+
+LOGGER = logging.getLogger(__name__)
+
+WORKDIR_PATH_ENV_VAR = "WORKDIR_PATH"
+WORKDIR_PATH_DEFAULT = "/workspace"
+_AUTO_INJECTED_BUILD_ARG_ENV_VARS = (WORKDIR_PATH_ENV_VAR,)
+
+
+def env_truthy(env_var: str) -> bool:
+    """Return `True` if the environment variable is set to a truthy value.
+
+    Args:
+        env_var: The name of the environment variable.
+
+    Returns:
+        True if the environment variable is set to a truthy value, False otherwise.
+    """
+    return os.getenv(env_var, "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+        "enabled",
+        "y",
+        "t",
+    }
+
+
+def get_workdir_path() -> str:
+    """Return the configured container workdir path.
+
+    Returns:
+        The workdir path from `WORKDIR_PATH`, or the project default.
+    """
+    return os.getenv(WORKDIR_PATH_ENV_VAR, WORKDIR_PATH_DEFAULT)
+
+
+def inject_auto_build_args_from_env(
+    build_args: dict[str, str] | None,
+) -> dict[str, str]:
+    """Inject configured env vars into Docker build args when present.
+
+    Environment-driven build args are only injected if they are set, and never
+    override explicitly provided build args.
+
+    Args:
+        build_args: Existing Docker build args from CLI/env parsing.
+
+    Returns:
+        A build-arg dictionary with auto-injected env values merged in.
+    """
+    merged_build_args = dict(build_args or {})
+    for env_var in _AUTO_INJECTED_BUILD_ARG_ENV_VARS:
+        env_value = os.getenv(env_var)
+        if env_value is not None:
+            merged_build_args.setdefault(env_var, env_value)
+    return merged_build_args
+
+
+def parse_container_extensions() -> list[dict]:
+    """Parse `CONTAINER_EXTENSION_FILES` and `CONTAINER_EXTENSIONS` (colon-delimited).
+
+    Returns:
+        A list of extension descriptor dictionaries with keys including `id`,
+        `source`, `path`, and `bundle_name`.
+    """
+    exts: list[dict] = []
+    files_raw = os.getenv("CONTAINER_EXTENSION_FILES")
+    if files_raw:
+        for part in [p.strip() for p in files_raw.split(":") if p.strip()]:
+            pth = Path(part)
+            exts.append(
+                {
+                    "id": (
+                        pth.name.split("Dockerfile.", 1)[1]
+                        if pth.name.startswith("Dockerfile.")
+                        else pth.stem
+                    ),
+                    "source": "file",
+                    "path": part,
+                    "bundle_name": None,
+                }
+            )
+    bundles_raw = os.getenv("CONTAINER_EXTENSIONS")
+    if bundles_raw:
+        for part in (p.strip() for p in bundles_raw.split(":")):
+            if not part:
+                continue
+            if "=" in part:
+                name, _, args = part.partition("=")
+                name = name.strip()
+                args = args.strip()
+            else:
+                name = part
+                args = None
+            exts.append(
+                {
+                    "id": name,
+                    "source": "bundle",
+                    "path": None,
+                    "bundle_name": name,
+                    "args": args,
+                }
+            )
+    return exts
+
+
+def resolve_extension_content(descriptor: dict[str, str | None]) -> str:
+    """Return the Dockerfile fragment for the given descriptor.
+
+    Args:
+        descriptor: Extension descriptor dictionary containing `source`,
+            `path`, and `bundle_name` values.
+
+    Returns:
+        The Dockerfile fragment text to use for the extension.
+    """
+
+    if descriptor["source"] == "file":
+        p = Path(descriptor["path"] or "")
+        if not p.exists():
+            utils.fatal(f"Extension Dockerfile not found: {p}")
+        return p.read_text(encoding="utf-8")
+    if descriptor["source"] == "bundle":
+        bundle_name = descriptor["bundle_name"]
+        out = utils.load_data_file(
+            f"{bundle_name}/Dockerfile",
+            type_identifier="dockerfile_extensions",
+            fatal_on_missing=False,
+        )
+        if out is None:
+            utils.fatal(f"Extension bundle not found: {bundle_name}")
+        return out[1]
+    utils.fatal(f"Unknown extension descriptor source: {descriptor['source']}")
+
+
+def get_cache_id_suffix(no_cache: bool) -> str:
+    """Return a cache-break suffix for Docker cache mount IDs.
+
+    If `no_cache` is enabled, this returns a stable random suffix for the
+    current task invocation; otherwise it returns an empty string.
+    """
+    if not no_cache:
+        return ""
+
+    return f"-{secrets.token_hex(8)}"
+
+
+def load_container_env_file(path: str | None = None) -> str | None:
+    """Return the contents of a container env file if it exists and is non-empty."""
+
+    if path is not None:
+        container_env_path = Path(path)
+        if not container_env_path.is_file():
+            utils.fatal(f"Container env file not found: {path}")
+    else:
+        container_env_path = Path(".containerenv")
+        if not container_env_path.is_file():
+            return None
+
+    container_env = container_env_path.read_text(encoding="utf-8").strip()
+    return container_env if container_env else None
+
+
+def split_colon_delimited_values(value: str) -> list[str]:
+    """Split a colon-delimited string while preserving quoted substrings."""
+    if not value or not value.strip():
+        return []
+
+    try:
+        tokens = shlex_split(value.replace(":", " "), comments=True)
+    except ValueError as exc:
+        raise ValueError(f"Unable to parse colon-delimited values: {exc}") from exc
+
+    return [token for token in tokens if token.strip()]
+
+
+def parse_container_env_tokens(value: str | list[str] | None) -> list[str]:
+    """Parse `KEY=VALUE` container env declarations from string or list input."""
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        return [token.strip() for token in value if token and token.strip()]
+
+    if not value.strip():
+        return []
+
+    tokens = split_colon_delimited_values(value)
+    return [token for token in tokens if token.strip()]
+
+
+def _parse_container_envfile_paths(
+    container_envfile: str | list[str] | None,
+) -> list[str]:
+    if container_envfile is None:
+        return []
+    if isinstance(container_envfile, list):
+        return [path.strip() for path in container_envfile if path and path.strip()]
+    if not container_envfile.strip():
+        return []
+    return split_colon_delimited_values(container_envfile)
+
+
+def load_container_env_tokens(
+    container_env: str | list[str] | None = None,
+    container_envfile: str | list[str] | None = None,
+) -> list[str]:
+    """Load container env declarations from multiple sources in precedence order."""
+    tokens: list[str] = []
+
+    file_value = load_container_env_file()
+    if file_value is not None:
+        tokens.extend(parse_container_env_tokens(file_value))
+
+    for path in _parse_container_envfile_paths(container_envfile):
+        file_value = load_container_env_file(path)
+        if file_value is not None:
+            tokens.extend(parse_container_env_tokens(file_value))
+
+    env_value = os.getenv("CONTAINER_ENV")
+    if env_value and env_value.strip():
+        tokens.extend(parse_container_env_tokens(env_value))
+
+    tokens.extend(parse_container_env_tokens(container_env))
+
+    return tokens
+
+
+def parse_container_deps_source() -> tuple[Path | list[Path] | None, str | None]:
+    """Return the source for dependency Dockerfile input.
+
+    `CONTAINER_DEPS_CONTENT` is preferred and overrides `CONTAINER_DEPS_FILE`.
+    `CONTAINER_DEPS_FILE` may contain a colon-delimited list of file paths.
+
+    Returns:
+        A tuple of `(dockerfile_path_or_paths, inline_content)`. One of the values
+        may be `None` when not provided.
+    """
+
+    content = os.getenv("CONTAINER_DEPS_CONTENT")
+    if content and content.strip():
+        return None, content.strip()
+
+    path_raw = os.getenv("CONTAINER_DEPS_FILE")
+    if path_raw:
+        paths = [Path(p.strip()) for p in split_colon_delimited_values(path_raw)]
+        if not paths:
+            return None, None
+        for p in paths:
+            if not p.exists():
+                utils.fatal(f"CONTAINER_DEPS_FILE not found: {p}")
+        return paths[0] if len(paths) == 1 else paths, None
+    return None, None
+
+
+def parse_container_deps() -> str | None:
+    """Return the Dockerfile content for the deps image from environment.
+
+    `CONTAINER_DEPS_CONTENT` overrides `CONTAINER_DEPS_FILE`.
+    """
+    dockerfile_path, content = parse_container_deps_source()
+    if content is not None:
+        return content
+    if dockerfile_path is not None:
+        if isinstance(dockerfile_path, list):
+            return "\n".join(
+                p.read_text(encoding="utf-8").strip() for p in dockerfile_path
+            ).strip()
+        return dockerfile_path.read_text(encoding="utf-8").strip()
+    return None
+
+
+def parse_container_deps_mappings() -> dict[str, str] | None:
+    """Parse `CONTAINER_DEPS_MAPPINGS` into dependency-name-to-path pairs.
+
+    The env var should contain whitespace-separated mappings in the form
+    `name:/target/path`.
+
+    Returns:
+        A dict of dependency names to destination paths, or `None` when unset.
+    """
+
+    raw = os.getenv("CONTAINER_DEPS_MAPPINGS")
+    if not raw or not raw.strip():
+        return None
+
+    import shlex
+
+    try:
+        tokens = shlex.split(raw)
+    except ValueError as exc:
+        utils.fatal(f"Invalid CONTAINER_DEPS_MAPPINGS: {exc}")
+
+    mappings: dict[str, str] = {}
+    for token in tokens:
+        if ":" not in token:
+            utils.fatal(
+                "CONTAINER_DEPS_MAPPINGS must contain pairs like 'name:/target/path'; invalid token: %s",
+                token,
+            )
+        name, dest = token.split(":", 1)
+        name = name.strip()
+        dest = dest.strip()
+        if not name or not dest:
+            utils.fatal(
+                "CONTAINER_DEPS_MAPPINGS must provide both a dependency name and a destination path"
+            )
+        if name in mappings:
+            utils.fatal(f"Duplicate dependency mapping for: {name}")
+        mappings[name] = dest
+
+    return mappings
+
+
+def render_container_deps_move_script(mappings: dict[str, str]) -> str:
+    """Render a Python script that moves deps from /tmp/deps into target paths."""
+    if not mappings:
+        return ""
+
+    import textwrap
+
+    script_lines = [
+        "import pathlib",
+        "import shutil",
+        "import sys",
+        "",
+        f"mappings = {repr(mappings)}",
+        'source_root = pathlib.Path("/tmp/deps")',
+        "",
+        "for name, dest in mappings.items():",
+        "    source_path = source_root / name",
+        "    if not source_path.exists():",
+        '        print(f"Dependency source not found: {source_path}", file=sys.stderr)',
+        "        sys.exit(1)",
+        "    dest_path = pathlib.Path(dest)",
+        "    dest_path.parent.mkdir(parents=True, exist_ok=True)",
+        "    shutil.move(str(source_path), str(dest_path))",
+    ]
+
+    return textwrap.dedent("\n".join(script_lines)).strip()
+
+
+def get_container_deps_move_script() -> str | None:
+    """Return the container dependency move script from env or path.
+
+    Supports either inline executable script content via
+    `CONTAINER_DEPS_MOVE_SCRIPT` or a host-side script file path via
+    `CONTAINER_DEPS_MOVE_SCRIPT_PATH`.
+    """
+
+    script_path_value = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT_PATH")
+    inline_script = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT")
+
+    if script_path_value and script_path_value.strip():
+        if inline_script and inline_script.strip():
+            LOGGER.warning(
+                "Both CONTAINER_DEPS_MOVE_SCRIPT_PATH and CONTAINER_DEPS_MOVE_SCRIPT are set; using CONTAINER_DEPS_MOVE_SCRIPT_PATH."
+            )
+        script_path = Path(script_path_value)
+        if not script_path.exists():
+            utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH not found: {script_path}")
+        if not script_path.is_file():
+            utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is not a file: {script_path}")
+        content = script_path.read_text(encoding="utf-8")
+        if not content.strip():
+            utils.fatal(f"CONTAINER_DEPS_MOVE_SCRIPT_PATH is empty: {script_path}")
+        return content.rstrip("\n")
+
+    if inline_script is None:
+        return None
+
+    inline_script = inline_script.strip()
+    return inline_script if inline_script else None
+
+
+def get_prune_keep() -> int:
+    """Return the integer value of CONTAINER_PRUNE_KEEP.
+
+    Semantics:
+        -1: keep all (no pruning)
+        0: keep only the latest
+        N: keep latest + N previous
+    Defaults to -1 when unset or invalid.
+
+    Returns:
+        The parsed prune count as an integer.
+    """
+    raw = os.getenv("CONTAINER_PRUNE_KEEP")
+    if raw is None:
+        return -1
+    try:
+        return int(raw)
+    except Exception:
+        LOGGER.warning(
+            "Invalid CONTAINER_PRUNE_KEEP value '%s' - defaulting to -1 (no prune)",
+            raw,
+        )
+        return -1

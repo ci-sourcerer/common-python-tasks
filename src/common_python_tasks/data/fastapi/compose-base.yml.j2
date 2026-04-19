@@ -1,0 +1,40 @@
+name: ${PACKAGE_NAME}
+
+x-common-environment: &common-environment
+  {{ ENV_PREFIX }}_HOST: api
+  {{ ENV_PREFIX }}_API_PORT: ${API_PORT}
+  {{ ENV_PREFIX }}_SECRET_KEY: ${SECRET_KEY}
+  {{ ENV_PREFIX }}_ENVIRONMENT: ${ENVIRONMENT}
+
+x-common-build-args: &common-build-args
+  PACKAGE_NAME: ${PACKAGE_NAME}
+  PYTHON_VERSION: ${PYTHON_VERSION}
+  POETRY_VERSION: ${POETRY_VERSION}
+
+services:
+  api:
+    user: "1000"
+    hostname: ${PACKAGE_NAME}-api
+    environment:
+      {{ ENV_PREFIX }}_HOST: 0.0.0.0
+      <<: *common-environment
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args: *common-build-args
+      target: runtime
+    image: ${PACKAGE_NAME}:${IMAGE_TAG}
+    networks:
+      - default
+    ports:
+      - mode: ingress
+        target: 8080
+        published: ${API_PORT}
+        protocol: tcp
+    restart: always
+    tmpfs:
+      - /.gunicorn
+
+networks:
+  default:
+    name: ${PACKAGE_NAME}_default
