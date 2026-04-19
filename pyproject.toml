@@ -37,7 +37,7 @@ Source = "http://github.com/ci-sourcerer/common-python-tasks.git"
 Issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
 
 [tool.poe]
-include_script = "common_python_tasks:tasks(exclude_tags=['fastapi'])"
+include_script = "common_python_tasks:tasks(exclude_tags=['fastapi', 'containers'])"
 
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
