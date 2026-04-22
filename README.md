@@ -2,6 +2,8 @@
 
 This package is a collection of (very) opinionated [Poe the Poet](https://poethepoet.natn.io/guides/packaged_tasks.html) Python tasks for common Python development workflows.
 
+Instead of writing your own tasks for formatting, linting, testing, packaging, and more, you can use these pre-built tasks that work out of the box with reasonable defaults and support configuration overrides when needed. In the past, I found myself copying and pasting the same task definitions across projects, and this package is my attempt to DRY up that workflow and provide a single source of truth for common Python development tasks. I hope you can use them too.
+
 ## Quick start
 
 ### Automated setup
@@ -22,14 +24,16 @@ This will complete the following steps.
 
 ### Manual setup
 
+There's no real reason to run the automated script; I just like automating everything. You can achieve the same result by following these steps.
+
 1. Add `common-python-tasks` to your `pyproject.toml` and configure Poe the Poet to include the desired tasks
 
     ```toml
     [project]
     name = "my-awesome-project"
-    version = "0.0.2"
+    version = "0.0.3"
     dependencies = [
-        "common-python-tasks==0.0.2",  # Always pin to a specific version
+        "common-python-tasks==0.0.3",  # Always pin to a specific version
     ]
 
     [tool.poe]
