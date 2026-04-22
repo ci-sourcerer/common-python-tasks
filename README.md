@@ -242,8 +242,8 @@ You can include or exclude tasks by tags in your `pyproject.toml`
 ```toml
 [project]
 name = "simple-cli-tool"
-version = "0.0.1"
-dependencies = ["common-python-tasks==0.0.1"]
+version = "0.0.3"
+dependencies = ["common-python-tasks==0.0.3"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks(include_tags=['format', 'lint'])"
@@ -256,8 +256,8 @@ Available tasks: `format`, `lint`.
 ```toml
 [project]
 name = "containerized-app"
-version = "0.0.1"
-dependencies = ["common-python-tasks==0.0.1"]
+version = "0.0.3"
+dependencies = ["common-python-tasks==0.0.3"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks(include_tags=['format', 'lint', 'test', 'containers'])"
@@ -274,7 +274,7 @@ Available tasks: All tasks including `build-image` and `push-image`.
 ```toml
 [project]
 name = "custom-test-setup"
-dependencies = ["common-python-tasks==0.0.1"]
+dependencies = ["common-python-tasks==0.0.3"]
 dynamic = ["version"]
 
 [tool.poe]
