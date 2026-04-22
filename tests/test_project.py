@@ -2,6 +2,7 @@ import importlib.metadata as metadata
 from unittest.mock import MagicMock, patch
 
 from common_python_tasks.project import (
+    get_authors,
     get_installed_requirement_version,
     is_task_tag_included,
 )
@@ -183,3 +184,15 @@ def test_is_task_tag_included_defaults_true_without_filters():
         }
 
         assert is_task_tag_included("containers") is True
+
+
+def test_get_authors_reads_pyproject():
+    get_authors.cache_clear()
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        mock_toml.return_value = {
+            "project": {
+                "authors": [{"name": "Test Author", "email": "test@example.com"}]
+            }
+        }
+
+        assert get_authors() == [("Test Author", "test@example.com")]

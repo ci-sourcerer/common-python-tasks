@@ -8,17 +8,17 @@ from typing import Any
 from . import utils
 
 
+@lru_cache
 def get_authors() -> list[tuple[str, str]]:
     """Return a list of authors from the pyproject.toml file.
 
     Returns:
         A list of tuples containing the name and email of each author.
     """
+    authors = read_pyproject_toml().get("project", {}).get("authors", [])
     return [
         ((a.get("name") or "").strip(), (a.get("email") or "").strip().strip("<>"))
-        for a in tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-        .get("project", {})
-        .get("authors", [])
+        for a in authors
     ]
 
 

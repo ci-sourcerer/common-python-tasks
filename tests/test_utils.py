@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from common_python_tasks.utils import (
     fatal,
+    get_package_name,
     is_package_installed,
     require_package,
     run_available_tools,
@@ -46,6 +47,16 @@ def test_is_package_installed_caches_results(mock_find_spec):
     is_package_installed("black")
 
     assert mock_find_spec.call_count == 1
+
+
+def test_get_package_name_reads_pyproject_when_env_missing(monkeypatch):
+    monkeypatch.delenv("PACKAGE_NAME", raising=False)
+    get_package_name.cache_clear()
+    with patch(
+        "common_python_tasks.utils.Path.read_text",
+        return_value='[project]\nname = "test-package"\n',
+    ):
+        assert get_package_name() == "test-package"
 
 
 def test_run_command_executes_shell_command():

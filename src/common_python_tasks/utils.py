@@ -213,6 +213,7 @@ def get_container_registry_url() -> str:
     ).strip()
 
 
+@lru_cache
 def get_package_name(use_underscores: bool = False) -> str:
     """Return the package name from environment or pyproject configuration.
 
