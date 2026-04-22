@@ -39,6 +39,9 @@ Issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
 [tool.poe]
 include_script = "common_python_tasks:tasks(exclude_tags=['fastapi', 'containers'])"
 
+[tool.poe.env]
+RELEASE_PRE_SCRIPT = "set -e && LAST_TAG=$(git describe --tags --abbrev=0) && LAST_TAG_NO_V=${LAST_TAG#v} && (sed --version >/dev/null 2>&1 && sed -i \"s/${LAST_TAG_NO_V}/${RELEASE_VERSION}/g\" README.md || sed -i '' \"s/${LAST_TAG_NO_V}/${RELEASE_VERSION}/g\" README.md) && git add README.md && git commit -m \"chore: update README.md for release ${RELEASE_VERSION}\""
+
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
 poetry-plugin-export = { version = ">=1.9.0,<2.0.0" }
