@@ -1,5 +1,7 @@
+import contextvars
 import logging
 import os
+from functools import partial, wraps
 from pathlib import Path
 
 from poethepoet_tasks import TaskCollection
@@ -45,6 +47,70 @@ tasks = TaskCollection(
         if Path(f).exists()
     ]
 )
+
+_task_call_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "common_python_tasks_task_call_depth", default=0
+)
+
+_original_script = tasks.script
+
+
+def _wrap_task_function(func: callable, task_name: str | None) -> callable:
+    resolved_task_name = task_name or func.__name__.replace("_", "-").lower()
+
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        current_depth = _task_call_depth.get()
+        if current_depth > 0:
+            LOGGER.log(
+                (
+                    logging.INFO
+                    if not resolved_task_name.startswith("_")
+                    else logging.DEBUG
+                ),
+                "Running task %s",
+                resolved_task_name,
+            )
+        token = _task_call_depth.set(current_depth + 1)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            _task_call_depth.reset(token)
+
+    return wrapped
+
+
+def _script(
+    func=None,
+    *,
+    task_name: str | None = None,
+    help: str | None = None,
+    task_args: bool = True,
+    options: dict | None = None,
+    tags: tuple[str, ...] = (),
+):
+    if func is None:
+        return partial(
+            _script,
+            task_name=task_name,
+            help=help,
+            task_args=task_args,
+            options=options,
+            tags=tags,
+        )
+
+    wrapped = _wrap_task_function(func, task_name)
+    return _original_script(
+        wrapped,
+        task_name=task_name,
+        help=help,
+        task_args=task_args,
+        options=options,
+        tags=tags,
+    )
+
+
+tasks.script = _script
 
 
 def _parse_build_args(

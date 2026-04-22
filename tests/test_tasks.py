@@ -61,6 +61,43 @@ def test_lint_all_fails_when_no_tools_installed(mock_find_spec):
         assert exc_info.value.code == 1
 
 
+def test_task_decorator_does_not_log_top_level_task(caplog):
+    import logging
+
+    from common_python_tasks import tasks as tasks_module
+
+    caplog.set_level(logging.INFO, logger="common_python_tasks")
+
+    @tasks_module.tasks.script(task_name="top-level-task", tags=())
+    def top_level_task():
+        return "ok"
+
+    top_level_task()
+
+    assert "Running task top-level-task" not in caplog.text
+
+
+def test_task_decorator_logs_nested_task_only(caplog):
+    import logging
+
+    from common_python_tasks import tasks as tasks_module
+
+    caplog.set_level(logging.INFO, logger="common_python_tasks")
+
+    @tasks_module.tasks.script(task_name="inner-task", tags=())
+    def inner_task():
+        return "inner"
+
+    @tasks_module.tasks.script(task_name="outer-task", tags=())
+    def outer_task():
+        inner_task()
+
+    outer_task()
+
+    assert "Running task outer-task" not in caplog.text
+    assert "Running task inner-task" in caplog.text
+
+
 class TestBumpVersion:
     @pytest.fixture
     def tag_calls(self):
