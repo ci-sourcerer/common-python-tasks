@@ -1,6 +1,12 @@
+import importlib
+import inspect
+import os
+import re
 import sys
 
-__all__ = ["get_available_tasks"]
+from .tasks import tasks
+
+__all__ = ["get_available_tasks", "print_available_tasks"]
 
 
 def get_available_tasks(internal: bool = False) -> list[str]:
@@ -12,13 +18,82 @@ def get_available_tasks(internal: bool = False) -> list[str]:
     Returns:
         A list of task names.
     """
-    from .tasks import tasks
-
     return [
         task_name
         for task_name in tasks()["tasks"]
         if internal or not task_name.startswith("_")
     ]
+
+
+def _extract_docstring_excerpt(doc: str) -> str:
+    excerpt = []
+    for line in doc.strip().splitlines():
+        if re.match(r"^(Args?|Arguments?|Parameters?):\s*$", line):
+            break
+        excerpt.append(line)
+
+    while excerpt and excerpt[-1].strip() == "":
+        excerpt.pop()
+
+    return "\n".join(excerpt)
+
+
+def _get_task_docstring(task_name: str) -> str | None:
+
+    task_config = tasks()["tasks"].get(task_name)
+    if not isinstance(task_config, dict):
+        return None
+
+    script = task_config.get("script")
+    if not isinstance(script, str) or ":" not in script:
+        return None
+
+    module_name, func_name = script.split(":", 1)
+
+    try:
+        module = importlib.import_module(module_name)
+        func = getattr(module, func_name)
+    except (ImportError, AttributeError):
+        return None
+
+    doc = inspect.getdoc(func)
+    if not doc:
+        return None
+
+    return _extract_docstring_excerpt(doc)
+
+
+def _get_task_tags(task_name: str) -> list[str] | None:
+    task_variants = getattr(tasks, "_tasks", {}).get(task_name)
+    if not task_variants:
+        return None
+
+    first_variant = task_variants[0]
+    tags = getattr(first_variant, "tags", None)
+    if not tags:
+        return None
+
+    return sorted(
+        tag for tag in tags if isinstance(tag, str) and not tag.startswith("task-")
+    )
+
+
+def print_available_tasks(internal: bool = False, include_docs: bool = False) -> None:
+    """Print available tasks.
+
+    Args:
+        internal: Whether or not to include internal task names starting with '_'.
+        include_docs: Whether or not to include task docstrings.
+    """
+    print("\nAvailable tasks in this release:\n")
+    for task_name in get_available_tasks(internal=internal):
+        print(f" - {task_name}")
+        if include_docs:
+            doc = _get_task_docstring(task_name)
+            if doc:
+                for line in doc.splitlines():
+                    print(f"     {line}")
+                print()
 
 
 if __name__ == "__main__":
@@ -28,8 +103,7 @@ if __name__ == "__main__":
     )
 
     if len(sys.argv) == 1:
-        print("\nAvailable tasks in this release:\n")
-        for task_name in get_available_tasks():
-            print(f" - {task_name}")
+        debug = os.getenv("COMMON_PYTHON_TASKS_LOG_LEVEL", "info").lower() == "debug"
+        print_available_tasks(include_docs=debug)
     else:
         sys.exit(1)

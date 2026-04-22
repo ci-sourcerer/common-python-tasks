@@ -1371,9 +1371,6 @@ def container_shell(
 ) -> None:
     """Run the debug image with an interactive shell.
 
-    Behavior when `tag` is `None` mirrors `run_container`:
-      - select the most-recently-built tag for the project's image (do not build).
-
     Args:
         tag: Image tag to use. If `None`, use the most-recently-built tag.
         shell: Preferred shell name or path. If `None`, use the first available from

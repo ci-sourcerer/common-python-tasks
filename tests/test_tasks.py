@@ -61,6 +61,18 @@ def test_lint_all_fails_when_no_tools_installed(mock_find_spec):
         assert exc_info.value.code == 1
 
 
+def test_print_available_tasks_includes_docstrings(capsys):
+    from common_python_tasks.__main__ import print_available_tasks
+
+    print_available_tasks(internal=False, include_docs=True)
+    captured = capsys.readouterr()
+
+    assert " - test" in captured.out
+    assert "Run the test suite with coverage" in captured.out
+    assert "Bump the project version." in captured.out
+    assert "Args:" not in captured.out
+
+
 def test_task_decorator_does_not_log_top_level_task(caplog):
     import logging
 
