@@ -166,7 +166,7 @@ def isort() -> None:
             "isort",
             "--quiet",
             ".",
-            "--settings-path",
+            "--settings-path" if isort_config_path else None,
             isort_config_path,
         ]
     )
@@ -218,7 +218,7 @@ def isort_check() -> None:
             "--quiet",
             ".",
             "--check-only",
-            "--settings-path",
+            "--settings-path" if isort_config_path else None,
             isort_config_path,
         ]
     )
@@ -251,7 +251,14 @@ def flake8_check() -> None:
 
     flake8_config_path = get_config_path("FLAKE8_CONFIG", ".flake8", ".flake8")
 
-    run_command(["flake8", Path("."), "--config", flake8_config_path])
+    run_command(
+        [
+            "flake8",
+            Path("."),
+            "--config" if flake8_config_path else None,
+            flake8_config_path,
+        ]
+    )
 
 
 @tasks.script(tags=["test"])
