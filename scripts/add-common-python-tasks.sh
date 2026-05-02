@@ -6,12 +6,16 @@
 set -e
 
 pkg="common-python-tasks"
-searchOutput=$(poetry search "$pkg")
-if [ "$searchOutput" = "No matching packages were found." ]; then
-    printf 'Package %s not found\n' "$pkg" >&2
-    exit 1
+if [ -n "$COMMON_PYTHON_TASKS_VERSION" ]; then
+    ver="$COMMON_PYTHON_TASKS_VERSION"
+else
+    searchOutput=$(poetry search "$pkg")
+    if [ "$searchOutput" = "No matching packages were found." ]; then
+        printf 'Package %s not found\n' "$pkg" >&2
+        exit 1
+    fi
+    ver=$(printf "%s" "$searchOutput" | awk -v p="$pkg" '$1==p{print $2}' | tail -n1)
 fi
-ver=$(printf "%s" "$searchOutput" | awk -v p="$pkg" '$1==p{print $2}' | tail -n1)
 if [ -n "$ver" ]; then
     poetry add --group dev "$pkg==$ver" || exit 1
 else

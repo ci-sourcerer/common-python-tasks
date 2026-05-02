@@ -1276,10 +1276,11 @@ def test_container_shell_wraps_fallback_shell_with_env_dump(
 
     assert len(run_calls) == 1
     run_call = [str(part) for part in run_calls[0] if part is not None]
-    assert run_call[-2:] == [
-        "-c",
-        "echo '=== Container environment variables ===' && env && echo '===================================' && exec $(command -v zsh || command -v fish || command -v ksh || command -v bash || command -v sh) || exit 127",
-    ]
+    assert run_call[-2] == "-c"
+    assert (
+        run_call[-1]
+        == "echo '=== Container environment variables ===' && env | sort && echo '========================================' && exec $(command -v zsh || command -v fish || command -v ksh || command -v bash || command -v sh) || exit 127"
+    )
 
 
 def test_container_shell_fails_when_no_images(

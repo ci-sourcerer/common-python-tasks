@@ -1,4 +1,6 @@
+import importlib
 import json
+import os
 import urllib.error
 from unittest.mock import ANY, MagicMock, patch
 
@@ -73,10 +75,32 @@ def test_print_available_tasks_includes_docstrings(capsys):
     assert "Args:" not in captured.out
 
 
+def test_public_tasks_defaults_to_common_profile():
+    import common_python_tasks
+
+    common_python_tasks = importlib.reload(common_python_tasks)
+    task_map = common_python_tasks.tasks()["tasks"]
+
+    assert "format" in task_map
+    assert "build-image" not in task_map
+    assert "stack-up" not in task_map
+    assert task_map["release"]["script"].endswith(":release_without_containers")
+
+
+def test_public_tasks_supports_explicit_empty_include_for_all_tasks():
+    import common_python_tasks
+
+    common_python_tasks = importlib.reload(common_python_tasks)
+    task_map = common_python_tasks.tasks(include_tags=())["tasks"]
+
+    assert "build-image" in task_map
+    assert "stack-up" in task_map
+
+
 def test_task_decorator_does_not_log_top_level_task(caplog):
     import logging
 
-    from common_python_tasks import tasks as tasks_module
+    tasks_module = importlib.import_module("common_python_tasks.tasks")
 
     caplog.set_level(logging.INFO, logger="common_python_tasks")
 
@@ -92,7 +116,7 @@ def test_task_decorator_does_not_log_top_level_task(caplog):
 def test_task_decorator_logs_nested_task_only(caplog):
     import logging
 
-    from common_python_tasks import tasks as tasks_module
+    tasks_module = importlib.import_module("common_python_tasks.tasks")
 
     caplog.set_level(logging.INFO, logger="common_python_tasks")
 
@@ -452,19 +476,19 @@ class TestBumpVersion:
 
 
 class TestReleaseTask:
-    def test_release_runs_packaging_only_when_containers_excluded(self):
-        from common_python_tasks.tasks import release
+    def test_release_without_containers_runs_packaging_flow(self):
+        from common_python_tasks.tasks import release_without_containers
 
         with (
+            patch.dict(
+                os.environ, {"RELEASE_PRE_SCRIPT": "", "RELEASE_POST_SCRIPT": ""}
+            ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
-            patch(
-                "common_python_tasks.project.is_task_tag_included", return_value=False
-            ) as mock_has_tag,
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
@@ -483,7 +507,7 @@ class TestReleaseTask:
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
         ):
-            release(component="minor", stage="beta")
+            release_without_containers(component="minor", stage="beta")
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
@@ -494,7 +518,6 @@ class TestReleaseTask:
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
-            mock_has_tag.assert_called_once_with("containers")
             mock_build_image.assert_not_called()
             mock_push_image.assert_not_called()
             mock_publish_github_release.assert_called_once_with(
@@ -503,19 +526,19 @@ class TestReleaseTask:
                 assets=[],
             )
 
-    def test_release_runs_container_steps_when_containers_included(self):
+    def test_release_runs_container_steps(self):
         from common_python_tasks.tasks import release
 
         with (
+            patch.dict(
+                os.environ, {"RELEASE_PRE_SCRIPT": "", "RELEASE_POST_SCRIPT": ""}
+            ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
-            patch(
-                "common_python_tasks.project.is_task_tag_included", return_value=True
-            ) as mock_has_tag,
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
@@ -545,7 +568,6 @@ class TestReleaseTask:
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
-            mock_has_tag.assert_called_once_with("containers")
             mock_build_image.assert_called_once_with(
                 debug=True,
                 no_cache=True,
@@ -562,8 +584,8 @@ class TestReleaseTask:
                 assets=[],
             )
 
-    def test_release_runs_pre_and_post_scripts(self):
-        from common_python_tasks.tasks import release
+    def test_release_without_containers_runs_pre_and_post_scripts(self):
+        from common_python_tasks.tasks import release_without_containers
 
         with (
             patch("common_python_tasks.git.ensure_on_default_branch"),
@@ -572,10 +594,6 @@ class TestReleaseTask:
             patch("common_python_tasks.tasks.build_package"),
             patch("common_python_tasks.tasks.publish_package"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
-            patch(
-                "common_python_tasks.project.is_task_tag_included",
-                return_value=False,
-            ),
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="0.0.1",
@@ -590,7 +608,7 @@ class TestReleaseTask:
             ),
             patch("common_python_tasks.github.publish_github_release"),
         ):
-            release(
+            release_without_containers(
                 component="patch",
                 pre_script="echo pre",
                 post_script="echo post",
@@ -630,9 +648,6 @@ class TestReleaseTask:
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
             patch(
-                "common_python_tasks.project.is_task_tag_included", return_value=True
-            ) as mock_has_tag,
-            patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
             ),
@@ -660,7 +675,6 @@ class TestReleaseTask:
             )
             mock_build_package.assert_not_called()
             mock_publish.assert_not_called()
-            mock_has_tag.assert_called_once_with("containers")
             mock_build_image.assert_not_called()
             mock_push_image.assert_not_called()
             mock_publish_github_release.assert_not_called()
@@ -693,19 +707,19 @@ class TestReleaseTask:
                 [],
             )
 
-    def test_release_accepts_none_stage_string(self):
-        from common_python_tasks.tasks import release
+    def test_release_without_containers_accepts_none_stage_string(self):
+        from common_python_tasks.tasks import release_without_containers
 
         with (
+            patch.dict(
+                os.environ, {"RELEASE_PRE_SCRIPT": "", "RELEASE_POST_SCRIPT": ""}
+            ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
-            patch(
-                "common_python_tasks.project.is_task_tag_included", return_value=False
-            ) as mock_has_tag,
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
@@ -722,7 +736,7 @@ class TestReleaseTask:
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
         ):
-            release(component="patch", stage="none")
+            release_without_containers(component="patch", stage="none")
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
@@ -733,15 +747,14 @@ class TestReleaseTask:
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
-            mock_has_tag.assert_called_once_with("containers")
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
                 prerelease=False,
                 assets=[],
             )
 
-    def test_release_fails_when_not_on_default_branch(self):
-        from common_python_tasks.tasks import release
+    def test_release_without_containers_fails_when_not_on_default_branch(self):
+        from common_python_tasks.tasks import release_without_containers
 
         def run_command_side_effect(
             cmd, capture_output=False, acceptable_returncodes=None, env=None
@@ -757,7 +770,7 @@ class TestReleaseTask:
             side_effect=run_command_side_effect,
         ):
             with pytest.raises(SystemExit) as exc_info:
-                release()
+                release_without_containers()
 
         assert exc_info.value.code == 1
 

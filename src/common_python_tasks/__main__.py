@@ -68,14 +68,13 @@ def _get_task_tags(task_name: str) -> list[str] | None:
     if not task_variants:
         return None
 
-    first_variant = task_variants[0]
-    tags = getattr(first_variant, "tags", None)
-    if not tags:
-        return None
-
-    return sorted(
-        tag for tag in tags if isinstance(tag, str) and not tag.startswith("task-")
-    )
+    tags = {
+        tag
+        for variant in task_variants
+        for tag in getattr(variant, "tags", ())
+        if isinstance(tag, str) and not tag.startswith("task-")
+    }
+    return sorted(tags) or None
 
 
 def print_available_tasks(internal: bool = False, include_docs: bool = False) -> None:
