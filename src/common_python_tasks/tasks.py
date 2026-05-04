@@ -1,5 +1,7 @@
+import contextvars
 import logging
 import os
+from functools import partial, wraps
 from pathlib import Path
 
 from poethepoet_tasks import TaskCollection
@@ -46,6 +48,70 @@ tasks = TaskCollection(
     ]
 )
 
+_task_call_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "common_python_tasks_task_call_depth", default=0
+)
+
+_original_script = tasks.script
+
+
+def _wrap_task_function(func: callable, task_name: str | None) -> callable:
+    resolved_task_name = task_name or func.__name__.replace("_", "-").lower()
+
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        current_depth = _task_call_depth.get()
+        if current_depth > 0:
+            LOGGER.log(
+                (
+                    logging.INFO
+                    if not resolved_task_name.startswith("_")
+                    else logging.DEBUG
+                ),
+                "Running task %s",
+                resolved_task_name,
+            )
+        token = _task_call_depth.set(current_depth + 1)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            _task_call_depth.reset(token)
+
+    return wrapped
+
+
+def _script(
+    func=None,
+    *,
+    task_name: str | None = None,
+    help: str | None = None,
+    task_args: bool = True,
+    options: dict | None = None,
+    tags: tuple[str, ...] = (),
+):
+    if func is None:
+        return partial(
+            _script,
+            task_name=task_name,
+            help=help,
+            task_args=task_args,
+            options=options,
+            tags=tags,
+        )
+
+    wrapped = _wrap_task_function(func, task_name)
+    return _original_script(
+        wrapped,
+        task_name=task_name,
+        help=help,
+        task_args=task_args,
+        options=options,
+        tags=tags,
+    )
+
+
+tasks.script = _script
+
 
 def _parse_build_args(
     cli_build_args: list[str] | None,
@@ -73,7 +139,7 @@ def _parse_build_args(
     return parsed_build_args or None
 
 
-@tasks.script(task_name="_black", tags=["format", "internal"])
+@tasks.script(task_name="_black", tags=["format", "internal", "common"])
 def black() -> None:
     """Run black formatting."""
     from common_python_tasks.utils import require_package, run_command
@@ -82,7 +148,7 @@ def black() -> None:
     run_command(["black", "--quiet", "."])
 
 
-@tasks.script(task_name="_isort", tags=["format", "internal"])
+@tasks.script(task_name="_isort", tags=["format", "internal", "common"])
 def isort() -> None:
     """Run isort formatting."""
     from common_python_tasks.utils import get_config_path, require_package, run_command
@@ -100,13 +166,13 @@ def isort() -> None:
             "isort",
             "--quiet",
             ".",
-            "--settings-path",
+            "--settings-path" if isort_config_path else None,
             isort_config_path,
         ]
     )
 
 
-@tasks.script(task_name="_autoflake", tags=["format", "internal"])
+@tasks.script(task_name="_autoflake", tags=["format", "internal", "common"])
 def autoflake() -> None:
     """Run autoflake to remove unused imports."""
     from common_python_tasks.utils import require_package, run_command
@@ -124,7 +190,7 @@ def autoflake() -> None:
     )
 
 
-@tasks.script(task_name="_black_check", tags=["lint", "internal"])
+@tasks.script(task_name="_black_check", tags=["lint", "internal", "common"])
 def black_check() -> None:
     """Run black in check mode."""
     from common_python_tasks.utils import require_package, run_command
@@ -133,7 +199,7 @@ def black_check() -> None:
     run_command(["black", "--quiet", "--diff", Path("."), "--check"])
 
 
-@tasks.script(task_name="_isort_check", tags=["lint"])
+@tasks.script(task_name="_isort_check", tags=["lint", "common"])
 def isort_check() -> None:
     """Run isort linting."""
     from common_python_tasks.utils import get_config_path, require_package, run_command
@@ -152,13 +218,13 @@ def isort_check() -> None:
             "--quiet",
             ".",
             "--check-only",
-            "--settings-path",
+            "--settings-path" if isort_config_path else None,
             isort_config_path,
         ]
     )
 
 
-@tasks.script(task_name="_autoflake_check", tags=["lint", "internal"])
+@tasks.script(task_name="_autoflake_check", tags=["lint", "internal", "common"])
 def autoflake_check() -> None:
     """Run autoflake in check mode."""
     from common_python_tasks.utils import require_package, run_command
@@ -176,7 +242,7 @@ def autoflake_check() -> None:
     )
 
 
-@tasks.script(task_name="_flake8_check", tags=["lint"])
+@tasks.script(task_name="_flake8_check", tags=["lint", "common"])
 def flake8_check() -> None:
     """Run flake8 linting."""
     from common_python_tasks.utils import get_config_path, require_package, run_command
@@ -185,10 +251,17 @@ def flake8_check() -> None:
 
     flake8_config_path = get_config_path("FLAKE8_CONFIG", ".flake8", ".flake8")
 
-    run_command(["flake8", Path("."), "--config", flake8_config_path])
+    run_command(
+        [
+            "flake8",
+            Path("."),
+            "--config" if flake8_config_path else None,
+            flake8_config_path,
+        ]
+    )
 
 
-@tasks.script(tags=["test"])
+@tasks.script(tags=["test", "common"])
 def test(quiet: bool = False) -> None:
     """Run the test suite with coverage (if `pytest-cov` is installed).
 
@@ -250,7 +323,7 @@ def test(quiet: bool = False) -> None:
         sys.exit(5)
 
 
-@tasks.script(task_name="clean", tags=["clean"])
+@tasks.script(task_name="clean", tags=["clean", "common"])
 def clean(dist_only: bool = False) -> None:
     """Clean up temporary files and directories.
 
@@ -274,7 +347,7 @@ def clean(dist_only: bool = False) -> None:
             item.unlink(missing_ok=True)
 
 
-@tasks.script(task_name="format", tags=["format"])
+@tasks.script(task_name="format", tags=["format", "common"])
 def format_all() -> None:
     """Format Python code with autoflake, black, and isort."""
     from common_python_tasks.utils import run_available_tools
@@ -289,7 +362,7 @@ def format_all() -> None:
     )
 
 
-@tasks.script(task_name="lint", tags=["lint"])
+@tasks.script(task_name="lint", tags=["lint", "common"])
 def lint_all() -> None:
     """Lint Python code with autoflake, black, isort, and flake8."""
     from common_python_tasks.utils import run_available_tools
@@ -676,7 +749,7 @@ def push_image(debug: bool = False) -> None:
         run_command(["docker", "push", full_tag])
 
 
-@tasks.script(task_name="publish-package", tags=["packaging"])
+@tasks.script(task_name="publish-package", tags=["packaging", "common"])
 def publish_package(build_first: bool = True) -> None:
     """Publish the package to the PyPI server.
 
@@ -690,7 +763,9 @@ def publish_package(build_first: bool = True) -> None:
     run_command(["poetry", "publish"])
 
 
-@tasks.script(task_name="publish-github-release", tags=["packaging", "release"])
+@tasks.script(
+    task_name="publish-github-release", tags=["packaging", "release", "common"]
+)
 def publish_github_release(
     tag_name: str | None = None,
     *,
@@ -733,7 +808,7 @@ def publish_github_release(
     )
 
 
-@tasks.script(task_name="build-package", tags=["packaging", "build"])
+@tasks.script(task_name="build-package", tags=["packaging", "build", "common"])
 def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
     """Build the package (wheel and sdist)."""
     from common_python_tasks.utils import run_command
@@ -748,7 +823,7 @@ def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
     run_command(command)
 
 
-@tasks.script(tags=["packaging"])
+@tasks.script(tags=["packaging", "common"])
 def bump_version(
     component: str = "auto",
     *,
@@ -833,7 +908,7 @@ def bump_version(
         run_command(["git", "tag", new_tag])
 
 
-@tasks.script(tags=["packaging", "release"])
+@tasks.script(tags=["packaging", "release", "common"])
 def changelog() -> None:
     """Print the changelog for the current version based on git history and git-cliff."""
     from common_python_tasks.utils import changelog as _changelog
@@ -841,12 +916,18 @@ def changelog() -> None:
     print(_changelog())
 
 
-@tasks.script(tags=["packaging", "release"])
-def release(
+def _normalize_release_stage(stage: str | None) -> str | None:
+    if stage is not None and stage.lower() == "none":
+        return None
+    return stage
+
+
+def _run_release_flow(
     component: str = "patch",
     *,
     stage: str | None = None,
     dry_run: bool = False,
+    include_containers: bool,
     debug: bool = False,
     no_cache: bool = False,
     plain: bool = False,
@@ -858,26 +939,6 @@ def release(
     pre_script: str | None = None,
     post_script: str | None = None,
 ) -> None:
-    """Run a full release flow for package (and containers when included).
-
-    Args:
-        component: The version component to bump: `major`, `minor`, or `patch`.
-        stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
-        dry_run: If `True`, only perform a dry-run version bump.
-        debug: Build/push debug container image tags when releasing containers.
-        no_cache: Do not use cache when building container images.
-        plain: Do not pretty-print container build output.
-        single_arch: Build container image for a single architecture.
-        build_args: Additional build arguments for the Docker build as repeated
-            `KEY=VALUE` values.
-        container_env: Inline container environment variables as repeated
-            `KEY=VALUE` values.
-        container_envfile: Repeated list of container environment files.
-        assets: Optional repeated list of release asset patterns or paths.
-        pre_script: Optional shell command to run before the release steps.
-        post_script: Optional shell command to run after the release completes.
-    """
-    from common_python_tasks.docker import build_image
     from common_python_tasks.git import (
         build_release_hook_environment,
         ensure_on_default_branch,
@@ -888,19 +949,13 @@ def release(
     from common_python_tasks.github import (
         publish_github_release as publish_github_release_helper,
     )
-    from common_python_tasks.project import (
-        get_release_tag_from_poetry_version,
-        is_task_tag_included,
-    )
+    from common_python_tasks.project import get_release_tag_from_poetry_version
     from common_python_tasks.utils import (
         log_dry_run,
         run_command,
     )
 
-    normalized_stage = stage
-    if normalized_stage is not None and normalized_stage.lower() == "none":
-        normalized_stage = None
-
+    normalized_stage = _normalize_release_stage(stage)
     pre_script = pre_script or os.getenv("RELEASE_PRE_SCRIPT")
     post_script = post_script or os.getenv("RELEASE_POST_SCRIPT")
 
@@ -919,7 +974,7 @@ def release(
         log_dry_run("Would push tags to origin")
         log_dry_run("Would build package with clean_dist=True")
         log_dry_run("Would publish package with build_first=False")
-        if is_task_tag_included("containers"):
+        if include_containers:
             log_dry_run(
                 "Would build container image with debug=%s no_cache=%s plain=%s single_arch=%s",
                 debug,
@@ -944,7 +999,9 @@ def release(
     build_package(clean_dist=True)
     publish_package(build_first=False)
 
-    if is_task_tag_included("containers"):
+    if include_containers:
+        from common_python_tasks.docker import build_image
+
         build_image(
             debug=debug,
             no_cache=no_cache,
@@ -979,6 +1036,91 @@ def release(
 
     if post_script:
         run_command(["sh", "-lc", post_script], env=hook_env, dry_run=dry_run)
+
+
+@tasks.script(task_name="release", tags=["packaging", "release", "containers"])
+def release(
+    component: str = "patch",
+    *,
+    stage: str | None = None,
+    dry_run: bool = False,
+    debug: bool = False,
+    no_cache: bool = False,
+    plain: bool = False,
+    single_arch: bool = False,
+    build_args: list[str] | None = None,
+    container_env: list[str] | None = None,
+    container_envfile: list[str] | None = None,
+    assets: list[str] | None = None,
+    pre_script: str | None = None,
+    post_script: str | None = None,
+) -> None:
+    """Run a full release flow for package and containers.
+
+    Args:
+        component: The version component to bump: `major`, `minor`, or `patch`.
+        stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
+        dry_run: If `True`, only perform a dry-run version bump.
+        debug: Build/push debug container image tags when releasing containers.
+        no_cache: Do not use cache when building container images.
+        plain: Do not pretty-print container build output.
+        single_arch: Build container image for a single architecture.
+        build_args: Additional build arguments for the Docker build as repeated
+            `KEY=VALUE` values.
+        container_env: Inline container environment variables as repeated
+            `KEY=VALUE` values.
+        container_envfile: Repeated list of container environment files.
+        assets: Optional repeated list of release asset patterns or paths.
+        pre_script: Optional shell command to run before the release steps.
+        post_script: Optional shell command to run after the release completes.
+    """
+    _run_release_flow(
+        component=component,
+        stage=stage,
+        dry_run=dry_run,
+        include_containers=True,
+        debug=debug,
+        no_cache=no_cache,
+        plain=plain,
+        single_arch=single_arch,
+        build_args=build_args,
+        container_env=container_env,
+        container_envfile=container_envfile,
+        assets=assets,
+        pre_script=pre_script,
+        post_script=post_script,
+    )
+
+
+@tasks.script(task_name="release", tags=["packaging", "release", "common"])
+def release_without_containers(
+    component: str = "patch",
+    *,
+    stage: str | None = None,
+    dry_run: bool = False,
+    assets: list[str] | None = None,
+    pre_script: str | None = None,
+    post_script: str | None = None,
+) -> None:
+    """Run a full release flow for package artifacts without container publishing.
+
+    Args:
+        component: The version component to bump: `major`, `minor`, or `patch`.
+        stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
+        dry_run: If `True`, only perform a dry-run version bump.
+        assets: Optional repeated list of release asset patterns or paths.
+        pre_script: Optional shell command to run before the release steps.
+        post_script: Optional shell command to run after the release completes.
+    """
+    _run_release_flow(
+        component=component,
+        stage=stage,
+        dry_run=dry_run,
+        include_containers=False,
+        assets=assets,
+        pre_script=pre_script,
+        post_script=post_script,
+    )
 
 
 @tasks.script(
@@ -1021,7 +1163,7 @@ def build_with_containers(
     )
 
 
-@tasks.script(task_name="build", tags=["packaging"])
+@tasks.script(task_name="build", tags=["packaging", "common"])
 def build_without_containers() -> None:
     """Build the project."""
     from common_python_tasks.docker import build
@@ -1304,9 +1446,6 @@ def container_shell(
     volumes: list[str] | None = None,
 ) -> None:
     """Run the debug image with an interactive shell.
-
-    Behavior when `tag` is `None` mirrors `run_container`:
-      - select the most-recently-built tag for the project's image (do not build).
 
     Args:
         tag: Image tag to use. If `None`, use the most-recently-built tag.

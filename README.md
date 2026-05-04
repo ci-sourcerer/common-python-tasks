@@ -2,6 +2,8 @@
 
 This package is a collection of (very) opinionated [Poe the Poet](https://poethepoet.natn.io/guides/packaged_tasks.html) Python tasks for common Python development workflows.
 
+Instead of writing your own tasks for formatting, linting, testing, packaging, and more, you can use these pre-built tasks that work out of the box with reasonable defaults and support configuration overrides when needed. In the past, I found myself copying and pasting the same task definitions across projects, and this package is my attempt to DRY up that workflow and provide a single source of truth for common Python development tasks. I hope you can use them too.
+
 ## Quick start
 
 ### Automated setup
@@ -9,31 +11,40 @@ This package is a collection of (very) opinionated [Poe the Poet](https://poethe
 You can add `common-python-tasks` to a new project by using the handy automated installation script.
 
 ```shell
-curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d | TAGS_TO_INCLUDE="format lint test" sh
+curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d | sh
+```
+
+To install a specific release, set the environment variable `COMMON_PYTHON_TASKS_VERSION`.
+
+```shell
+COMMON_PYTHON_TASKS_VERSION=__RELEASE_VERSION__ \
+  sh -c "$(curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d)"
 ```
 
 This will complete the following steps.
 
 1. Add the latest version of `common-python-tasks` to your `pyproject.toml` dependencies
-2. Configure Poe the Poet to include only the tasks with the specified tags
+2. Configure Poe the Poet to expose the default common task set
 3. Install the package using Poetry
 
 **Always review scripts before running them!** Even though I believe I write good software, it's best practice to verify any script you download from the Internet.
 
 ### Manual setup
 
-1. Add `common-python-tasks` to your `pyproject.toml` and configure Poe the Poet to include the desired tasks
+There's no real reason to run the automated script; I just like automating everything. You can achieve the same result by following these steps.
+
+1. Add `common-python-tasks` to your `pyproject.toml` and configure Poe the Poet
 
     ```toml
     [project]
     name = "my-awesome-project"
-    version = "0.0.2"
+    version = "__RELEASE_VERSION__"
     dependencies = [
-        "common-python-tasks==0.0.2",  # Always pin to a specific version
+        "common-python-tasks==__RELEASE_VERSION__",  # Always pin to a specific version
     ]
 
     [tool.poe]
-    include_script = "common_python_tasks:tasks(include_tags=['format', 'lint', 'test'])"  # Include or exclude tasks by tags
+    include_script = "common_python_tasks:tasks()"  # Uses the default `common` task set
     ```
 
 2. Install the package
@@ -57,26 +68,26 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 <!-- tasks-table -->
 | Task | Description | Tags |
 | - | - | - |
-| `build` | Build the project and its containers (when `containers` tag is included) | packaging, containers |
+| `build` | Build the project and its containers (when `containers` tag is included) | common, containers, packaging |
 | `build-image` | Build the container image for this project using the Dockerfile template (and configured extensions) | containers, build |
-| `build-package` | Build the package (wheel and sdist) | packaging, build |
-| `bump-version` | Bump the project version, defaulting to an inferred semantic bump from git history | packaging |
-| `changelog` | Print the changelog for the current version based on git history | packaging, release |
-| `clean` | Clean up temporary files and directories | clean |
+| `build-package` | Build the package (wheel and sdist) | build, common, packaging |
+| `bump-version` | Bump the project version, defaulting to an inferred semantic bump from git history | common, packaging |
+| `changelog` | Print the changelog for the current version based on git history | common, packaging, release |
+| `clean` | Clean up temporary files and directories | clean, common |
 | `container-shell` | Run the debug image with an interactive shell | containers, debug |
 | `db-shell` | Open a psql shell to the database container | web, containers, database |
-| `format` | Format code with autoflake, black, and isort | format |
-| `lint` | Lint Python code with autoflake, black, isort, and flake8 | lint |
-| `publish-package` | Publish the package to the PyPI server | packaging |
-| `publish-github-release` | Publish or update a GitHub Release and attach built distribution assets | packaging, release |
+| `format` | Format code with autoflake, black, and isort | common, format |
+| `lint` | Lint Python code with autoflake, black, isort, and flake8 | common, lint |
+| `publish-package` | Publish the package to the PyPI server | common, packaging |
+| `publish-github-release` | Publish or update a GitHub Release and attach built distribution assets | common, packaging, release |
 | `push-image` | Push the Docker image to the container registry | containers, packaging, release |
-| `release` | Run package release flow and publish containers when `containers` tag is included. Supports optional `RELEASE_PRE_SCRIPT` and `RELEASE_POST_SCRIPT` hooks. | packaging, release |
+| `release` | Run a full release flow for package and containers. | common, containers, packaging, release |
 | `reset-db` | Reset the database by deleting the database volume | web, containers, database |
 | `run-container` | Run the Docker image as a container | containers |
 | `run-db-migrations` | Run database migrations | web, containers, database |
 | `stack-down` | Bring down the development stack for the application | web, containers |
 | `stack-up` | Bring up the development stack for the application | web, containers |
-| `test` | Run the test suite with coverage | test |
+| `test` | Run the test suite with coverage | common, test |
 <!-- end-tasks-table -->
 
 ## Docker Compose Development Stacks
@@ -235,32 +246,32 @@ The following environment variable enables debugging output.
 
 ### Usage examples
 
-You can include or exclude tasks by tags in your `pyproject.toml`
+By default, `tasks()` exposes the common task set. You can still include or exclude tags in your `pyproject.toml` when needed.
 
 #### Minimal setup
 
 ```toml
 [project]
 name = "simple-cli-tool"
-version = "0.0.1"
-dependencies = ["common-python-tasks==0.0.1"]
+version = "__RELEASE_VERSION__"
+dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
 
 [tool.poe]
-include_script = "common_python_tasks:tasks(include_tags=['format', 'lint'])"
+include_script = "common_python_tasks:tasks()"
 ```
 
-Available tasks: `format`, `lint`.
+Available tasks: common defaults such as `format`, `lint`, `test`, and `build`.
 
 #### Container-based project
 
 ```toml
 [project]
 name = "containerized-app"
-version = "0.0.1"
-dependencies = ["common-python-tasks==0.0.1"]
+version = "__RELEASE_VERSION__"
+dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
 
 [tool.poe]
-include_script = "common_python_tasks:tasks(include_tags=['format', 'lint', 'test', 'containers'])"
+include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
 
 [tool.poe.env]
 DOCKERHUB_USERNAME = "myusername"
@@ -274,11 +285,11 @@ Available tasks: All tasks including `build-image` and `push-image`.
 ```toml
 [project]
 name = "custom-test-setup"
-dependencies = ["common-python-tasks==0.0.1"]
+dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
 dynamic = ["version"]
 
 [tool.poe]
-include_script = "common_python_tasks:tasks(include_tags=['test'])"
+include_script = "common_python_tasks:tasks()"
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "integration"]
@@ -291,7 +302,7 @@ The `test` task will automatically use your `[tool.pytest.ini_options]` configur
 
 ### Tasks not showing up with `poe --help`
 
-Check your `[tool.poe]` configuration in `pyproject.toml`. Make sure you're using `include_script`, not `includes`.
+Check your `[tool.poe]` configuration in `pyproject.toml`. Make sure you're using `include_script`.
 
 ```toml
 # Correct

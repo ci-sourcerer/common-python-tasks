@@ -18,10 +18,10 @@ classifiers = [
 ]
 dependencies = [
     "autoflake (>=2.3.1,<3.0.0)",
-    "black (>=25.11.0,<26.0.0)",
+    "black (>=26.3.1,<27.0.0)",
     "dunamai (>=1.25.0,<2.0.0)",
     "flake8 (>=7.3.0,<8.0.0)",
-    "isort (>=7.0.0,<8.0.0)",
+    "isort (>=8.0.1,<9.0.0)",
     "poethepoet-tasks (>=0.3.0,<0.4.0)",
     "pytest-cov (>=7.0.0,<8.0.0)",
     "pytest (>=9.0.1,<10.0.0)",
@@ -37,7 +37,11 @@ Source = "http://github.com/ci-sourcerer/common-python-tasks.git"
 Issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
 
 [tool.poe]
-include_script = "common_python_tasks:tasks(exclude_tags=['fastapi', 'containers'])"
+include_script = "common_python_tasks:tasks()"
+
+[tool.poe.env]
+RELEASE_PRE_SCRIPT = "python scripts/release_script.py pre"
+RELEASE_POST_SCRIPT = "python scripts/release_script.py post"
 
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
