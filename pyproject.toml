@@ -55,7 +55,7 @@ include = ["src/common_python_tasks/data/*"]
 version = "0.0.0"
 
 [dependency-groups]
-debug = ["debugpy (>=1.8.16,<2.0.0)"]
+debug = ["debugpy (>=1.8.20,<2.0.0)"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
