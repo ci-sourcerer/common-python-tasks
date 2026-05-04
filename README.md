@@ -386,7 +386,7 @@ The standard Python Dockerfile incorporates several intentional design choices.
 
 ## Notes
 
-- This project dogfoods itself - it uses `common-python-tasks` for its own development
+- This project dogfoods itself - it uses `common-python-tasks` for its own development. **That said, you must set the environment variable `PYTHONPATH=src` when running tasks locally to ensure you are using the local version of the package instead of the installed version**
 - `RELEASE_PRE_SCRIPT` and `RELEASE_POST_SCRIPT` hooks may not be necessary for most users, as this package promotes the use of `poetry-dynamic-versioning` and `git-cliff` to automate versioning and changelog generation based on git history. However, one advanced use case for the `RELEASE_PRE_SCRIPT` hook is to edit a file before release, such as a README that references the current stable version number. This allows you to keep the README up to date with the latest version without hardcoding it.
 - Contributions welcome! Open an issue/discussion to discuss changes before submitting a PR. I do not claim to have all the answers, and you can help determine the future of low-code solutions for Python. I am very interested in your feedback as I don't want to work in a vacuum
 - Alpha status: Expect breaking changes between minor versions until 1.0.0
