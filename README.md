@@ -17,7 +17,7 @@ curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents
 To install a specific release, set the environment variable `COMMON_PYTHON_TASKS_VERSION`.
 
 ```shell
-COMMON_PYTHON_TASKS_VERSION=0.0.3 \
+COMMON_PYTHON_TASKS_VERSION=__RELEASE_VERSION__ \
   sh -c "$(curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d)"
 ```
 
@@ -38,9 +38,9 @@ There's no real reason to run the automated script; I just like automating every
     ```toml
     [project]
     name = "my-awesome-project"
-    version = "0.0.3"
+    version = "__RELEASE_VERSION__"
     dependencies = [
-        "common-python-tasks==0.0.3",  # Always pin to a specific version
+        "common-python-tasks==__RELEASE_VERSION__",  # Always pin to a specific version
     ]
 
     [tool.poe]
@@ -253,8 +253,8 @@ By default, `tasks()` exposes the common task set. You can still include or excl
 ```toml
 [project]
 name = "simple-cli-tool"
-version = "0.0.3"
-dependencies = ["common-python-tasks==0.0.3"]
+version = "__RELEASE_VERSION__"
+dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"
@@ -267,8 +267,8 @@ Available tasks: common defaults such as `format`, `lint`, `test`, and `build`.
 ```toml
 [project]
 name = "containerized-app"
-version = "0.0.3"
-dependencies = ["common-python-tasks==0.0.3"]
+version = "__RELEASE_VERSION__"
+dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
@@ -285,7 +285,7 @@ Available tasks: All tasks including `build-image` and `push-image`.
 ```toml
 [project]
 name = "custom-test-setup"
-dependencies = ["common-python-tasks==0.0.3"]
+dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
 dynamic = ["version"]
 
 [tool.poe]
