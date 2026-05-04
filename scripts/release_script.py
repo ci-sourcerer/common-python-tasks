@@ -74,17 +74,35 @@ def _commit_readme_update(phase: str, release_version: str) -> None:
     subprocess.run(["git", "commit", "-m", commit_message], check=True)
 
 
-def main(*, dry_run: bool = False, phase: ReleasePhase) -> None:
+def main(*, phase: ReleasePhase) -> None:
     """Update README placeholder content during pre/post release hooks.
 
+    When the `RELEASE_SCRIPT_DRY_RUN` environment variable is set to `"1"`,
+    this function prints what it would modify without making any changes, then
+    returns. This implements the release dry-run hook contract: hook scripts
+    should check `RELEASE_SCRIPT_DRY_RUN` and self-report their intended
+    side effects so the user sees a complete dry-run preview.
+
     Args:
-        dry_run: Print transformed README output instead of writing/committing.
         phase: Release phase to determine transformation logic.
 
     Raises:
         SystemExit: If required placeholders are missing or if no changes were made.
     """
     release_version = os.environ["RELEASE_VERSION"]
+
+    if os.environ.get("RELEASE_SCRIPT_DRY_RUN") == "1":
+        if phase == ReleasePhase.PRE:
+            print(
+                f"[DRY RUN] Would modify: README.md "
+                f"(replace {README_VERSION_PLACEHOLDER!r} with {release_version!r})"
+            )
+        else:
+            print(
+                f"[DRY RUN] Would modify: README.md "
+                f"(reset version to {README_VERSION_PLACEHOLDER!r})"
+            )
+        return
 
     readme_path = Path("README.md")
     readme_text = readme_path.read_text(encoding="utf-8")
@@ -98,10 +116,6 @@ def main(*, dry_run: bool = False, phase: ReleasePhase) -> None:
     if updated_text == readme_text:
         raise SystemExit("README.md was not changed")
 
-    if dry_run:
-        print(updated_text)
-        return
-
     readme_path.write_text(updated_text, encoding="utf-8")
     _commit_readme_update(phase, release_version)
 
@@ -113,10 +127,5 @@ if __name__ == "__main__":
         choices=[ReleasePhase.PRE.name.lower(), ReleasePhase.POST.name.lower()],
         help="Release phase: 'pre' or 'post'.",
     )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the updated README content instead of writing it.",
-    )
     args = parser.parse_args()
-    main(dry_run=args.dry_run, phase=ReleasePhase(args.phase))
+    main(phase=ReleasePhase(args.phase))

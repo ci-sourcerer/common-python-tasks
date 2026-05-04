@@ -625,6 +625,7 @@ class TestReleaseTask:
             assert first_hook_env["RELEASE_VERSION"] == "0.0.2"
             assert first_hook_env["RELEASE_COMPONENT"] == "patch"
             assert first_hook_env["RELEASE_DRY_RUN"] == "0"
+            assert first_hook_env["RELEASE_SCRIPT_DRY_RUN"] == "0"
 
     def test_release_without_containers_uses_phase_configured_release_script_hooks(
         self,
@@ -675,6 +676,53 @@ class TestReleaseTask:
             )
             assert pre_call.kwargs["env"]["RELEASE_VERSION"] == "0.0.2"
             assert pre_call.kwargs["env"]["RELEASE_TAG"] == "v0.0.2"
+
+    def test_release_dry_run_executes_hook_scripts_with_release_script_dry_run_env(
+        self,
+    ):
+        from common_python_tasks.tasks import release_without_containers
+
+        with (
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.tasks.clean"),
+            patch("common_python_tasks.tasks.bump_version"),
+            patch("common_python_tasks.tasks.build_package"),
+            patch("common_python_tasks.tasks.publish_package"),
+            patch("common_python_tasks.utils.run_command") as mock_run_command,
+            patch("common_python_tasks.utils.LOGGER"),
+            patch(
+                "common_python_tasks.project.get_project_version_from_poetry",
+                return_value="0.0.1",
+            ),
+            patch(
+                "common_python_tasks.github.get_github_release_asset_paths",
+                return_value=[],
+            ),
+            patch("common_python_tasks.github.publish_github_release"),
+        ):
+            release_without_containers(
+                component="patch",
+                dry_run=True,
+                pre_script="echo pre",
+                post_script="echo post",
+            )
+
+            pre_call = next(
+                call_args
+                for call_args in mock_run_command.call_args_list
+                if call_args.args[0] == ["sh", "-lc", "echo pre"]
+            )
+            assert pre_call.kwargs["dry_run"] is False
+            assert pre_call.kwargs["env"]["RELEASE_SCRIPT_DRY_RUN"] == "1"
+            assert pre_call.kwargs["env"]["RELEASE_DRY_RUN"] == "1"
+
+            post_call = next(
+                call_args
+                for call_args in mock_run_command.call_args_list
+                if call_args.args[0] == ["sh", "-lc", "echo post"]
+            )
+            assert post_call.kwargs["dry_run"] is False
+            assert post_call.kwargs["env"]["RELEASE_SCRIPT_DRY_RUN"] == "1"
 
     def test_release_dry_run_only_bumps_version(self):
         from common_python_tasks.tasks import release
@@ -736,9 +784,8 @@ class TestReleaseTask:
                 False,
             )
             mock_logger.info.assert_any_call(
-                "\033[93m[DRY RUN]\033[0m Would publish GitHub Release %s with assets=%s",
+                "\033[93m[DRY RUN]\033[0m Would publish GitHub Release %s with built assets",
                 "v1.2.3",
-                [],
             )
 
     def test_release_without_containers_accepts_none_stage_string(self):

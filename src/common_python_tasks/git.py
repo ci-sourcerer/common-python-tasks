@@ -76,6 +76,19 @@ def build_release_hook_environment(
 ) -> dict[str, str]:
     """Build the environment variables passed into release hook scripts.
 
+    The following variables are set and available to all hook scripts:
+
+    - `RELEASE_COMPONENT`: The version component being bumped.
+    - `RELEASE_STAGE`: The pre-release stage, or an empty string for a stable release.
+    - `RELEASE_VERSION`: The computed next version (e.g. `"1.2.3"`).
+    - `RELEASE_TAG`: The Git tag for the release (e.g. `"v1.2.3"`).
+    - `RELEASE_DRY_RUN`: `"1"` if this is a dry run, `"0"` otherwise.
+    - `RELEASE_SCRIPT_DRY_RUN`: `"1"` if this is a dry run, `"0"` otherwise.
+      Hook scripts should check this variable and, when set to `"1"`, print
+      what they would do without making any changes, then exit successfully.
+      This allows the release dry-run to show a complete preview of all
+      side effects, including those performed by hook scripts.
+
     Args:
         component: The component to bump (major, minor, patch, or auto).
         stage: The release stage (alpha, beta, rc, or None).
@@ -86,12 +99,14 @@ def build_release_hook_environment(
     """
     normalized_stage = stage.lower() if stage is not None else None
     result = compute_next_release_version(component, stage)
+    dry_run_flag = "1" if dry_run else "0"
     return {
         "RELEASE_COMPONENT": result.component,
         "RELEASE_STAGE": normalized_stage or "",
         "RELEASE_VERSION": result.version,
         "RELEASE_TAG": f"v{result.version}",
-        "RELEASE_DRY_RUN": "1" if dry_run else "0",
+        "RELEASE_DRY_RUN": dry_run_flag,
+        "RELEASE_SCRIPT_DRY_RUN": dry_run_flag,
     }
 
 
