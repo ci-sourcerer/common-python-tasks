@@ -906,12 +906,6 @@ def _run_release_flow(
         build_release_hook_environment,
         ensure_on_default_branch,
     )
-    from common_python_tasks.github import (
-        get_github_release_asset_paths,
-    )
-    from common_python_tasks.github import (
-        publish_github_release as publish_github_release_helper,
-    )
     from common_python_tasks.utils import (
         log_dry_run,
         run_command,
@@ -924,7 +918,7 @@ def _run_release_flow(
     ensure_on_default_branch()
     hook_env = build_release_hook_environment(component, normalized_stage, dry_run)
     if pre_script:
-        run_command(["sh", "-lc", pre_script], env=hook_env)
+        run_command(["sh", "-lc", pre_script], env=hook_env, dry_run=False)
 
     if dry_run:
         log_dry_run("Would clean generated artifacts before release")
@@ -949,7 +943,7 @@ def _run_release_flow(
             "Would publish GitHub Release %s with built assets", hook_env["RELEASE_TAG"]
         )
         if post_script:
-            run_command(["sh", "-lc", post_script], env=hook_env)
+            run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)
         return
 
     build_package(clean_dist=True)
@@ -969,14 +963,12 @@ def _run_release_flow(
         )
         push_image(debug=debug)
 
-    asset_paths = get_github_release_asset_paths(assets)
-
     run_command(["git", "push", "origin", hook_env["RELEASE_TAG"]])
     try:
-        publish_github_release_helper(
+        publish_github_release(
             hook_env["RELEASE_TAG"],
             prerelease=normalized_stage is not None,
-            assets=asset_paths,
+            assets=assets,
         )
     except SystemExit:
         LOGGER.warning(
@@ -990,7 +982,7 @@ def _run_release_flow(
         raise
 
     if post_script:
-        run_command(["sh", "-lc", post_script], env=hook_env)
+        run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)
 
 
 @tasks.script(task_name="release", tags=["packaging", "release", "containers"])

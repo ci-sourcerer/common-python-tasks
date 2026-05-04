@@ -518,7 +518,10 @@ class TestReleaseTask:
             mock_push_image.assert_not_called()
             mock_publish_github_release.assert_called_once_with(
                 "v1.3.0b1",
+                release_name="v1.3.0b1",
+                body=None,
                 prerelease=True,
+                draft=False,
                 assets=[],
             )
 
@@ -572,7 +575,10 @@ class TestReleaseTask:
             mock_push_image.assert_called_once_with(debug=True)
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
+                release_name="v1.2.3",
+                body=None,
                 prerelease=False,
+                draft=False,
                 assets=[],
             )
 
@@ -826,7 +832,10 @@ class TestReleaseTask:
             mock_publish.assert_called_once_with(build_first=False)
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
+                release_name="v1.2.3",
+                body=None,
                 prerelease=False,
+                draft=False,
                 assets=[],
             )
 
