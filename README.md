@@ -217,7 +217,7 @@ The following environment variables configure package and container behavior.
 - `GITHUB_RELEASE_BODY` optional release body text to use for the GitHub Release.
 - `RELEASE_PRE_SCRIPT` optional shell command to run before the release steps.
 - `RELEASE_POST_SCRIPT` optional shell command to run after the release completes.
-- Hook commands receive the following env vars: `RELEASE_TAG`, `RELEASE_VERSION`, `RELEASE_STAGE`, `RELEASE_COMPONENT`, and `RELEASE_DRY_RUN`.
+- Hook commands receive the following env vars: `RELEASE_SCRIPT_PHASE`, `RELEASE_TAG`, `RELEASE_VERSION`, `RELEASE_STAGE`, `RELEASE_COMPONENT`, and `RELEASE_DRY_RUN`.
 
 #### Docker Compose settings
 

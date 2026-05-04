@@ -41,8 +41,8 @@ include_script = "common_python_tasks:tasks(exclude_tags=['containers'])"
 
 [tool.poe.env]
 PYTHONPATH = "src"
-RELEASE_PRE_SCRIPT = "python scripts/release_script.py pre"
-RELEASE_POST_SCRIPT = "python scripts/release_script.py post"
+RELEASE_PRE_SCRIPT = "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py"
+RELEASE_POST_SCRIPT = "RELEASE_SCRIPT_PHASE=post python scripts/release_script.py"
 
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }

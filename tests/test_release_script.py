@@ -27,6 +27,7 @@ def test_main_pre_phase_replaces_placeholder_and_rebuilds_table(tmp_path, monkey
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
+    monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
 
     release_script = _load_release_script_module()
 
@@ -40,7 +41,7 @@ def test_main_pre_phase_replaces_placeholder_and_rebuilds_table(tmp_path, monkey
         ),
         patch.object(release_script.subprocess, "run") as mock_run,
     ):
-        release_script.main(phase=release_script.ReleasePhase.PRE)
+        release_script.main()
 
     updated_text = readme_path.read_text(encoding="utf-8")
     assert "__RELEASE_VERSION__" not in updated_text
@@ -74,11 +75,12 @@ def test_main_post_phase_restores_placeholder_without_rebuilding_table(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
+    monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "post")
 
     release_script = _load_release_script_module()
 
     with patch.object(release_script.subprocess, "run") as mock_run:
-        release_script.main(phase=release_script.ReleasePhase.POST)
+        release_script.main()
 
     updated_text = readme_path.read_text(encoding="utf-8")
     assert "Version: __RELEASE_VERSION__" in updated_text
@@ -112,11 +114,12 @@ def test_main_dry_run_is_controlled_by_release_script_dry_run_env_pre_phase(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "9.9.9")
     monkeypatch.setenv("RELEASE_SCRIPT_DRY_RUN", "1")
+    monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
 
     release_script = _load_release_script_module()
 
     with patch.object(release_script.subprocess, "run") as mock_run:
-        release_script.main(phase=release_script.ReleasePhase.PRE)
+        release_script.main()
 
     assert readme_path.read_text(encoding="utf-8") == readme_text
     output = capsys.readouterr().out
@@ -132,11 +135,12 @@ def test_main_pre_phase_fails_when_placeholder_is_missing(tmp_path, monkeypatch)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
+    monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
 
     release_script = _load_release_script_module()
 
     with pytest.raises(SystemExit, match="release placeholder"):
-        release_script.main(phase=release_script.ReleasePhase.PRE)
+        release_script.main()
 
 
 def test_main_post_phase_fails_when_release_version_is_missing(tmp_path, monkeypatch):
@@ -145,11 +149,12 @@ def test_main_post_phase_fails_when_release_version_is_missing(tmp_path, monkeyp
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
+    monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "post")
 
     release_script = _load_release_script_module()
 
     with pytest.raises(SystemExit, match="does not contain the release version"):
-        release_script.main(phase=release_script.ReleasePhase.POST)
+        release_script.main()
 
 
 def test_release_script_dry_run_env_pre_phase_prints_summary_without_modifying_files(
@@ -162,11 +167,12 @@ def test_release_script_dry_run_env_pre_phase_prints_summary_without_modifying_f
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "2.0.0")
     monkeypatch.setenv("RELEASE_SCRIPT_DRY_RUN", "1")
+    monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
 
     release_script = _load_release_script_module()
 
     with patch.object(release_script.subprocess, "run") as mock_run:
-        release_script.main(phase=release_script.ReleasePhase.PRE)
+        release_script.main()
 
     assert readme_path.read_text(encoding="utf-8") == original_text
     mock_run.assert_not_called()
@@ -186,11 +192,12 @@ def test_release_script_dry_run_env_post_phase_prints_summary_without_modifying_
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "2.0.0")
     monkeypatch.setenv("RELEASE_SCRIPT_DRY_RUN", "1")
+    monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "post")
 
     release_script = _load_release_script_module()
 
     with patch.object(release_script.subprocess, "run") as mock_run:
-        release_script.main(phase=release_script.ReleasePhase.POST)
+        release_script.main()
 
     assert readme_path.read_text(encoding="utf-8") == original_text
     mock_run.assert_not_called()

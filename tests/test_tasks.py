@@ -638,8 +638,8 @@ class TestReleaseTask:
     ):
         from common_python_tasks.tasks import release_without_containers
 
-        pre_script = "python scripts/release_script.py pre"
-        post_script = "python scripts/release_script.py post"
+        pre_script = "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py"
+        post_script = "RELEASE_SCRIPT_PHASE=post python scripts/release_script.py"
 
         with (
             patch.dict(

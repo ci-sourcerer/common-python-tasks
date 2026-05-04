@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-import argparse
 import os
 import re
 import subprocess
-from enum import StrEnum, auto
+from enum import StrEnum
 from pathlib import Path
 
 from common_python_tasks.__main__ import (
@@ -17,8 +16,28 @@ TASKS_TABLE_PATTERN = r"(?ms)<!-- tasks-table -->.*?<!-- end-tasks-table -->"
 
 
 class ReleasePhase(StrEnum):
-    PRE = auto()
-    POST = auto()
+    PRE = "pre"
+    POST = "post"
+
+
+RELEASE_SCRIPT_PHASE = "RELEASE_SCRIPT_PHASE"
+
+
+def _resolve_release_phase(phase: ReleasePhase | None = None) -> ReleasePhase:
+    if phase is not None:
+        return phase
+
+    phase_value = os.environ.get(RELEASE_SCRIPT_PHASE)
+    if phase_value is None:
+        raise SystemExit(f"{RELEASE_SCRIPT_PHASE} must be set to 'pre' or 'post'.")
+
+    try:
+        return ReleasePhase(phase_value.lower())
+    except ValueError as exc:
+        raise SystemExit(
+            f"Invalid {RELEASE_SCRIPT_PHASE!r}: {phase_value!r}. "
+            "Expected 'pre' or 'post'."
+        ) from exc
 
 
 def build_tasks_table() -> str:
@@ -74,21 +93,20 @@ def _commit_readme_update(phase: str, release_version: str) -> None:
     subprocess.run(["git", "commit", "-m", commit_message], check=True)
 
 
-def main(*, phase: ReleasePhase) -> None:
-    """Update README placeholder content during pre/post release hooks.
+def main(*, phase: ReleasePhase | None = None) -> None:
+    """Update README placeholder content during release hook execution.
 
-    When the `RELEASE_SCRIPT_DRY_RUN` environment variable is set to `"1"`,
-    this function prints what it would modify without making any changes, then
-    returns. This implements the release dry-run hook contract: hook scripts
-    should check `RELEASE_SCRIPT_DRY_RUN` and self-report their intended
-    side effects so the user sees a complete dry-run preview.
+    The phase is taken from the `RELEASE_SCRIPT_PHASE` environment variable
+    when not explicitly provided. When `RELEASE_SCRIPT_DRY_RUN` is set to
+    "1", the hook prints the changes it would make without modifying files.
 
     Args:
-        phase: Release phase to determine transformation logic.
+        phase: Optional release phase.
 
     Raises:
         SystemExit: If required placeholders are missing or if no changes were made.
     """
+    phase = _resolve_release_phase(phase)
     release_version = os.environ["RELEASE_VERSION"]
 
     if os.environ.get("RELEASE_SCRIPT_DRY_RUN") == "1":
@@ -121,11 +139,4 @@ def main(*, phase: ReleasePhase) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Prepare README for release hooks.")
-    parser.add_argument(
-        "phase",
-        choices=[ReleasePhase.PRE.name.lower(), ReleasePhase.POST.name.lower()],
-        help="Release phase: 'pre' or 'post'.",
-    )
-    args = parser.parse_args()
-    main(phase=ReleasePhase(args.phase))
+    main()
