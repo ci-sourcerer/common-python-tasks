@@ -40,6 +40,7 @@ Issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
 include_script = "common_python_tasks:tasks(exclude_tags=['containers'])"
 
 [tool.poe.env]
+PYTHONPATH = "src"
 RELEASE_PRE_SCRIPT = "python scripts/release_script.py pre"
 RELEASE_POST_SCRIPT = "python scripts/release_script.py post"
 
