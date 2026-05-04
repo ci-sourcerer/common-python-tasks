@@ -94,12 +94,12 @@ def main(*, phase: ReleasePhase) -> None:
     if os.environ.get("RELEASE_SCRIPT_DRY_RUN") == "1":
         if phase == ReleasePhase.PRE:
             print(
-                f"[DRY RUN] Would modify: README.md "
+                f"Would modify: README.md "
                 f"(replace {README_VERSION_PLACEHOLDER!r} with {release_version!r})"
             )
         else:
             print(
-                f"[DRY RUN] Would modify: README.md "
+                f"Would modify: README.md "
                 f"(reset version to {README_VERSION_PLACEHOLDER!r})"
             )
         return

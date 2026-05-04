@@ -924,7 +924,7 @@ def _run_release_flow(
     ensure_on_default_branch()
     hook_env = build_release_hook_environment(component, normalized_stage, dry_run)
     if pre_script:
-        run_command(["sh", "-lc", pre_script], env=hook_env, dry_run=False)
+        run_command(["sh", "-lc", pre_script], env=hook_env)
 
     if dry_run:
         log_dry_run("Would clean generated artifacts before release")
@@ -945,12 +945,11 @@ def _run_release_flow(
                 single_arch,
             )
             log_dry_run("Would push container image with debug=%s", debug)
-        asset_paths = get_github_release_asset_paths(assets)
         log_dry_run(
             "Would publish GitHub Release %s with built assets", hook_env["RELEASE_TAG"]
         )
         if post_script:
-            run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)
+            run_command(["sh", "-lc", post_script], env=hook_env)
         return
 
     build_package(clean_dist=True)
@@ -991,7 +990,7 @@ def _run_release_flow(
         raise
 
     if post_script:
-        run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)
+        run_command(["sh", "-lc", post_script], env=hook_env)
 
 
 @tasks.script(task_name="release", tags=["packaging", "release", "containers"])
