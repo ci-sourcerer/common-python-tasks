@@ -1,39 +1,44 @@
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from dunamai import Style, Version
 
 from . import project, utils
 
 
-def build_release_hook_environment(
-    component: str,
-    stage: str | None,
-    dry_run: bool,
-) -> dict[str, str]:
-    """Build the environment variables passed into release hook scripts.
+class NextReleaseVersion(NamedTuple):
+    """The computed next release version and normalized component."""
+
+    version: str
+    component: str
+
+
+def compute_next_release_version(
+    component: str, stage: str | None
+) -> NextReleaseVersion:
+    """Compute the next release version based on the given component and stage.
 
     Args:
-        component: The component to bump (major, minor, patch, or auto).
-        stage: The release stage (alpha, beta, rc, or None).
-        dry_run: Whether this is a dry run.
+        component: The version component to bump (major, minor, patch, or auto).
+        stage: Optional pre-release stage (alpha, beta, rc, or None).
 
     Returns:
-        A dictionary of environment variables for the release hook.
+        A `NextReleaseVersion` with the serialized new version and normalized component.
     """
     component = component.lower()
     normalized_stage = stage.lower() if stage is not None else None
 
+    current_version_text = project.get_project_version_from_poetry()
     if component == "auto":
         component = infer_bump_component_from_git_cliff()
-
-    current_version_text = project.get_project_version_from_poetry()
-    current_version = Version.parse(current_version_text)
-
-    if component == "auto" and re.match(r"^0\.", str(current_version.base)):
-        component = "patch"
+        if re.match(r"^0\.", str(Version.parse(current_version_text).base)):
+            utils.LOGGER.info(
+                "Current version %s is pre-production; using patch bump.",
+                current_version_text,
+            )
+            component = "patch"
 
     valid_components = {"major": 0, "minor": 1, "patch": 2}
     if component not in valid_components:
@@ -61,12 +66,31 @@ def build_release_hook_environment(
         )
         bumped.revision = 1
 
-    release_version = bumped.serialize()
+    return NextReleaseVersion(version=bumped.serialize(), component=component)
+
+
+def build_release_hook_environment(
+    component: str,
+    stage: str | None,
+    dry_run: bool,
+) -> dict[str, str]:
+    """Build the environment variables passed into release hook scripts.
+
+    Args:
+        component: The component to bump (major, minor, patch, or auto).
+        stage: The release stage (alpha, beta, rc, or None).
+        dry_run: Whether this is a dry run.
+
+    Returns:
+        A dictionary of environment variables for the release hook.
+    """
+    normalized_stage = stage.lower() if stage is not None else None
+    result = compute_next_release_version(component, stage)
     return {
-        "RELEASE_COMPONENT": component,
+        "RELEASE_COMPONENT": result.component,
         "RELEASE_STAGE": normalized_stage or "",
-        "RELEASE_VERSION": release_version,
-        "RELEASE_TAG": f"v{release_version}",
+        "RELEASE_VERSION": result.version,
+        "RELEASE_TAG": f"v{result.version}",
         "RELEASE_DRY_RUN": "1" if dry_run else "0",
     }
 

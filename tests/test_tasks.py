@@ -496,10 +496,6 @@ class TestReleaseTask:
             patch("common_python_tasks.docker.build_image") as mock_build_image,
             patch("common_python_tasks.tasks.push_image") as mock_push_image,
             patch(
-                "common_python_tasks.project.get_release_tag_from_poetry_version",
-                return_value="v1.2.3",
-            ),
-            patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
                 return_value=[],
             ),
@@ -514,14 +510,14 @@ class TestReleaseTask:
                 component="minor", stage="beta", dry_run=False
             )
             mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "v1.2.3"]
+                ["git", "push", "origin", "v1.3.0b1"]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
             mock_build_image.assert_not_called()
             mock_push_image.assert_not_called()
             mock_publish_github_release.assert_called_once_with(
-                "v1.2.3",
+                "v1.3.0b1",
                 prerelease=True,
                 assets=[],
             )
@@ -545,10 +541,6 @@ class TestReleaseTask:
             ),
             patch("common_python_tasks.docker.build_image") as mock_build_image,
             patch("common_python_tasks.tasks.push_image") as mock_push_image,
-            patch(
-                "common_python_tasks.project.get_release_tag_from_poetry_version",
-                return_value="v1.2.3",
-            ),
             patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
                 return_value=[],
@@ -597,10 +589,6 @@ class TestReleaseTask:
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="0.0.1",
-            ),
-            patch(
-                "common_python_tasks.project.get_release_tag_from_poetry_version",
-                return_value="v0.0.2",
             ),
             patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
@@ -662,10 +650,6 @@ class TestReleaseTask:
                 return_value="0.0.1",
             ),
             patch(
-                "common_python_tasks.project.get_release_tag_from_poetry_version",
-                return_value="v0.0.2",
-            ),
-            patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
                 return_value=[],
             ),
@@ -704,10 +688,6 @@ class TestReleaseTask:
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
-            ),
-            patch(
-                "common_python_tasks.project.get_release_tag_from_poetry_version",
-                return_value="v1.2.2",
             ),
             patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
@@ -757,7 +737,7 @@ class TestReleaseTask:
             )
             mock_logger.info.assert_any_call(
                 "\033[93m[DRY RUN]\033[0m Would publish GitHub Release %s with assets=%s",
-                "v1.2.2",
+                "v1.2.3",
                 [],
             )
 
@@ -777,10 +757,6 @@ class TestReleaseTask:
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
-            ),
-            patch(
-                "common_python_tasks.project.get_release_tag_from_poetry_version",
-                return_value="v1.2.3",
             ),
             patch(
                 "common_python_tasks.github.get_github_release_asset_paths",

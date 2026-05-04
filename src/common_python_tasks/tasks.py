@@ -829,7 +829,7 @@ def bump_version(
     *,
     stage: str | None = None,
     dry_run: bool = False,
-) -> None:
+) -> str:
     """Bump the project version.
 
     Args:
@@ -837,52 +837,22 @@ def bump_version(
             `auto` to infer the bump from git history using git-cliff.
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
         dry_run: If `True`, print what would happen without making changes.
-    """
-    from typing import Literal
 
+    Returns:
+        The new version string that was/would be set.
+    """
     from common_python_tasks.git import (
+        compute_next_release_version,
         ensure_on_default_branch,
         get_dirty_files,
-        infer_bump_component_from_git_cliff,
     )
-    from common_python_tasks.project import get_project_version_from_poetry
     from common_python_tasks.utils import (
         fatal,
         log_dry_run,
         run_command,
     )
-    from dunamai import Version
-
-    component = component.lower()
-    stage = stage.lower() if stage is not None else None
 
     ensure_on_default_branch()
-
-    valid_components = {"major": 0, "minor": 1, "patch": 2}
-    current_version_text: str | None = None
-    if component == "auto":
-        import re
-
-        current_version_text = get_project_version_from_poetry()
-        component = infer_bump_component_from_git_cliff()
-        current_version = Version.parse(current_version_text)
-        if re.match(r"^0\.", str(current_version.base)):
-            LOGGER.info(
-                "Current version %s is pre-production; forcing patch bump.",
-                current_version_text,
-            )
-            component = "patch"
-    if component not in valid_components:
-        fatal(
-            f'Invalid component "{component}". Must be one of: {set(valid_components.keys())} or "auto"'
-        )
-    bump_index: Literal[0, 1, 2] = valid_components[component]
-
-    valid_stages = {"alpha", "a", "beta", "b", "rc"}
-    if stage is not None and stage not in valid_stages:
-        fatal(
-            f'Invalid stage "{stage}". Must be one of: {valid_stages} or empty for none.'
-        )
 
     if get_dirty_files():
         fatal(
@@ -890,22 +860,15 @@ def bump_version(
             "Please commit or stash changes before bumping version."
         )
 
-    bumped = Version.parse(Version.parse(get_project_version_from_poetry()).base).bump(
-        bump_index
-    )
-
-    if stage is not None:
-        bumped.stage = {"a": "alpha", "b": "beta"}.get(stage, stage)
-        bumped.revision = 1
-
-    new_version = bumped.serialize()
+    result = compute_next_release_version(component, stage)
+    new_version = result.version
 
     if dry_run:
         log_dry_run("Would bump version to %s", new_version)
     else:
-        new_tag = f"v{new_version}"
         LOGGER.info("Bumping version to %s", new_version)
-        run_command(["git", "tag", new_tag])
+        run_command(["git", "tag", f"v{new_version}"])
+    return new_version
 
 
 @tasks.script(tags=["packaging", "release", "common"])
@@ -949,7 +912,6 @@ def _run_release_flow(
     from common_python_tasks.github import (
         publish_github_release as publish_github_release_helper,
     )
-    from common_python_tasks.project import get_release_tag_from_poetry_version
     from common_python_tasks.utils import (
         log_dry_run,
         run_command,
@@ -983,11 +945,10 @@ def _run_release_flow(
                 single_arch,
             )
             log_dry_run("Would push container image with debug=%s", debug)
-        release_tag = get_release_tag_from_poetry_version()
         asset_paths = get_github_release_asset_paths(assets)
         log_dry_run(
             "Would publish GitHub Release %s with assets=%s",
-            release_tag,
+            hook_env["RELEASE_TAG"],
             asset_paths,
         )
         if post_script:
@@ -1011,23 +972,22 @@ def _run_release_flow(
         )
         push_image(debug=debug)
 
-    release_tag = get_release_tag_from_poetry_version()
     asset_paths = get_github_release_asset_paths(assets)
 
-    run_command(["git", "push", "origin", release_tag])
+    run_command(["git", "push", "origin", hook_env["RELEASE_TAG"]])
     try:
         publish_github_release_helper(
-            release_tag,
+            hook_env["RELEASE_TAG"],
             prerelease=normalized_stage is not None,
             assets=asset_paths,
         )
     except SystemExit:
         LOGGER.warning(
             "GitHub Release publication failed after pushing %s; attempting to remove remote tag",
-            release_tag,
+            hook_env["RELEASE_TAG"],
         )
         run_command(
-            ["git", "push", "origin", "--delete", release_tag],
+            ["git", "push", "origin", "--delete", hook_env["RELEASE_TAG"]],
             acceptable_returncodes={0, 1},
         )
         raise
