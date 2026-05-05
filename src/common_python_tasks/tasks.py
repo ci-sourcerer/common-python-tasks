@@ -113,6 +113,37 @@ def _script(
 tasks.script = _script
 
 
+def _should_update_release_changelog() -> bool:
+    from common_python_tasks.env import env_truthy
+
+    return env_truthy("RELEASE_UPDATE_CHANGELOG")
+
+
+def _update_release_changelog(release_tag: str) -> None:
+    from common_python_tasks.utils import prepend_changelog, run_command
+
+    changelog_path = Path("CHANGELOG.md")
+    prepend_changelog(release_tag, changelog_path)
+
+    status = run_command(
+        ["git", "status", "--porcelain", "--", changelog_path],
+        capture_output=True,
+    )
+    changed_files = (
+        status.stdout.strip()
+        if status is not None and isinstance(status.stdout, str)
+        else ""
+    )
+    if not changed_files:
+        LOGGER.info("CHANGELOG.md already matches release %s", release_tag)
+        return
+
+    run_command(["git", "add", changelog_path])
+    run_command(
+        ["git", "commit", "-m", f"chore(release): update changelog for {release_tag}"]
+    )
+
+
 def _parse_build_args(
     cli_build_args: list[str] | None,
     env_build_args: str | None,
@@ -885,6 +916,19 @@ def _normalize_release_stage(stage: str | None) -> str | None:
     return stage
 
 
+def _log_release_changelog_dry_run(release_tag: str) -> None:
+    from common_python_tasks.utils import log_dry_run
+
+    log_dry_run(
+        "Would update CHANGELOG.md for release %s using git-cliff --prepend",
+        release_tag,
+    )
+    log_dry_run(
+        "Would commit CHANGELOG.md with message %s",
+        f"chore(release): update changelog for {release_tag}",
+    )
+
+
 def _run_release_flow(
     component: str = "patch",
     *,
@@ -925,7 +969,17 @@ def _run_release_flow(
     else:
         clean()
 
-    bump_version(component=component, stage=normalized_stage, dry_run=dry_run)
+    if _should_update_release_changelog():
+        if dry_run:
+            _log_release_changelog_dry_run(hook_env["RELEASE_TAG"])
+        else:
+            _update_release_changelog(hook_env["RELEASE_TAG"])
+
+    bump_version(
+        component=hook_env["RELEASE_COMPONENT"],
+        stage=normalized_stage,
+        dry_run=dry_run,
+    )
     if dry_run:
         log_dry_run("Would push tags to origin")
         log_dry_run("Would build package with clean_dist=True")

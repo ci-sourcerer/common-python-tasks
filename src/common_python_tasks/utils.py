@@ -10,7 +10,6 @@ from pathlib import Path
 from shlex import quote
 from typing import Callable, Sequence
 
-from common_python_tasks import utils
 from jinja2 import Template
 
 LOGGER = logging.getLogger(__name__)
@@ -302,15 +301,49 @@ def render_template_text(
     return Template(template_text).render(**template_vars)
 
 
-def changelog() -> str | None:
-    """Generate release notes from git-cliff for unreleased commits."""
-    result = utils.run_command(
-        ["git-cliff", "--unreleased"],
-        capture_output=True,
+def run_git_cliff(
+    args: Sequence[str | Path],
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess | None:
+    """Run git-cliff with the given arguments.
+
+    Args:
+        args: Additional arguments to pass to git-cliff.
+        capture_output: Whether to capture stdout and stderr.
+
+    Returns:
+        The `CompletedProcess` result, or `None` for dry-run invocations.
+    """
+    return run_command(
+        ["git-cliff", *args],
+        capture_output=capture_output,
         acceptable_returncodes={0},
     )
-    changelog = result.stdout.strip()
-    if not changelog:
+
+
+def prepend_changelog(
+    tag_name: str,
+    changelog_path: Path = Path("CHANGELOG.md"),
+) -> None:
+    """Prepend release notes for the given tag to a changelog file using git-cliff.
+
+    Creates the changelog file with a scaffold header if it does not exist, then
+    runs `git-cliff --tag <tag_name> --prepend <changelog_path>`.
+
+    Args:
+        tag_name: The release tag to generate changelog entries for.
+        changelog_path: The path to the changelog file to prepend to.
+    """
+    if not changelog_path.exists():
+        changelog_path.write_text("# Changelog\n\n## [Unreleased]\n", encoding="utf-8")
+    run_git_cliff(["--tag", tag_name, "--prepend", changelog_path])
+
+
+def changelog() -> str | None:
+    """Generate release notes from git-cliff for unreleased commits."""
+    result = run_git_cliff(["--unreleased"], capture_output=True)
+    notes = result.stdout.strip()
+    if not notes:
         LOGGER.warning("git-cliff produced no release notes for unreleased commits")
 
-    return changelog
+    return notes

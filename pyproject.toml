@@ -41,6 +41,7 @@ include_script = "common_python_tasks:tasks(exclude_tags=['containers'])"
 
 [tool.poe.env]
 PYTHONPATH = "src"
+RELEASE_UPDATE_CHANGELOG = "1"
 RELEASE_PRE_SCRIPT = "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py"
 RELEASE_POST_SCRIPT = "RELEASE_SCRIPT_PHASE=post python scripts/release_script.py"
 

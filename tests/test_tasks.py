@@ -2,9 +2,26 @@ import importlib
 import json
 import os
 import urllib.error
-from unittest.mock import ANY, MagicMock, patch
+from pathlib import Path
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
+
+
+def _release_run_command_side_effect(changelog_status: str = " M CHANGELOG.md\n"):
+    def side_effect(
+        command,
+        capture_output=False,
+        acceptable_returncodes=None,
+        env=None,
+        always_show_command=False,
+        dry_run=False,
+    ):
+        if command[:3] == ["git", "status", "--porcelain"]:
+            return MagicMock(returncode=0, stdout=changelog_status)
+        return MagicMock(returncode=0, stdout="")
+
+    return side_effect
 
 
 def test_format_all_uses_run_available_tools(mock_find_spec):
@@ -503,14 +520,42 @@ class TestReleaseTask:
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
         ):
+            mock_run_command.side_effect = _release_run_command_side_effect()
+
             release_without_containers(component="minor", stage="beta")
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
                 component="minor", stage="beta", dry_run=False
             )
-            mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "v1.3.0b1"]
+            mock_run_command.assert_has_calls(
+                [
+                    call(
+                        [
+                            "git-cliff",
+                            "--tag",
+                            "v1.3.0b1",
+                            "--prepend",
+                            Path("CHANGELOG.md"),
+                        ],
+                        capture_output=False,
+                        acceptable_returncodes={0},
+                    ),
+                    call(
+                        ["git", "status", "--porcelain", "--", Path("CHANGELOG.md")],
+                        capture_output=True,
+                    ),
+                    call(["git", "add", Path("CHANGELOG.md")]),
+                    call(
+                        [
+                            "git",
+                            "commit",
+                            "-m",
+                            "chore(release): update changelog for v1.3.0b1",
+                        ]
+                    ),
+                    call(["git", "push", "origin", "v1.3.0b1"]),
+                ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
@@ -552,14 +597,42 @@ class TestReleaseTask:
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
         ):
+            mock_run_command.side_effect = _release_run_command_side_effect()
+
             release(debug=True, no_cache=True, plain=True, single_arch=True)
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
                 component="patch", stage=None, dry_run=False
             )
-            mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "v1.2.3"]
+            mock_run_command.assert_has_calls(
+                [
+                    call(
+                        [
+                            "git-cliff",
+                            "--tag",
+                            "v1.2.3",
+                            "--prepend",
+                            Path("CHANGELOG.md"),
+                        ],
+                        capture_output=False,
+                        acceptable_returncodes={0},
+                    ),
+                    call(
+                        ["git", "status", "--porcelain", "--", Path("CHANGELOG.md")],
+                        capture_output=True,
+                    ),
+                    call(["git", "add", Path("CHANGELOG.md")]),
+                    call(
+                        [
+                            "git",
+                            "commit",
+                            "-m",
+                            "chore(release): update changelog for v1.2.3",
+                        ]
+                    ),
+                    call(["git", "push", "origin", "v1.2.3"]),
+                ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
@@ -770,6 +843,14 @@ class TestReleaseTask:
                 "\033[93m[DRY RUN]\033[0m Would clean generated artifacts before release"
             )
             mock_logger.info.assert_any_call(
+                "\033[93m[DRY RUN]\033[0m Would update CHANGELOG.md for release %s using git-cliff --prepend",
+                "v1.2.3",
+            )
+            mock_logger.info.assert_any_call(
+                "\033[93m[DRY RUN]\033[0m Would commit CHANGELOG.md with message %s",
+                "chore(release): update changelog for v1.2.3",
+            )
+            mock_logger.info.assert_any_call(
                 "\033[93m[DRY RUN]\033[0m Would push tags to origin"
             )
             mock_logger.info.assert_any_call(
@@ -819,14 +900,42 @@ class TestReleaseTask:
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
         ):
+            mock_run_command.side_effect = _release_run_command_side_effect()
+
             release_without_containers(component="patch", stage="none")
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
                 component="patch", stage=None, dry_run=False
             )
-            mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "v1.2.3"]
+            mock_run_command.assert_has_calls(
+                [
+                    call(
+                        [
+                            "git-cliff",
+                            "--tag",
+                            "v1.2.3",
+                            "--prepend",
+                            Path("CHANGELOG.md"),
+                        ],
+                        capture_output=False,
+                        acceptable_returncodes={0},
+                    ),
+                    call(
+                        ["git", "status", "--porcelain", "--", Path("CHANGELOG.md")],
+                        capture_output=True,
+                    ),
+                    call(["git", "add", Path("CHANGELOG.md")]),
+                    call(
+                        [
+                            "git",
+                            "commit",
+                            "-m",
+                            "chore(release): update changelog for v1.2.3",
+                        ]
+                    ),
+                    call(["git", "push", "origin", "v1.2.3"]),
+                ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
@@ -838,6 +947,46 @@ class TestReleaseTask:
                 draft=False,
                 assets=[],
             )
+
+    def test_release_without_containers_can_disable_changelog_updates(self):
+        from common_python_tasks.tasks import release_without_containers
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RELEASE_PRE_SCRIPT": "",
+                    "RELEASE_POST_SCRIPT": "",
+                    "RELEASE_UPDATE_CHANGELOG": "0",
+                },
+            ),
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.tasks.clean") as mock_clean,
+            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.utils.run_command") as mock_run_command,
+            patch("common_python_tasks.tasks.build_package") as mock_build_package,
+            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch(
+                "common_python_tasks.project.get_project_version_from_poetry",
+                return_value="1.2.2",
+            ),
+            patch(
+                "common_python_tasks.github.get_github_release_asset_paths",
+                return_value=[],
+            ),
+            patch("common_python_tasks.github.publish_github_release"),
+        ):
+            release_without_containers(component="patch")
+
+            mock_clean.assert_called_once_with()
+            mock_bump.assert_called_once_with(
+                component="patch", stage=None, dry_run=False
+            )
+            mock_run_command.assert_called_once_with(
+                ["git", "push", "origin", "v1.2.3"]
+            )
+            mock_build_package.assert_called_once_with(clean_dist=True)
+            mock_publish.assert_called_once_with(build_first=False)
 
     def test_release_without_containers_fails_when_not_on_default_branch(self):
         from common_python_tasks.tasks import release_without_containers

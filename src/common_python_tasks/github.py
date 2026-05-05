@@ -29,11 +29,7 @@ def _is_unreleased_placeholder(notes: str) -> bool:
 
 def _latest_tagged_changelog() -> str | None:
     """Return release notes for the latest tagged release from git-cliff."""
-    result = utils.run_command(
-        ["git-cliff", "--latest"],
-        capture_output=True,
-        acceptable_returncodes={0},
-    )
+    result = utils.run_git_cliff(["--latest"], capture_output=True)
     changelog = result.stdout.strip()
     if not changelog:
         LOGGER.warning("git-cliff produced no release notes for the latest tag")
