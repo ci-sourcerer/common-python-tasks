@@ -194,3 +194,75 @@ class TestHasTagsLaterInHistory:
             mock.side_effect = side_effect
 
             assert not has_tags_later_in_history()
+
+
+class TestGetDirtyFiles:
+    def test_returns_empty_list_when_no_dirty_files(self):
+        from common_python_tasks.git import get_dirty_files
+
+        with patch("common_python_tasks.utils.run_command") as mock_run:
+            mock_run.return_value = MagicMock(stdout="", returncode=0)
+            result = get_dirty_files()
+            assert result == []
+
+    def test_parses_porcelain_output(self):
+        from pathlib import Path
+
+        from common_python_tasks.git import get_dirty_files
+
+        porcelain_output = " M src/file.py\n?? new_file.txt\nA  added.py\n"
+        with patch("common_python_tasks.utils.run_command") as mock_run:
+            mock_run.return_value = MagicMock(stdout=porcelain_output, returncode=0)
+            result = get_dirty_files()
+            assert result == [
+                Path("src/file.py"),
+                Path("new_file.txt"),
+                Path("added.py"),
+            ]
+
+    def test_respects_ignore_list(self):
+        from pathlib import Path
+
+        from common_python_tasks.git import get_dirty_files
+
+        porcelain_output = " M src/file.py\n?? new_file.txt\n"
+        with patch("common_python_tasks.utils.run_command") as mock_run:
+            mock_run.return_value = MagicMock(stdout=porcelain_output, returncode=0)
+            result = get_dirty_files(ignore=[Path("new_file.txt")])
+            assert result == [Path("src/file.py")]
+
+
+class TestGetVersion:
+    def test_returns_version_with_dirty_suffix(self):
+        from common_python_tasks.git import get_version
+
+        with patch("common_python_tasks.git.get_dirty_files") as mock_dirty:
+            with patch("common_python_tasks.git.Version") as mock_version:
+                mock_dirty.return_value = ["/some/file.py"]
+                mock_instance = MagicMock()
+                mock_instance.serialize.return_value = "1.2.3+dirty"
+                mock_version.from_git.return_value = mock_instance
+
+                result = get_version()
+                assert result == "1.2.3+dirty"
+                mock_instance.serialize.assert_called_once()
+
+
+class TestGetImageTag:
+    def test_normalizes_docker_unsafe_characters(self):
+        from common_python_tasks.git import get_image_tag
+
+        with patch("common_python_tasks.git.get_version") as mock_version:
+            mock_version.return_value = "1.2.3.post0.dev123+abc"
+            result = get_image_tag()
+            assert result == "1.2.3-post0-dev123-abc"
+
+    def test_respects_ignore_list(self):
+        from pathlib import Path
+
+        from common_python_tasks.git import get_image_tag
+
+        with patch("common_python_tasks.git.get_version") as mock_version:
+            mock_version.return_value = "2.0.0+dirty"
+            result = get_image_tag(ignore=[Path("CHANGELOG.md")])
+            assert result == "2.0.0-dirty"

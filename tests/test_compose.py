@@ -23,3 +23,50 @@ def test_get_required_vars_for_files_includes_workdir_path_for_compose_db():
     vars_required = get_required_vars_for_files("fastapi", [Path("compose-db.yml")])
 
     assert "WORKDIR_PATH" in vars_required
+
+
+def test_get_compose_type_returns_default_fastapi(monkeypatch):
+    from common_python_tasks.compose import get_compose_type
+
+    monkeypatch.delenv("COMPOSE_TYPE", raising=False)
+
+    result = get_compose_type()
+
+    assert result == "fastapi"
+
+
+def test_get_compose_type_returns_env_value(monkeypatch):
+    from common_python_tasks.compose import get_compose_type
+
+    monkeypatch.setenv("COMPOSE_TYPE", "custom")
+
+    result = get_compose_type()
+
+    assert result == "custom"
+
+
+def test_read_dotenv_parses_simple_env_file(tmp_path):
+    from common_python_tasks.compose import read_dotenv
+
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("API_PORT=8000\nDEBUG=true\n", encoding="utf-8")
+
+    result = read_dotenv(dotenv)
+
+    assert result["API_PORT"] == "8000"
+    assert result["DEBUG"] == "true"
+
+
+def test_ensure_secrets_generated_creates_keys(tmp_path, monkeypatch):
+    from common_python_tasks.compose import ensure_secrets_generated
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("DB_PASS", raising=False)
+
+    ensure_secrets_generated()
+
+    dotenv = tmp_path / ".env"
+    content = dotenv.read_text(encoding="utf-8")
+    assert "SECRET_KEY=" in content
+    assert "DB_PASS=" in content

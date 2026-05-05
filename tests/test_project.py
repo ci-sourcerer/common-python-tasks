@@ -1,6 +1,7 @@
 import importlib.metadata as metadata
 from unittest.mock import MagicMock, patch
 
+import pytest
 from common_python_tasks.project import (
     get_authors,
     get_installed_requirement_version,
@@ -212,3 +213,70 @@ def test_get_authors_reads_pyproject():
         }
 
         assert get_authors() == [("Test Author", "test@example.com")]
+
+
+def test_resolve_container_entrypoint_command_uses_custom_when_provided():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    result = resolve_container_entrypoint_command(custom_entrypoint="  my-script  ")
+
+    assert result == "my-script"
+
+
+def test_resolve_container_entrypoint_command_uses_package_script_when_available():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        with patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"):
+            mock_toml.return_value = {
+                "project": {"scripts": {"my_pkg": "my_pkg.cli:main"}}
+            }
+
+            result = resolve_container_entrypoint_command()
+
+            assert result == "my_pkg"
+
+
+def test_resolve_container_entrypoint_command_defaults_to_python():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        with patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"):
+            mock_toml.return_value = {"project": {}}
+
+            result = resolve_container_entrypoint_command()
+
+            assert result == "python"
+
+
+def test_get_project_version_from_poetry_parses_output():
+    from common_python_tasks.project import get_project_version_from_poetry
+
+    with patch("common_python_tasks.utils.run_command") as mock_run:
+        mock_run.return_value = MagicMock(stdout="my-project 1.2.3\n", returncode=0)
+
+        result = get_project_version_from_poetry()
+
+        assert result == "1.2.3"
+
+
+def test_get_project_version_from_poetry_fails_on_empty_output():
+    from common_python_tasks.project import get_project_version_from_poetry
+
+    with patch("common_python_tasks.utils.run_command") as mock_run:
+        with patch("common_python_tasks.utils.fatal", side_effect=SystemExit(1)):
+            mock_run.return_value = MagicMock(stdout="", returncode=0)
+            with pytest.raises(SystemExit):
+                get_project_version_from_poetry()
+
+
+def test_get_release_tag_from_poetry_version():
+    from common_python_tasks.project import get_release_tag_from_poetry_version
+
+    with patch(
+        "common_python_tasks.project.get_project_version_from_poetry",
+        return_value="2.1.0",
+    ):
+        result = get_release_tag_from_poetry_version()
+
+        assert result == "v2.1.0"

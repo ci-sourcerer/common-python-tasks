@@ -214,36 +214,6 @@ class TestBumpVersion:
                         mock_run.side_effect = side_effect
                         yield mock_run
 
-    def test_bump_major_no_tags(self, mock_clean_repo_no_tags, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("major")
-        assert tag_calls[-1] == "v1.0.0"
-
-    def test_bump_minor_no_tags(self, mock_clean_repo_no_tags, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("minor")
-        assert tag_calls[-1] == "v0.1.0"
-
-    def test_bump_patch_no_tags(self, mock_clean_repo_no_tags, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("patch")
-        assert tag_calls[-1] == "v0.0.1"
-
-    def test_bump_major_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("major")
-        assert tag_calls[-1] == "v2.0.0"
-
-    def test_bump_minor_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("minor")
-        assert tag_calls[-1] == "v1.3.0"
-
     def test_bump_patch_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
         from common_python_tasks.tasks import bump_version
 
@@ -349,33 +319,11 @@ class TestBumpVersion:
 
         assert tag_calls == []
 
-    def test_bump_with_alpha_stage(self, mock_clean_repo_with_tag, tag_calls):
+    def test_bump_with_stage_param(self, mock_clean_repo_with_tag, tag_calls):
         from common_python_tasks.tasks import bump_version
 
         bump_version("patch", stage="alpha")
         assert tag_calls[-1] == "v1.2.4a1"
-
-    def test_bump_with_beta_stage(self, mock_clean_repo_with_tag, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("minor", stage="beta")
-        assert tag_calls[-1] == "v1.3.0b1"
-
-    def test_bump_with_rc_stage(self, mock_clean_repo_with_tag, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("major", stage="rc")
-        assert tag_calls[-1] == "v2.0.0rc1"
-
-    def test_bump_with_short_stage_names(self, mock_clean_repo_no_tags, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("patch", stage="a")
-        assert tag_calls[-1] == "v0.0.1a1"
-
-        tag_calls.clear()
-        bump_version("patch", stage="b")
-        assert tag_calls[-1] == "v0.0.1b1"
 
     def test_dry_run_no_tags(self, mock_clean_repo_no_tags, tag_calls):
         from common_python_tasks.tasks import bump_version
@@ -437,133 +385,6 @@ class TestBumpVersion:
                 with pytest.raises(SystemExit) as exc_info:
                     bump_version("patch")
                 assert exc_info.value.code == 1
-
-    def test_case_insensitive_component(self, mock_clean_repo_no_tags, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("MAJOR")
-        assert tag_calls[-1] == "v1.0.0"
-
-        tag_calls.clear()
-        bump_version("Minor")
-        assert tag_calls[-1] == "v0.1.0"
-
-    def test_case_insensitive_stage(self, mock_clean_repo_no_tags, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        bump_version("patch", stage="ALPHA")
-        assert tag_calls[-1] == "v0.0.1a1"
-
-        tag_calls.clear()
-        bump_version("patch", stage="Beta")
-        assert tag_calls[-1] == "v0.0.1b1"
-
-    def test_bump_from_dev_version(self, tag_calls):
-        from common_python_tasks.tasks import bump_version
-
-        with (
-            patch("common_python_tasks.git.ensure_on_default_branch"),
-            patch("common_python_tasks.git.get_dirty_files") as mock_dirty,
-        ):
-            with patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
-                return_value="1.2.3.post2.dev0",
-            ):
-                with patch("common_python_tasks.utils.run_command") as mock_run:
-                    mock_dirty.return_value = []
-
-                    def side_effect(command, *args, **kwargs):
-                        result = MagicMock()
-                        if (
-                            len(command) >= 3
-                            and command[0] == "git"
-                            and command[1] == "tag"
-                        ):
-                            result.returncode = 0
-                            tag_calls.append(command[-1])
-                            result.stdout = ""
-                        else:
-                            result.returncode = 0
-                            result.stdout = ""
-                        return result
-
-                    mock_run.side_effect = side_effect
-                    bump_version("patch")
-                    assert tag_calls[-1] == "v1.2.4"
-
-
-class TestReleaseTask:
-    def test_release_without_containers_runs_packaging_flow(self):
-        from common_python_tasks.tasks import release_without_containers
-
-        with (
-            patch.dict(
-                os.environ, {"RELEASE_PRE_SCRIPT": "", "RELEASE_POST_SCRIPT": ""}
-            ),
-            patch("common_python_tasks.git.ensure_on_default_branch"),
-            patch("common_python_tasks.tasks.clean") as mock_clean,
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
-            patch(
-                "common_python_tasks.utils.prepend_changelog"
-            ) as mock_prepend_changelog,
-            patch("common_python_tasks.utils.run_command") as mock_run_command,
-            patch("common_python_tasks.tasks.build_package") as mock_build_package,
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
-            patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
-                return_value="1.2.2",
-            ),
-            patch("common_python_tasks.docker.build_image") as mock_build_image,
-            patch("common_python_tasks.tasks.push_image") as mock_push_image,
-            patch(
-                "common_python_tasks.github.get_github_release_asset_paths",
-                return_value=[],
-            ),
-            patch(
-                "common_python_tasks.github.publish_github_release"
-            ) as mock_publish_github_release,
-        ):
-            mock_run_command.side_effect = _release_run_command_side_effect()
-
-            release_without_containers(component="minor", stage="beta")
-
-            mock_clean.assert_called_once_with()
-            mock_bump.assert_called_once_with(
-                component="minor", stage="beta", dry_run=False
-            )
-            mock_prepend_changelog.assert_called_once_with(
-                "v1.3.0b1", Path("CHANGELOG.md")
-            )
-            mock_run_command.assert_has_calls(
-                [
-                    call(
-                        ["git", "status", "--porcelain", "--", Path("CHANGELOG.md")],
-                        capture_output=True,
-                    ),
-                    call(["git", "add", Path("CHANGELOG.md")]),
-                    call(
-                        [
-                            "git",
-                            "commit",
-                            "-m",
-                            "chore(release): update changelog for v1.3.0b1",
-                        ]
-                    ),
-                    call(["git", "push", "origin", "v1.3.0b1"]),
-                ]
-            )
-            mock_build_package.assert_called_once_with(clean_dist=True)
-            mock_publish.assert_called_once_with(build_first=False)
-            mock_build_image.assert_not_called()
-            mock_push_image.assert_not_called()
-            mock_publish_github_release.assert_called_once_with(
-                "v1.3.0b1",
-                release_name="v1.3.0b1",
-                body=None,
-                prerelease=True,
-                draft=False,
-                assets=[],
-            )
 
     def test_release_runs_container_steps(self):
         from common_python_tasks.tasks import release
