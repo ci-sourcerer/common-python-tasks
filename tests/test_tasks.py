@@ -503,6 +503,9 @@ class TestReleaseTask:
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch(
+                "common_python_tasks.utils.prepend_changelog"
+            ) as mock_prepend_changelog,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
@@ -528,19 +531,11 @@ class TestReleaseTask:
             mock_bump.assert_called_once_with(
                 component="minor", stage="beta", dry_run=False
             )
+            mock_prepend_changelog.assert_called_once_with(
+                "v1.3.0b1", Path("CHANGELOG.md")
+            )
             mock_run_command.assert_has_calls(
                 [
-                    call(
-                        [
-                            "git-cliff",
-                            "--tag",
-                            "v1.3.0b1",
-                            "--prepend",
-                            Path("CHANGELOG.md"),
-                        ],
-                        capture_output=False,
-                        acceptable_returncodes={0},
-                    ),
                     call(
                         ["git", "status", "--porcelain", "--", Path("CHANGELOG.md")],
                         capture_output=True,
@@ -580,6 +575,9 @@ class TestReleaseTask:
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch(
+                "common_python_tasks.utils.prepend_changelog"
+            ) as mock_prepend_changelog,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
@@ -605,19 +603,11 @@ class TestReleaseTask:
             mock_bump.assert_called_once_with(
                 component="patch", stage=None, dry_run=False
             )
+            mock_prepend_changelog.assert_called_once_with(
+                "v1.2.3", Path("CHANGELOG.md")
+            )
             mock_run_command.assert_has_calls(
                 [
-                    call(
-                        [
-                            "git-cliff",
-                            "--tag",
-                            "v1.2.3",
-                            "--prepend",
-                            Path("CHANGELOG.md"),
-                        ],
-                        capture_output=False,
-                        acceptable_returncodes={0},
-                    ),
                     call(
                         ["git", "status", "--porcelain", "--", Path("CHANGELOG.md")],
                         capture_output=True,
@@ -664,6 +654,7 @@ class TestReleaseTask:
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch("common_python_tasks.tasks.build_package"),
             patch("common_python_tasks.tasks.publish_package"),
+            patch("common_python_tasks.utils.prepend_changelog"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
@@ -724,6 +715,7 @@ class TestReleaseTask:
             patch("common_python_tasks.tasks.bump_version"),
             patch("common_python_tasks.tasks.build_package"),
             patch("common_python_tasks.tasks.publish_package"),
+            patch("common_python_tasks.utils.prepend_changelog"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
@@ -885,6 +877,9 @@ class TestReleaseTask:
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch(
+                "common_python_tasks.utils.prepend_changelog"
+            ) as mock_prepend_changelog,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
@@ -908,19 +903,11 @@ class TestReleaseTask:
             mock_bump.assert_called_once_with(
                 component="patch", stage=None, dry_run=False
             )
+            mock_prepend_changelog.assert_called_once_with(
+                "v1.2.3", Path("CHANGELOG.md")
+            )
             mock_run_command.assert_has_calls(
                 [
-                    call(
-                        [
-                            "git-cliff",
-                            "--tag",
-                            "v1.2.3",
-                            "--prepend",
-                            Path("CHANGELOG.md"),
-                        ],
-                        capture_output=False,
-                        acceptable_returncodes={0},
-                    ),
                     call(
                         ["git", "status", "--porcelain", "--", Path("CHANGELOG.md")],
                         capture_output=True,

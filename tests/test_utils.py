@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -5,9 +6,11 @@ from common_python_tasks.utils import (
     fatal,
     get_package_name,
     is_package_installed,
+    prepend_changelog,
     require_package,
     run_available_tools,
     run_command,
+    run_git_cliff,
 )
 
 
@@ -166,3 +169,75 @@ def test_run_available_tools_runs_all_when_all_installed(mock_find_spec):
     black_fn.assert_called_once()
     isort_fn.assert_called_once()
     autoflake_fn.assert_called_once()
+
+
+def test_run_git_cliff_passes_args_and_capture_output_to_run_command():
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        mock_run_command.return_value = MagicMock(stdout="notes", returncode=0)
+
+        result = run_git_cliff(["--unreleased"], capture_output=True)
+
+        mock_run_command.assert_called_once_with(
+            ["git-cliff", "--unreleased"],
+            capture_output=True,
+            acceptable_returncodes={0},
+        )
+        assert result.stdout == "notes"
+
+
+def test_run_git_cliff_defaults_to_no_capture():
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        run_git_cliff(["--tag", "v1.0.0"])
+
+        mock_run_command.assert_called_once_with(
+            ["git-cliff", "--tag", "v1.0.0"],
+            capture_output=False,
+            acceptable_returncodes={0},
+        )
+
+
+def test_prepend_changelog_creates_scaffold_when_file_missing(tmp_path):
+    changelog_path = tmp_path / "CHANGELOG.md"
+
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        prepend_changelog("v1.2.3", changelog_path)
+
+    assert (
+        changelog_path.read_text(encoding="utf-8") == "# Changelog\n\n## [Unreleased]\n"
+    )
+    mock_run_command.assert_called_once_with(
+        ["git-cliff", "--tag", "v1.2.3", "--prepend", changelog_path],
+        capture_output=False,
+        acceptable_returncodes={0},
+    )
+
+
+def test_prepend_changelog_does_not_overwrite_existing_file(tmp_path):
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text("# Existing Changelog\n", encoding="utf-8")
+
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        prepend_changelog("v2.0.0", changelog_path)
+
+    assert changelog_path.read_text(encoding="utf-8") == "# Existing Changelog\n"
+    mock_run_command.assert_called_once_with(
+        ["git-cliff", "--tag", "v2.0.0", "--prepend", changelog_path],
+        capture_output=False,
+        acceptable_returncodes={0},
+    )
+
+
+def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        prepend_changelog("v1.0.0")
+
+    assert (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8") == (
+        "# Changelog\n\n## [Unreleased]\n"
+    )
+    mock_run_command.assert_called_once_with(
+        ["git-cliff", "--tag", "v1.0.0", "--prepend", Path("CHANGELOG.md")],
+        capture_output=False,
+        acceptable_returncodes={0},
+    )
