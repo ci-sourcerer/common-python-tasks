@@ -3,13 +3,6 @@
     "python-envs.defaultPackageManager": "ms-python.python:poetry",
     "python.analysis.extraPaths": ["src"],
     "python.testing.pytestEnabled": true,
-    "python-envs.pythonProjects": [
-        {
-            "path": ".",
-            "packageManager": "ms-python.python:poetry",
-            "envManager": "ms-python.python:poetry"
-        }
-    ],
     "files.exclude": {
         "**/.venv": true,
         "**/__pycache__": true,

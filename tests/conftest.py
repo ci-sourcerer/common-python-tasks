@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -7,6 +8,24 @@ import pytest
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _set_test_environment_variables():
+    """Set environment variables required for tests to pass.
+    
+    These variables are set in [tool.poe.env] and need to be available
+    when running pytest directly.
+    """
+    os.environ.setdefault("RELEASE_UPDATE_CHANGELOG", "1")
+    os.environ.setdefault(
+        "RELEASE_PRE_SCRIPT",
+        "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py",
+    )
+    os.environ.setdefault(
+        "RELEASE_POST_SCRIPT",
+        "RELEASE_SCRIPT_PHASE=post python scripts/release_script.py",
+    )
 
 
 @pytest.fixture
