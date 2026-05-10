@@ -13,6 +13,23 @@ from common_python_tasks.__main__ import (
     get_available_tasks,
 )
 
+
+class _ColoredFormatter(logging.Formatter):
+    COLORS = {
+        "WARNING": "\033[93m",
+        "ERROR": "\033[91m",
+        "CRITICAL": "\033[91m",
+        "RESET": "\033[0m",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_color = self.COLORS.get(record.levelname, "")
+        record.levelname = (
+            f"\033[1m{log_color}{record.levelname}{self.COLORS['RESET'] if log_color else ''}\033[0m"
+        )
+        return super().format(record)
+
+
 LOGGER = logging.getLogger(__name__)
 LOGGER.propagate = False
 LOGGER.setLevel(logging.INFO)
@@ -23,13 +40,15 @@ def _configure_logger() -> None:
         LOGGER.removeHandler(LOGGER.handlers[0])
 
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
+    handler.setFormatter(
+        _ColoredFormatter("[%(asctime)s] %(levelname)s: %(message)s")
+    )
     LOGGER.addHandler(handler)
 
 
 def log_dry_run(message: str, *args: object) -> None:
-    """Log a dry-run informational message with a yellow prefix."""
-    LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
+    """Log a dry-run informational message with a dry-run prefix."""
+    LOGGER.info("[DRY RUN] " + message, *args)
 
 
 README_VERSION_PLACEHOLDER = "__RELEASE_VERSION__"
