@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+import logging
 import os
 import re
 import subprocess
@@ -10,6 +12,25 @@ from common_python_tasks.__main__ import (
     _get_task_tags,
     get_available_tasks,
 )
+
+LOGGER = logging.getLogger(__name__)
+LOGGER.propagate = False
+LOGGER.setLevel(logging.INFO)
+
+
+def _configure_logger() -> None:
+    while LOGGER.handlers:
+        LOGGER.removeHandler(LOGGER.handlers[0])
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
+    LOGGER.addHandler(handler)
+
+
+def log_dry_run(message: str, *args: object) -> None:
+    """Log a dry-run informational message with a yellow prefix."""
+    LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
+
 
 README_VERSION_PLACEHOLDER = "__RELEASE_VERSION__"
 TASKS_TABLE_PATTERN = r"(?ms)<!-- tasks-table -->.*?<!-- end-tasks-table -->"
@@ -109,16 +130,19 @@ def main(*, phase: ReleasePhase | None = None) -> None:
     phase = _resolve_release_phase(phase)
     release_version = os.environ["RELEASE_VERSION"]
 
+    _configure_logger()
+
     if os.environ.get("RELEASE_SCRIPT_DRY_RUN") == "1":
         if phase == ReleasePhase.PRE:
-            print(
-                f"Would modify: README.md "
-                f"(replace {README_VERSION_PLACEHOLDER!r} with {release_version!r})"
+            log_dry_run(
+                "Would modify: README.md " "(replace %r with %r)",
+                README_VERSION_PLACEHOLDER,
+                release_version,
             )
         else:
-            print(
-                f"Would modify: README.md "
-                f"(reset version to {README_VERSION_PLACEHOLDER!r})"
+            log_dry_run(
+                "Would modify: README.md " "(reset version to %r)",
+                README_VERSION_PLACEHOLDER,
             )
         return
 

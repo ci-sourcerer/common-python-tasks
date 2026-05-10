@@ -122,8 +122,9 @@ def test_main_dry_run_is_controlled_by_release_script_dry_run_env_pre_phase(
         release_script.main()
 
     assert readme_path.read_text(encoding="utf-8") == readme_text
-    output = capsys.readouterr().out
-    assert "Would modify: README.md" in output
+    output = capsys.readouterr().err
+    assert output.startswith("[")
+    assert "INFO: [DRY RUN] Would modify: README.md" in output
     assert "'__RELEASE_VERSION__'" in output
     assert "'9.9.9'" in output
     mock_run.assert_not_called()
@@ -176,8 +177,9 @@ def test_release_script_dry_run_env_pre_phase_prints_summary_without_modifying_f
 
     assert readme_path.read_text(encoding="utf-8") == original_text
     mock_run.assert_not_called()
-    output = capsys.readouterr().out
-    assert "Would modify: README.md" in output
+    output = capsys.readouterr().err
+    assert output.startswith("[")
+    assert "INFO: [DRY RUN] Would modify: README.md" in output
     assert "'__RELEASE_VERSION__'" in output
     assert "'2.0.0'" in output
 
@@ -201,6 +203,7 @@ def test_release_script_dry_run_env_post_phase_prints_summary_without_modifying_
 
     assert readme_path.read_text(encoding="utf-8") == original_text
     mock_run.assert_not_called()
-    output = capsys.readouterr().out
-    assert "Would modify: README.md" in output
+    output = capsys.readouterr().err
+    assert output.startswith("[")
+    assert "INFO: [DRY RUN] Would modify: README.md" in output
     assert "'__RELEASE_VERSION__'" in output
