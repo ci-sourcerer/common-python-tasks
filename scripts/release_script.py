@@ -43,8 +43,8 @@ def _configure_logger() -> None:
 
 
 def log_dry_run(message: str, *args: object) -> None:
-    """Log a dry-run informational message with a dry-run prefix."""
-    LOGGER.info("[DRY RUN] " + message, *args)
+    """Log a dry-run informational message with a yellow prefix."""
+    LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
 
 
 README_VERSION_PLACEHOLDER = "__RELEASE_VERSION__"
