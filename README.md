@@ -17,7 +17,7 @@ curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents
 To install a specific release, set the environment variable `COMMON_PYTHON_TASKS_VERSION`.
 
 ```shell
-COMMON_PYTHON_TASKS_VERSION=__RELEASE_VERSION__ \
+COMMON_PYTHON_TASKS_VERSION=0.1.0 \
   sh -c "$(curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d)"
 ```
 
@@ -38,9 +38,9 @@ There's no real reason to run the automated script; I just like automating every
     ```toml
     [project]
     name = "my-awesome-project"
-    version = "__RELEASE_VERSION__"
+    version = "0.1.0"
     dependencies = [
-        "common-python-tasks==__RELEASE_VERSION__",  # Always pin to a specific version
+        "common-python-tasks==0.1.0",  # Always pin to a specific version
     ]
 
     [tool.poe]
@@ -68,26 +68,26 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 <!-- tasks-table -->
 | Task | Description | Tags |
 | - | - | - |
-| `build` | Build the project and its containers (when `containers` tag is included) | common, containers, packaging |
-| `build-image` | Build the container image for this project using the Dockerfile template (and configured extensions) | containers, build |
-| `build-package` | Build the package (wheel and sdist) | build, common, packaging |
-| `bump-version` | Bump the project version, defaulting to an inferred semantic bump from git history | common, packaging |
-| `changelog` | Print the changelog for the current version based on git history | common, packaging, release |
-| `clean` | Clean up temporary files and directories | clean, common |
-| `container-shell` | Run the debug image with an interactive shell | containers, debug |
-| `db-shell` | Open a psql shell to the database container | web, containers, database |
-| `format` | Format code with autoflake, black, and isort | common, format |
-| `lint` | Lint Python code with autoflake, black, isort, and flake8 | common, lint |
-| `publish-package` | Publish the package to the PyPI server | common, packaging |
-| `publish-github-release` | Publish or update a GitHub Release and attach built distribution assets | common, packaging, release |
-| `push-image` | Push the Docker image to the container registry | containers, packaging, release |
+| `test` | Run the test suite with coverage (if `pytest-cov` is installed). | common, test |
+| `clean` | Clean up temporary files and directories. | clean, common |
+| `format` | Format Python code with autoflake, black, and isort. | common, format |
+| `lint` | Lint Python code with autoflake, black, isort, and flake8. | common, lint |
+| `build-image` | Build the container image for this project using the Dockerfile template. | build, containers |
+| `run-container` | Run the Docker image as a container for this project.  By default (when `tag` is `None`) this will run the most-recently-built tag for the project's image. | containers |
+| `push-image` | Push the Docker image for this project to the container registry. | containers, packaging, release |
+| `publish-package` | Publish the package to the PyPI server. | common, packaging |
+| `publish-github-release` | Publish or update a GitHub Release for the current repository. | common, packaging, release |
+| `build-package` | Build the package (wheel and sdist). | build, common, packaging |
+| `bump-version` | Bump the project version. | common, packaging |
+| `changelog` | Print the changelog for the current version based on git history and git-cliff. | common, packaging, release |
 | `release` | Run a full release flow for package and containers. | common, containers, packaging, release |
-| `reset-db` | Reset the database by deleting the database volume | web, containers, database |
-| `run-container` | Run the Docker image as a container | containers |
-| `run-db-migrations` | Run database migrations | web, containers, database |
-| `stack-down` | Bring down the development stack for the application | web, containers |
-| `stack-up` | Bring up the development stack for the application | web, containers |
-| `test` | Run the test suite with coverage | common, test |
+| `build` | Build the project and its containers. | common, containers, packaging |
+| `stack-up` | Bring up the development stack for the application. | containers, fastapi, web |
+| `stack-down` | Bring down the development stack for the application. | containers, fastapi, web |
+| `reset-db` | Reset the database by deleting the database volume. | containers, database, fastapi, web |
+| `run-db-migrations` | Run database migrations. | containers, database, fastapi, web |
+| `db-shell` | Open a psql shell to the database container. | containers, database, fastapi, web |
+| `container-shell` | Run the debug image with an interactive shell. | containers, debug |
 <!-- end-tasks-table -->
 
 ## Docker Compose Development Stacks
@@ -254,8 +254,8 @@ By default, `tasks()` exposes the common task set. You can still include or excl
 ```toml
 [project]
 name = "simple-cli-tool"
-version = "__RELEASE_VERSION__"
-dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
+version = "0.1.0"
+dependencies = ["common-python-tasks==0.1.0"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"
@@ -268,8 +268,8 @@ Available tasks: common defaults such as `format`, `lint`, `test`, and `build`.
 ```toml
 [project]
 name = "containerized-app"
-version = "__RELEASE_VERSION__"
-dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
+version = "0.1.0"
+dependencies = ["common-python-tasks==0.1.0"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
@@ -286,7 +286,7 @@ Available tasks: All tasks including `build-image` and `push-image`.
 ```toml
 [project]
 name = "custom-test-setup"
-dependencies = ["common-python-tasks==__RELEASE_VERSION__"]
+dependencies = ["common-python-tasks==0.1.0"]
 dynamic = ["version"]
 
 [tool.poe]
