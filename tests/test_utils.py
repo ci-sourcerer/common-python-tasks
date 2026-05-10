@@ -206,7 +206,14 @@ def test_prepend_changelog_creates_scaffold_when_file_missing(tmp_path):
         changelog_path.read_text(encoding="utf-8") == "# Changelog\n\n## [Unreleased]\n"
     )
     mock_run_command.assert_called_once_with(
-        ["git-cliff", "--tag", "v1.2.3", "--prepend", changelog_path],
+        [
+            "git-cliff",
+            "--unreleased",
+            "--tag",
+            "v1.2.3",
+            "--prepend",
+            changelog_path,
+        ],
         capture_output=False,
         acceptable_returncodes={0},
     )
@@ -221,7 +228,14 @@ def test_prepend_changelog_does_not_overwrite_existing_file(tmp_path):
 
     assert changelog_path.read_text(encoding="utf-8") == "# Existing Changelog\n"
     mock_run_command.assert_called_once_with(
-        ["git-cliff", "--tag", "v2.0.0", "--prepend", changelog_path],
+        [
+            "git-cliff",
+            "--unreleased",
+            "--tag",
+            "v2.0.0",
+            "--prepend",
+            changelog_path,
+        ],
         capture_output=False,
         acceptable_returncodes={0},
     )
@@ -237,7 +251,14 @@ def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypat
         "# Changelog\n\n## [Unreleased]\n"
     )
     mock_run_command.assert_called_once_with(
-        ["git-cliff", "--tag", "v1.0.0", "--prepend", Path("CHANGELOG.md")],
+        [
+            "git-cliff",
+            "--unreleased",
+            "--tag",
+            "v1.0.0",
+            "--prepend",
+            Path("CHANGELOG.md"),
+        ],
         capture_output=False,
         acceptable_returncodes={0},
     )

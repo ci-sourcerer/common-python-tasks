@@ -656,7 +656,14 @@ class TestBumpVersion:
                 "\033[93m[DRY RUN]\033[0m Would clean generated artifacts before release"
             )
             mock_run_command.assert_any_call(
-                ["git-cliff", "--tag", "v1.2.3", "--prepend", Path("CHANGELOG.md")],
+                [
+                    "git-cliff",
+                    "--unreleased",
+                    "--tag",
+                    "v1.2.3",
+                    "--prepend",
+                    Path("CHANGELOG.md"),
+                ],
                 dry_run=True,
             )
             mock_run_command.assert_any_call(

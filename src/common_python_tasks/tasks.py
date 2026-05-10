@@ -125,7 +125,14 @@ def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
     changelog_path = Path("CHANGELOG.md")
     if dry_run:
         run_command(
-            ["git-cliff", "--tag", release_tag, "--prepend", changelog_path],
+            [
+                "git-cliff",
+                "--unreleased",
+                "--tag",
+                release_tag,
+                "--prepend",
+                changelog_path,
+            ],
             dry_run=True,
         )
         run_command(["git", "add", changelog_path], dry_run=True)

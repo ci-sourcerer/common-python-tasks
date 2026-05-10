@@ -24,9 +24,7 @@ class _ColoredFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_color = self.COLORS.get(record.levelname, "")
-        record.levelname = (
-            f"\033[1m{log_color}{record.levelname}{self.COLORS['RESET'] if log_color else ''}\033[0m"
-        )
+        record.levelname = f"\033[1m{log_color}{record.levelname}{self.COLORS['RESET'] if log_color else ''}\033[0m"
         return super().format(record)
 
 
@@ -40,9 +38,7 @@ def _configure_logger() -> None:
         LOGGER.removeHandler(LOGGER.handlers[0])
 
     handler = logging.StreamHandler()
-    handler.setFormatter(
-        _ColoredFormatter("[%(asctime)s] %(levelname)s: %(message)s")
-    )
+    handler.setFormatter(_ColoredFormatter("[%(asctime)s] %(levelname)s: %(message)s"))
     LOGGER.addHandler(handler)
 
 

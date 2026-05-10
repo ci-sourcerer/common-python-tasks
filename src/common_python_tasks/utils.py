@@ -328,7 +328,7 @@ def prepend_changelog(
     """Prepend release notes for the given tag to a changelog file using git-cliff.
 
     Creates the changelog file with a scaffold header if it does not exist, then
-    runs `git-cliff --tag <tag_name> --prepend <changelog_path>`.
+    runs `git-cliff --unreleased --tag <tag_name> --prepend <changelog_path>`.
 
     Args:
         tag_name: The release tag to generate changelog entries for.
@@ -336,7 +336,7 @@ def prepend_changelog(
     """
     if not changelog_path.exists():
         changelog_path.write_text("# Changelog\n\n## [Unreleased]\n", encoding="utf-8")
-    run_git_cliff(["--tag", tag_name, "--prepend", changelog_path])
+    run_git_cliff(["--unreleased", "--tag", tag_name, "--prepend", changelog_path])
 
 
 def changelog() -> str | None:
