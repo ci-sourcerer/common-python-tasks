@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 @pytest.fixture(scope="session", autouse=True)
 def _set_test_environment_variables():
     """Set environment variables required for tests to pass.
-    
+
     These variables are set in [tool.poe.env] and need to be available
     when running pytest directly.
     """

@@ -639,7 +639,7 @@ class TestBumpVersion:
             patch(
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
-            patch("common_python_tasks.utils.run_command"),
+            patch("common_python_tasks.utils.run_command") as mock_run_command,
         ):
             release(component="patch", dry_run=True)
 
@@ -655,13 +655,22 @@ class TestBumpVersion:
             mock_logger.info.assert_any_call(
                 "\033[93m[DRY RUN]\033[0m Would clean generated artifacts before release"
             )
-            mock_logger.info.assert_any_call(
-                "\033[93m[DRY RUN]\033[0m Would update CHANGELOG.md for release %s using git-cliff --prepend",
-                "v1.2.3",
+            mock_run_command.assert_any_call(
+                ["git-cliff", "--tag", "v1.2.3", "--prepend", Path("CHANGELOG.md")],
+                dry_run=True,
             )
-            mock_logger.info.assert_any_call(
-                "\033[93m[DRY RUN]\033[0m Would commit CHANGELOG.md with message %s",
-                "chore(release): update changelog for v1.2.3",
+            mock_run_command.assert_any_call(
+                ["git", "add", Path("CHANGELOG.md")],
+                dry_run=True,
+            )
+            mock_run_command.assert_any_call(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    "chore(release): update changelog for v1.2.3",
+                ],
+                dry_run=True,
             )
             mock_logger.info.assert_any_call(
                 "\033[93m[DRY RUN]\033[0m Would push tags to origin"

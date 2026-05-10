@@ -119,10 +119,27 @@ def _should_update_release_changelog() -> bool:
     return env_truthy("RELEASE_UPDATE_CHANGELOG")
 
 
-def _update_release_changelog(release_tag: str) -> None:
+def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
     from common_python_tasks.utils import prepend_changelog, run_command
 
     changelog_path = Path("CHANGELOG.md")
+    if dry_run:
+        run_command(
+            ["git-cliff", "--tag", release_tag, "--prepend", changelog_path],
+            dry_run=True,
+        )
+        run_command(["git", "add", changelog_path], dry_run=True)
+        run_command(
+            [
+                "git",
+                "commit",
+                "-m",
+                f"chore(release): update changelog for {release_tag}",
+            ],
+            dry_run=True,
+        )
+        return
+
     prepend_changelog(release_tag, changelog_path)
 
     status = run_command(
@@ -916,19 +933,6 @@ def _normalize_release_stage(stage: str | None) -> str | None:
     return stage
 
 
-def _log_release_changelog_dry_run(release_tag: str) -> None:
-    from common_python_tasks.utils import log_dry_run
-
-    log_dry_run(
-        "Would update CHANGELOG.md for release %s using git-cliff --prepend",
-        release_tag,
-    )
-    log_dry_run(
-        "Would commit CHANGELOG.md with message %s",
-        f"chore(release): update changelog for {release_tag}",
-    )
-
-
 def _run_release_flow(
     component: str = "patch",
     *,
@@ -970,10 +974,7 @@ def _run_release_flow(
         clean()
 
     if _should_update_release_changelog():
-        if dry_run:
-            _log_release_changelog_dry_run(hook_env["RELEASE_TAG"])
-        else:
-            _update_release_changelog(hook_env["RELEASE_TAG"])
+        _update_release_changelog(hook_env["RELEASE_TAG"], dry_run=dry_run)
 
     bump_version(
         component=hook_env["RELEASE_COMPONENT"],
