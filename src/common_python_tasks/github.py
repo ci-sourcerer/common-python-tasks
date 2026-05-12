@@ -89,7 +89,39 @@ def get_github_token() -> str | None:
     Returns:
         The GitHub token from `GITHUB_TOKEN` or `GH_TOKEN`, or `None` if unset.
     """
-    return (os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or "").strip() or None
+    token = (os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or "").strip()
+    if token:
+        return token
+
+    try:
+        result = utils.run_command(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            acceptable_returncodes={0, 1},
+        )
+    except FileNotFoundError:
+        LOGGER.warning(
+            "GitHub CLI not installed; cannot retrieve token via `gh auth token`"
+        )
+        return None
+
+    if result is None:
+        return None
+
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        message = "Failed to retrieve GitHub token via `gh auth token`"
+        if stderr:
+            message += f": {stderr}"
+        LOGGER.warning(message)
+        return None
+
+    token = (result.stdout or "").strip()
+    if not token:
+        LOGGER.warning("`gh auth token` returned an empty token")
+        return None
+
+    return token
 
 
 def get_github_api_base_url() -> str:
