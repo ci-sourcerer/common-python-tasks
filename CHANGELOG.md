@@ -1,3 +1,18 @@
+## [0.2.0] - 2026-05-21
+
+### 🚀 Features
+
+- *(github)* Allow `get_github_token` to retrieve token from GitHub CLI if available
+
+### 🐛 Bug Fixes
+
+- *(dependabot)* `widen` for dependabot
+- *(tests)* Remove "[DRY RUN]" from output assertions
+- Properly replace README version references
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.2.0
 ## [0.1.0] - 2026-05-10
 
 ### 🚀 Features
