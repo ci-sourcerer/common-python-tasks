@@ -142,6 +142,7 @@ def _commit_readme_update(release_version: str) -> None:
 
 def main() -> None:
     """Update README release content during release hook execution."""
+    _resolve_release_phase()
     release_version = os.environ["RELEASE_VERSION"]
 
     _configure_logger()
