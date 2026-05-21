@@ -52,7 +52,6 @@ TASKS_TABLE_PATTERN = r"(?ms)<!-- tasks-table -->.*?<!-- end-tasks-table -->"
 
 class ReleasePhase(StrEnum):
     PRE = "pre"
-    POST = "post"
 
 
 RELEASE_SCRIPT_PHASE = "RELEASE_SCRIPT_PHASE"
@@ -85,15 +84,13 @@ def _resolve_release_phase(phase: ReleasePhase | None = None) -> ReleasePhase:
 
     phase_value = os.environ.get(RELEASE_SCRIPT_PHASE)
     if phase_value is None:
-        raise SystemExit(f"{RELEASE_SCRIPT_PHASE} must be set to 'pre' or 'post'.")
+        raise SystemExit(f"{RELEASE_SCRIPT_PHASE} must be set to 'pre'.")
 
-    try:
-        return ReleasePhase(phase_value.lower())
-    except ValueError as exc:
+    if phase_value.lower() != "pre":
         raise SystemExit(
-            f"Invalid {RELEASE_SCRIPT_PHASE!r}: {phase_value!r}. "
-            "Expected 'pre' or 'post'."
-        ) from exc
+            f"Invalid {RELEASE_SCRIPT_PHASE!r}: {phase_value!r}. Expected 'pre'."
+        )
+    return ReleasePhase.PRE
 
 
 def build_tasks_table() -> str:
@@ -130,10 +127,6 @@ def _update_readme_for_pre_release(
     )
 
 
-def _update_readme_for_post_release(readme_text: str, _release_version: str) -> str:
-    return readme_text
-
-
 def _commit_readme_update(release_version: str) -> None:
     subprocess.run(["git", "add", "README.md"], check=True)
     subprocess.run(
@@ -147,53 +140,31 @@ def _commit_readme_update(release_version: str) -> None:
     )
 
 
-def main(*, phase: ReleasePhase | None = None) -> None:
-    """Update README release content during release hook execution.
-
-    The phase is taken from the `RELEASE_SCRIPT_PHASE` environment variable
-    when not explicitly provided. When `RELEASE_SCRIPT_DRY_RUN` is set to
-    "1", the hook prints the changes it would make without modifying files.
-
-    Args:
-        phase: Optional release phase.
-
-    Raises:
-        SystemExit: If the latest tagged version is missing during pre-release.
-    """
-    phase = _resolve_release_phase(phase)
+def main() -> None:
+    """Update README release content during release hook execution."""
     release_version = os.environ["RELEASE_VERSION"]
 
     _configure_logger()
 
     if os.environ.get("RELEASE_SCRIPT_DRY_RUN") == "1":
-        if phase == ReleasePhase.PRE:
-            current_version = _get_latest_release_version()
-            log_dry_run(
-                "Would modify: README.md " "(replace %r with %r)",
-                current_version,
-                release_version,
-            )
-        else:
-            log_dry_run("Would leave README.md at release version %r", release_version)
+        current_version = _get_latest_release_version()
+        log_dry_run(
+            "Would modify: README.md " "(replace %r with %r)",
+            current_version,
+            release_version,
+        )
         return
 
     readme_path = Path("README.md")
     readme_text = readme_path.read_text(encoding="utf-8")
 
-    updated_text = (
-        _update_readme_for_pre_release(
-            readme_text,
-            _get_latest_release_version(),
-            release_version,
-        )
-        if phase == ReleasePhase.PRE
-        else _update_readme_for_post_release(readme_text, release_version)
+    updated_text = _update_readme_for_pre_release(
+        readme_text,
+        _get_latest_release_version(),
+        release_version,
     )
 
     if updated_text == readme_text:
-        if phase == ReleasePhase.POST:
-            LOGGER.info("README.md already matches release version %s", release_version)
-            return
         raise SystemExit("README.md was not changed")
 
     readme_path.write_text(updated_text, encoding="utf-8")
