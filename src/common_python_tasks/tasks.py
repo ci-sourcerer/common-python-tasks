@@ -1024,6 +1024,10 @@ def _run_release_flow(
     if _should_update_release_changelog():
         _update_release_changelog(hook_env["RELEASE_TAG"], dry_run=dry_run)
 
+    # Push all release commits (README, changelog, etc.) before tagging
+    if not dry_run:
+        run_command(["git", "push", "origin", "HEAD"])
+
     bump_version(
         component=hook_env["RELEASE_COMPONENT"],
         stage=normalized_stage,
