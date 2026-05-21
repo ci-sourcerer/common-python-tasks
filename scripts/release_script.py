@@ -47,7 +47,6 @@ def log_dry_run(message: str, *args: object) -> None:
     LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
 
 
-README_VERSION_PLACEHOLDER = "__RELEASE_VERSION__"
 TASKS_TABLE_PATTERN = r"(?ms)<!-- tasks-table -->.*?<!-- end-tasks-table -->"
 
 
@@ -57,6 +56,27 @@ class ReleasePhase(StrEnum):
 
 
 RELEASE_SCRIPT_PHASE = "RELEASE_SCRIPT_PHASE"
+
+
+def _get_latest_release_version() -> str:
+    completed_process = subprocess.run(
+        ["git", "tag", "--sort=-version:refname"],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    latest_tag = next(
+        (
+            line.strip()
+            for line in completed_process.stdout.splitlines()
+            if line.strip()
+        ),
+        None,
+    )
+    if latest_tag is None:
+        raise SystemExit("Unable to determine the latest Git tag for README updates")
+
+    return latest_tag.removeprefix("v")
 
 
 def _resolve_release_phase(phase: ReleasePhase | None = None) -> ReleasePhase:
@@ -94,43 +114,41 @@ def build_tasks_table() -> str:
     return "\n".join(lines)
 
 
-def _update_readme_for_pre_release(readme_text: str, release_version: str) -> str:
-    if README_VERSION_PLACEHOLDER not in readme_text:
+def _update_readme_for_pre_release(
+    readme_text: str, current_version: str, release_version: str
+) -> str:
+    if current_version not in readme_text:
         raise SystemExit(
-            "README.md is missing the release placeholder "
-            f"{README_VERSION_PLACEHOLDER!r}"
+            "README.md does not contain the latest tagged version "
+            f"{current_version!r} to update"
         )
 
     return re.sub(
         TASKS_TABLE_PATTERN,
         build_tasks_table(),
-        readme_text.replace(README_VERSION_PLACEHOLDER, release_version),
+        readme_text.replace(current_version, release_version),
     )
 
 
-def _update_readme_for_post_release(readme_text: str, release_version: str) -> str:
-    if release_version not in readme_text:
-        raise SystemExit(
-            "README.md does not contain the release version "
-            f"{release_version!r} to reset"
-        )
-
-    return readme_text.replace(release_version, README_VERSION_PLACEHOLDER)
+def _update_readme_for_post_release(readme_text: str, _release_version: str) -> str:
+    return readme_text
 
 
-def _commit_readme_update(phase: str, release_version: str) -> None:
-    commit_message = (
-        f"chore(release): set README version {release_version}"
-        if phase == ReleasePhase.PRE
-        else "chore(release): reset README version placeholder"
-    )
-
+def _commit_readme_update(release_version: str) -> None:
     subprocess.run(["git", "add", "README.md"], check=True)
-    subprocess.run(["git", "commit", "-m", commit_message], check=True)
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "-m",
+            f"chore(release): set README version {release_version}",
+        ],
+        check=True,
+    )
 
 
 def main(*, phase: ReleasePhase | None = None) -> None:
-    """Update README placeholder content during release hook execution.
+    """Update README release content during release hook execution.
 
     The phase is taken from the `RELEASE_SCRIPT_PHASE` environment variable
     when not explicitly provided. When `RELEASE_SCRIPT_DRY_RUN` is set to
@@ -140,7 +158,7 @@ def main(*, phase: ReleasePhase | None = None) -> None:
         phase: Optional release phase.
 
     Raises:
-        SystemExit: If required placeholders are missing or if no changes were made.
+        SystemExit: If the latest tagged version is missing during pre-release.
     """
     phase = _resolve_release_phase(phase)
     release_version = os.environ["RELEASE_VERSION"]
@@ -149,32 +167,37 @@ def main(*, phase: ReleasePhase | None = None) -> None:
 
     if os.environ.get("RELEASE_SCRIPT_DRY_RUN") == "1":
         if phase == ReleasePhase.PRE:
+            current_version = _get_latest_release_version()
             log_dry_run(
                 "Would modify: README.md " "(replace %r with %r)",
-                README_VERSION_PLACEHOLDER,
+                current_version,
                 release_version,
             )
         else:
-            log_dry_run(
-                "Would modify: README.md " "(reset version to %r)",
-                README_VERSION_PLACEHOLDER,
-            )
+            log_dry_run("Would leave README.md at release version %r", release_version)
         return
 
     readme_path = Path("README.md")
     readme_text = readme_path.read_text(encoding="utf-8")
 
     updated_text = (
-        _update_readme_for_pre_release(readme_text, release_version)
+        _update_readme_for_pre_release(
+            readme_text,
+            _get_latest_release_version(),
+            release_version,
+        )
         if phase == ReleasePhase.PRE
         else _update_readme_for_post_release(readme_text, release_version)
     )
 
     if updated_text == readme_text:
+        if phase == ReleasePhase.POST:
+            LOGGER.info("README.md already matches release version %s", release_version)
+            return
         raise SystemExit("README.md was not changed")
 
     readme_path.write_text(updated_text, encoding="utf-8")
-    _commit_readme_update(phase, release_version)
+    _commit_readme_update(release_version)
 
 
 if __name__ == "__main__":

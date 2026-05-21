@@ -112,11 +112,46 @@ def _script(
 
 tasks.script = _script
 
+NO_PROMPT_ENV_VAR = "COMMON_PYTHON_TASKS_NO_PROMPT"
+
 
 def _should_update_release_changelog() -> bool:
     from common_python_tasks.env import env_truthy
 
     return env_truthy("RELEASE_UPDATE_CHANGELOG")
+
+
+def _confirm_release_with_uncommitted_changes(dirty_files: list[Path]) -> bool:
+    preview = ", ".join(str(path) for path in dirty_files[:5])
+    if len(dirty_files) > 5:
+        preview = f"{preview}, ... and {len(dirty_files) - 5} more"
+
+    LOGGER.warning("Repository has uncommitted changes: %s", preview)
+    try:
+        response = input("Proceed with release anyway? [y/N]: ").strip().lower()
+    except (EOFError, OSError):
+        return False
+    return response in {"y", "yes"}
+
+
+def _resolve_allow_dirty_release(dirty_files: list[Path]) -> bool:
+    from common_python_tasks.utils import fatal
+
+    if not dirty_files:
+        return False
+
+    if os.getenv(NO_PROMPT_ENV_VAR) == "1":
+        LOGGER.warning(
+            "Proceeding with release despite uncommitted changes because %s=1",
+            NO_PROMPT_ENV_VAR,
+        )
+        return True
+
+    if _confirm_release_with_uncommitted_changes(dirty_files):
+        return True
+
+    fatal("Aborted due to uncommitted changes.")
+    return False
 
 
 def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
@@ -884,6 +919,7 @@ def bump_version(
     *,
     stage: str | None = None,
     dry_run: bool = False,
+    allow_dirty: bool = False,
 ) -> str:
     """Bump the project version.
 
@@ -892,6 +928,7 @@ def bump_version(
             `auto` to infer the bump from git history using git-cliff.
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
         dry_run: If `True`, print what would happen without making changes.
+        allow_dirty: If `True`, allow version bumping with uncommitted changes.
 
     Returns:
         The new version string that was/would be set.
@@ -909,7 +946,7 @@ def bump_version(
 
     ensure_on_default_branch()
 
-    if get_dirty_files():
+    if get_dirty_files() and not allow_dirty:
         fatal(
             "Repository has uncommitted changes. "
             "Please commit or stash changes before bumping version."
@@ -960,6 +997,7 @@ def _run_release_flow(
     from common_python_tasks.git import (
         build_release_hook_environment,
         ensure_on_default_branch,
+        get_dirty_files,
     )
     from common_python_tasks.utils import (
         log_dry_run,
@@ -971,7 +1009,10 @@ def _run_release_flow(
     post_script = post_script or os.getenv("RELEASE_POST_SCRIPT")
 
     ensure_on_default_branch()
+    allow_dirty = _resolve_allow_dirty_release(get_dirty_files())
     hook_env = build_release_hook_environment(component, normalized_stage, dry_run)
+    if allow_dirty:
+        hook_env[NO_PROMPT_ENV_VAR] = "1"
     if pre_script:
         run_command(["sh", "-lc", pre_script], env=hook_env, dry_run=False)
 
@@ -987,6 +1028,7 @@ def _run_release_flow(
         component=hook_env["RELEASE_COMPONENT"],
         stage=normalized_stage,
         dry_run=dry_run,
+        allow_dirty=allow_dirty,
     )
     if dry_run:
         log_dry_run("Would push tags to origin")

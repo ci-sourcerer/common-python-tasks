@@ -386,6 +386,24 @@ class TestBumpVersion:
                     bump_version("patch")
                 assert exc_info.value.code == 1
 
+    def test_dirty_repo_can_be_allowed(self):
+        from common_python_tasks.tasks import bump_version
+
+        with (
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files") as mock_dirty,
+            patch(
+                "common_python_tasks.git.compute_next_release_version"
+            ) as mock_compute,
+            patch("common_python_tasks.utils.run_command") as mock_run_command,
+        ):
+            mock_dirty.return_value = [Path("modified_file.py")]
+            mock_compute.return_value = MagicMock(version="1.2.3")
+
+            bump_version("patch", allow_dirty=True)
+
+            mock_run_command.assert_called_once_with(["git", "tag", "v1.2.3"])
+
     def test_release_runs_container_steps(self):
         from common_python_tasks.tasks import release
 
@@ -394,6 +412,7 @@ class TestBumpVersion:
                 os.environ, {"RELEASE_PRE_SCRIPT": "", "RELEASE_POST_SCRIPT": ""}
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch(
@@ -422,7 +441,7 @@ class TestBumpVersion:
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
-                component="patch", stage=None, dry_run=False
+                component="patch", stage=None, dry_run=False, allow_dirty=False
             )
             mock_prepend_changelog.assert_called_once_with(
                 "v1.2.3", Path("CHANGELOG.md")
@@ -471,6 +490,7 @@ class TestBumpVersion:
 
         with (
             patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch("common_python_tasks.tasks.build_package"),
@@ -495,7 +515,7 @@ class TestBumpVersion:
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
-                component="patch", stage=None, dry_run=False
+                component="patch", stage=None, dry_run=False, allow_dirty=False
             )
             mock_run_command.assert_any_call(
                 ["git", "push", "origin", "v0.0.2"],
@@ -532,6 +552,7 @@ class TestBumpVersion:
                 {"RELEASE_PRE_SCRIPT": pre_script, "RELEASE_POST_SCRIPT": post_script},
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
             patch("common_python_tasks.tasks.clean"),
             patch("common_python_tasks.tasks.bump_version"),
             patch("common_python_tasks.tasks.build_package"),
@@ -576,6 +597,7 @@ class TestBumpVersion:
 
         with (
             patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
             patch("common_python_tasks.tasks.clean"),
             patch("common_python_tasks.tasks.bump_version"),
             patch("common_python_tasks.tasks.build_package"),
@@ -621,6 +643,7 @@ class TestBumpVersion:
 
         with (
             patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
@@ -645,7 +668,7 @@ class TestBumpVersion:
 
             mock_clean.assert_not_called()
             mock_bump.assert_called_once_with(
-                component="patch", stage=None, dry_run=True
+                component="patch", stage=None, dry_run=True, allow_dirty=False
             )
             mock_build_package.assert_not_called()
             mock_publish.assert_not_called()
@@ -712,6 +735,7 @@ class TestBumpVersion:
                 os.environ, {"RELEASE_PRE_SCRIPT": "", "RELEASE_POST_SCRIPT": ""}
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch(
@@ -738,7 +762,7 @@ class TestBumpVersion:
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
-                component="patch", stage=None, dry_run=False
+                component="patch", stage=None, dry_run=False, allow_dirty=False
             )
             mock_prepend_changelog.assert_called_once_with(
                 "v1.2.3", Path("CHANGELOG.md")
@@ -785,6 +809,7 @@ class TestBumpVersion:
                 },
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
             patch("common_python_tasks.tasks.clean") as mock_clean,
             patch("common_python_tasks.tasks.bump_version") as mock_bump,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
@@ -804,13 +829,106 @@ class TestBumpVersion:
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(
-                component="patch", stage=None, dry_run=False
+                component="patch", stage=None, dry_run=False, allow_dirty=False
             )
             mock_run_command.assert_called_once_with(
                 ["git", "push", "origin", "v1.2.3"]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
+
+    def test_release_without_containers_prompts_once_for_dirty_repo(self):
+        from common_python_tasks.tasks import release_without_containers
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RELEASE_PRE_SCRIPT": "",
+                    "RELEASE_POST_SCRIPT": "",
+                    "RELEASE_UPDATE_CHANGELOG": "0",
+                },
+            ),
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch(
+                "common_python_tasks.git.get_dirty_files",
+                return_value=[Path("README.md")],
+            ),
+            patch("builtins.input", return_value="y") as mock_input,
+            patch("common_python_tasks.tasks.clean") as mock_clean,
+            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.utils.run_command") as mock_run_command,
+            patch("common_python_tasks.tasks.build_package") as mock_build_package,
+            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch(
+                "common_python_tasks.project.get_project_version_from_poetry",
+                return_value="1.2.2",
+            ),
+            patch(
+                "common_python_tasks.github.get_github_release_asset_paths",
+                return_value=[],
+            ),
+            patch("common_python_tasks.github.publish_github_release"),
+        ):
+            release_without_containers(component="patch")
+
+            mock_input.assert_called_once_with("Proceed with release anyway? [y/N]: ")
+            mock_clean.assert_called_once_with()
+            mock_bump.assert_called_once_with(
+                component="patch", stage=None, dry_run=False, allow_dirty=True
+            )
+            mock_run_command.assert_called_once_with(
+                ["git", "push", "origin", "v1.2.3"]
+            )
+            mock_build_package.assert_called_once_with(clean_dist=True)
+            mock_publish.assert_called_once_with(build_first=False)
+
+    def test_release_without_containers_allows_dirty_repo_without_prompt_env(self):
+        from common_python_tasks.tasks import release_without_containers
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RELEASE_PRE_SCRIPT": "echo pre",
+                    "RELEASE_POST_SCRIPT": "",
+                    "RELEASE_UPDATE_CHANGELOG": "0",
+                    "COMMON_PYTHON_TASKS_NO_PROMPT": "1",
+                },
+            ),
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch(
+                "common_python_tasks.git.get_dirty_files",
+                return_value=[Path("README.md")],
+            ),
+            patch("builtins.input") as mock_input,
+            patch("common_python_tasks.tasks.clean"),
+            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.utils.run_command") as mock_run_command,
+            patch("common_python_tasks.tasks.build_package"),
+            patch("common_python_tasks.tasks.publish_package"),
+            patch(
+                "common_python_tasks.project.get_project_version_from_poetry",
+                return_value="1.2.2",
+            ),
+            patch(
+                "common_python_tasks.github.get_github_release_asset_paths",
+                return_value=[],
+            ),
+            patch("common_python_tasks.github.publish_github_release"),
+        ):
+            release_without_containers(component="patch")
+
+            mock_input.assert_not_called()
+            mock_bump.assert_called_once_with(
+                component="patch", stage=None, dry_run=False, allow_dirty=True
+            )
+            pre_call = next(
+                call_args
+                for call_args in mock_run_command.call_args_list
+                if call_args.args[0] == ["sh", "-lc", "echo pre"]
+            )
+            assert pre_call.kwargs["env"]["COMMON_PYTHON_TASKS_NO_PROMPT"] == "1"
 
     def test_release_without_containers_fails_when_not_on_default_branch(self):
         from common_python_tasks.tasks import release_without_containers
