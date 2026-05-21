@@ -81,7 +81,7 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
     )
 
 
-def test_main_post_phase_leaves_readme_unchanged_without_rebuilding_table(
+def test_main_fails_for_invalid_release_phase_without_running_git(
     tmp_path, monkeypatch
 ):
     readme_path = tmp_path / "README.md"
@@ -97,11 +97,16 @@ def test_main_post_phase_leaves_readme_unchanged_without_rebuilding_table(
 
     release_script = _load_release_script_module()
 
-    with patch.object(release_script.subprocess, "run") as mock_run:
+    with (
+        patch.object(release_script.subprocess, "run") as mock_run,
+        pytest.raises(
+            SystemExit,
+            match="Invalid 'RELEASE_SCRIPT_PHASE': 'post'. Expected 'pre'.",
+        ),
+    ):
         release_script.main()
 
     updated_text = readme_path.read_text(encoding="utf-8")
-    assert updated_text == readme_path.read_text(encoding="utf-8")
     assert "Version: 1.2.3" in updated_text
     assert "| keep | this | table |" in updated_text
     mock_run.assert_not_called()
@@ -176,7 +181,7 @@ def test_main_pre_phase_fails_when_latest_tagged_version_is_missing(
         release_script.main()
 
 
-def test_main_post_phase_leaves_readme_unchanged_when_release_version_is_missing(
+def test_main_fails_for_invalid_release_phase_when_release_version_is_missing(
     tmp_path, monkeypatch
 ):
     readme_path = tmp_path / "README.md"
@@ -188,7 +193,13 @@ def test_main_post_phase_leaves_readme_unchanged_when_release_version_is_missing
 
     release_script = _load_release_script_module()
 
-    with patch.object(release_script.subprocess, "run") as mock_run:
+    with (
+        patch.object(release_script.subprocess, "run") as mock_run,
+        pytest.raises(
+            SystemExit,
+            match="Invalid 'RELEASE_SCRIPT_PHASE': 'post'. Expected 'pre'.",
+        ),
+    ):
         release_script.main()
 
     assert readme_path.read_text(encoding="utf-8") == "Version: 1.2.2\n"
@@ -235,7 +246,7 @@ def test_release_script_dry_run_env_pre_phase_prints_summary_without_modifying_f
     )
 
 
-def test_release_script_dry_run_env_post_phase_prints_summary_without_modifying_files(
+def test_release_script_dry_run_env_post_phase_fails_before_git_commands(
     tmp_path, monkeypatch, capsys
 ):
     readme_path = tmp_path / "README.md"
@@ -249,12 +260,15 @@ def test_release_script_dry_run_env_post_phase_prints_summary_without_modifying_
 
     release_script = _load_release_script_module()
 
-    with patch.object(release_script.subprocess, "run") as mock_run:
+    with (
+        patch.object(release_script.subprocess, "run") as mock_run,
+        pytest.raises(
+            SystemExit,
+            match="Invalid 'RELEASE_SCRIPT_PHASE': 'post'. Expected 'pre'.",
+        ),
+    ):
         release_script.main()
 
     assert readme_path.read_text(encoding="utf-8") == original_text
     mock_run.assert_not_called()
-    output = capsys.readouterr().err
-    assert output.startswith("[")
-    assert "INFO" in output
-    assert "Would leave README.md at release version '2.0.0'" in output
+    assert capsys.readouterr().err == ""

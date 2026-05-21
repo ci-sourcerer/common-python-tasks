@@ -461,6 +461,7 @@ class TestBumpVersion:
                             "chore(release): update changelog for v1.2.3",
                         ]
                     ),
+                    call(["git", "push", "origin", "HEAD"]),
                     call(["git", "push", "origin", "v1.2.3"]),
                 ]
             )
@@ -782,6 +783,7 @@ class TestBumpVersion:
                             "chore(release): update changelog for v1.2.3",
                         ]
                     ),
+                    call(["git", "push", "origin", "HEAD"]),
                     call(["git", "push", "origin", "v1.2.3"]),
                 ]
             )
@@ -831,8 +833,11 @@ class TestBumpVersion:
             mock_bump.assert_called_once_with(
                 component="patch", stage=None, dry_run=False, allow_dirty=False
             )
-            mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "v1.2.3"]
+            mock_run_command.assert_has_calls(
+                [
+                    call(["git", "push", "origin", "HEAD"]),
+                    call(["git", "push", "origin", "v1.2.3"]),
+                ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
@@ -877,8 +882,11 @@ class TestBumpVersion:
             mock_bump.assert_called_once_with(
                 component="patch", stage=None, dry_run=False, allow_dirty=True
             )
-            mock_run_command.assert_called_once_with(
-                ["git", "push", "origin", "v1.2.3"]
+            mock_run_command.assert_has_calls(
+                [
+                    call(["git", "push", "origin", "HEAD"]),
+                    call(["git", "push", "origin", "v1.2.3"]),
+                ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
