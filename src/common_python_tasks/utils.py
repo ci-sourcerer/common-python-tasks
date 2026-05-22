@@ -10,7 +10,7 @@ from getpass import getuser
 from importlib.resources import files
 from pathlib import Path
 from shlex import quote
-from typing import Callable, Sequence
+from typing import Callable, Collection, Sequence
 
 from jinja2 import Template
 
@@ -120,7 +120,7 @@ def remove_path(path: Path) -> None:
 def run_command(
     command: Sequence[str | Path | None],
     capture_output: bool = False,
-    acceptable_returncodes: Sequence[int] | None = None,
+    acceptable_returncodes: Collection[int] | None = None,
     env: dict[str, str] | None = None,
     always_show_command: bool = False,
     dry_run: bool = False,
@@ -143,10 +143,9 @@ def run_command(
         The `CompletedProcess` instance from the subprocess run, or `None` for dry-run
         invocations.
     """
-    import subprocess
-
     if acceptable_returncodes is None:
         acceptable_returncodes = {0}
+    acceptable_returncodes = set(acceptable_returncodes)
 
     command = [str(c) for c in command if c is not None]
 
@@ -208,7 +207,18 @@ def load_data_file(
     try:
         data_files = files("common_python_tasks") / "data" / type_identifier
         data_file = data_files / file_name
-        return (Path(str(data_file)), data_file.read_text())
+        text = data_file.read_text()
+        # Try to provide a real filesystem Path when possible (packages in wheels
+        # may store resources inside archives). `as_file()` yields a real path
+        # via a context manager when supported by the Traversable.
+        try:
+            with data_file.as_file() as real_path:
+                return (Path(real_path), text)
+        except (AttributeError, OSError):
+            # Fall back to a Path constructed from the Traversable string
+            # representation so existing callers that index [0] still receive
+            # a Path-like object.
+            return (Path(str(data_file)), text)
     except FileNotFoundError as e:
         if fatal_on_missing:
             fatal(f"Data file not found: {file_name} ({e})")
@@ -239,7 +249,7 @@ def get_container_registry_url() -> str:
 
 
 @lru_cache
-def get_package_name(use_underscores: bool = False) -> str:
+def get_package_name(use_underscores: bool = False) -> str | None:
     """Return the package name from environment or pyproject configuration.
 
     Args:
@@ -250,9 +260,17 @@ def get_package_name(use_underscores: bool = False) -> str:
     """
     import tomllib
 
-    name = os.getenv("PACKAGE_NAME") or tomllib.loads(
-        Path("pyproject.toml").read_text()
-    ).get("project", {}).get("name")
+    name = os.getenv("PACKAGE_NAME")
+    if not name:
+        try:
+            pyproject = Path("pyproject.toml")
+            if pyproject.exists():
+                name = (
+                    tomllib.loads(pyproject.read_text()).get("project", {}).get("name")
+                )
+        except Exception as e:  # pragma: no cover - defensive logging
+            LOGGER.debug("Unable to read pyproject.toml: %s", e)
+
     if use_underscores and name:
         name = package_name_to_underscore(name)
     return name
@@ -365,9 +383,8 @@ def get_prepended_changelog_contents(
         if changelog_path.exists()
         else "# Changelog\n\n## [Unreleased]\n"
     )
-    release_notes = run_git_cliff(
-        ["--unreleased", "--tag", tag_name], capture_output=True
-    ).stdout
+    res = run_git_cliff(["--unreleased", "--tag", tag_name], capture_output=True)
+    release_notes = res.stdout if (res and res.stdout) else ""
     if release_notes.strip():
         # Ensure the prepended section is separated from existing content.
         release_notes = release_notes.rstrip("\n") + "\n\n"
@@ -398,11 +415,12 @@ def prepend_changelog(
 
 def changelog() -> str | None:
     """Generate release notes from git-cliff for unreleased commits."""
-    result = run_git_cliff(["--unreleased"], capture_output=True).stdout
-    if not result:
+    res = run_git_cliff(["--unreleased"], capture_output=True)
+    if not res or not res.stdout:
         LOGGER.warning("git-cliff produced no release notes for unreleased commits")
-        return result
+        return None
 
+    result = res.stdout
     return re.sub(
         r"(?im)\A##\s*\[?unreleased\]?\s*\n?",
         "",
