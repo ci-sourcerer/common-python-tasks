@@ -1,3 +1,27 @@
+## [0.3.0] - 2026-05-22
+
+### 🐛 Bug Fixes
+
+- *(release)* Remove useless post-release phase
+- *(release)* `git push` as necessary
+- *(release)* Resolve release phase during main execution
+- *(tests)* Fix broken release tests
+- Fix log regression
+- Remove "unreleased" section from `git-cliff` output
+- *(tests)* Fix tests for changelog
+
+### 💼 Other
+
+- Add newline to changelog
+
+### 🚜 Refactor
+
+- [**breaking**] Refactor several functions for less redundant code, use of enums, etc.; update tests
+
+### ⚙️ Miscellaneous Tasks
+
+- *(dependabot)* Remove dependabot as "widen" is not yet supported for Python
+- *(release)* Set README version 0.3.0
 ## [0.2.0] - 2026-05-21
 
 ### 🚀 Features
