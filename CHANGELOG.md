@@ -22,6 +22,7 @@
 
 - *(dependabot)* Remove dependabot as "widen" is not yet supported for Python
 - *(release)* Set README version 0.3.0
+
 ## [0.2.0] - 2026-05-21
 
 ### 🚀 Features
@@ -92,6 +93,7 @@
 - Update version in README
 - Remove usless item after all in `pyproject.toml`
 - *(release)* Set README version 0.1.0
+
 # Changelog
 
 ## [Unreleased]
