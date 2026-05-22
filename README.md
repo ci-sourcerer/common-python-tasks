@@ -215,7 +215,7 @@ The following environment variables configure package and container behavior.
 - `GITHUB_RELEASE_TAG` optional tag name to publish for the GitHub Release.
 - `GITHUB_RELEASE_NAME` optional release title to use for the GitHub Release.
 - `GITHUB_RELEASE_BODY` optional release body text to use for the GitHub Release.
-- `RELEASE_UPDATE_CHANGELOG` truthy value to update `CHANGELOG.md` with `git-cliff --tag "$RELEASE_TAG" --prepend CHANGELOG.md` before the release tag is created. This is enabled by default; set it to a falsy value to disable changelog commits during release.
+- `RELEASE_UPDATE_CHANGELOG` truthy value to update `CHANGELOG.md` by prepending the `git-cliff --unreleased --tag "$RELEASE_TAG"` output before the release tag is created. This is enabled by default; set it to a falsy value to disable changelog commits during release.
 - `RELEASE_PRE_SCRIPT` optional shell command to run before the release steps.
 - `RELEASE_POST_SCRIPT` optional shell command to run after the release completes.
 - Hook commands receive the following env vars: `RELEASE_SCRIPT_PHASE`, `RELEASE_TAG`, `RELEASE_VERSION`, `RELEASE_STAGE`, `RELEASE_COMPONENT`, and `RELEASE_DRY_RUN`.

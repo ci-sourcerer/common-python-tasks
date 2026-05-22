@@ -354,7 +354,7 @@ def prepend_changelog(
     """Prepend release notes for the given tag to a changelog file using git-cliff.
 
     Creates the changelog file with a scaffold header if it does not exist, then
-    runs `git-cliff --unreleased --tag <tag_name> --prepend <changelog_path>`.
+    prepends the `git-cliff --unreleased --tag <tag_name>` output to the file.
 
     Args:
         tag_name: The release tag to generate changelog entries for.
@@ -362,20 +362,26 @@ def prepend_changelog(
     """
     if not changelog_path.exists():
         changelog_path.write_text("# Changelog\n\n## [Unreleased]\n", encoding="utf-8")
-    run_git_cliff(["--unreleased", "--tag", tag_name, "--prepend", changelog_path])
+    release_notes = run_git_cliff(
+        ["--unreleased", "--tag", tag_name], capture_output=True
+    ).stdout
+    if release_notes and not release_notes.endswith("\n"):
+        release_notes += "\n"
+
+    existing_changelog = changelog_path.read_text(encoding="utf-8")
+    changelog_path.write_text(release_notes + existing_changelog, encoding="utf-8")
 
 
 def changelog() -> str | None:
     """Generate release notes from git-cliff for unreleased commits."""
-    result = run_git_cliff(["--unreleased"], capture_output=True)
-    notes = result.stdout.strip()
-    if not notes:
+    result = run_git_cliff(["--unreleased"], capture_output=True).stdout
+    if not result:
         LOGGER.warning("git-cliff produced no release notes for unreleased commits")
-        return notes
+        return result
 
     return re.sub(
         r"(?im)\A##\s*\[?unreleased\]?\s*\n?",
         "",
-        notes,
+        result,
         count=1,
     ).strip()

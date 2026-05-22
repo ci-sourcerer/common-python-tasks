@@ -121,17 +121,28 @@ def _should_update_release_changelog() -> bool:
     return env_truthy("RELEASE_UPDATE_CHANGELOG")
 
 
+def _confirm(message: str) -> bool:
+    yes_values = {"y", "yes"}
+    no_values = {"n", "no"}
+    while True:
+        try:
+            response = input(f"{message} [y/N]: ").strip().lower()
+        except (EOFError, OSError):
+            return False
+
+        if response in yes_values:
+            return True
+        if response in no_values:
+            return False
+
+
 def _confirm_release_with_uncommitted_changes(dirty_files: list[Path]) -> bool:
     preview = ", ".join(str(path) for path in dirty_files[:5])
     if len(dirty_files) > 5:
         preview = f"{preview}, ... and {len(dirty_files) - 5} more"
 
     LOGGER.warning("Repository has uncommitted changes: %s", preview)
-    try:
-        response = input("Proceed with release anyway? [y/N]: ").strip().lower()
-    except (EOFError, OSError):
-        return False
-    return response in {"y", "yes"}
+    return _confirm("Proceed with release anyway?")
 
 
 def _resolve_allow_dirty_release(dirty_files: list[Path]) -> bool:
@@ -155,20 +166,14 @@ def _resolve_allow_dirty_release(dirty_files: list[Path]) -> bool:
 
 
 def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
-    from .utils import prepend_changelog, run_command
+    from .utils import log_dry_run, prepend_changelog, run_command
 
     changelog_path = Path("CHANGELOG.md")
     if dry_run:
-        run_command(
-            [
-                "git-cliff",
-                "--unreleased",
-                "--tag",
-                release_tag,
-                "--prepend",
-                changelog_path,
-            ],
-            dry_run=True,
+        log_dry_run(
+            "Would prepend generated git-cliff release notes for %s to %s",
+            release_tag,
+            changelog_path,
         )
         run_command(["git", "add", changelog_path], dry_run=True)
         run_command(
@@ -1014,7 +1019,7 @@ def _run_release_flow(
     post_script = post_script or os.getenv("RELEASE_POST_SCRIPT")
 
     ensure_on_default_branch()
-    allow_dirty = _resolve_allow_dirty_release(get_dirty_files())
+    allow_dirty = dry_run or _resolve_allow_dirty_release(get_dirty_files())
     hook_env = build_release_hook_environment(release_component, release_stage, dry_run)
     if allow_dirty:
         hook_env[NO_PROMPT_ENV_VAR] = "1"

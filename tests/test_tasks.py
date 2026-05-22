@@ -66,6 +66,16 @@ def test_format_all_fails_when_no_tools_installed(mock_find_spec):
         assert exc_info.value.code == 1
 
 
+def test_confirm_loops_until_valid_response():
+    from common_python_tasks.tasks import _confirm
+
+    with patch("builtins.input", side_effect=["maybe", "Y"]):
+        assert _confirm("Proceed?") is True
+
+    with patch("builtins.input", side_effect=["", "no"]):
+        assert _confirm("Proceed?") is False
+
+
 def test_lint_all_fails_when_no_tools_installed(mock_find_spec):
     from common_python_tasks.tasks import lint_all
     from common_python_tasks.utils import is_package_installed
@@ -698,7 +708,7 @@ class TestBumpVersion:
 
             mock_clean.assert_not_called()
             mock_bump.assert_called_once_with(
-                component="patch", stage=None, dry_run=True, allow_dirty=False
+                component="patch", stage=None, dry_run=True, allow_dirty=True
             )
             mock_build_package.assert_not_called()
             mock_publish.assert_not_called()
@@ -708,16 +718,10 @@ class TestBumpVersion:
             mock_logger.info.assert_any_call(
                 "\033[93m[DRY RUN]\033[0m Would clean generated artifacts before release"
             )
-            mock_run_command.assert_any_call(
-                [
-                    "git-cliff",
-                    "--unreleased",
-                    "--tag",
-                    "v1.2.3",
-                    "--prepend",
-                    Path("CHANGELOG.md"),
-                ],
-                dry_run=True,
+            mock_logger.info.assert_any_call(
+                "\033[93m[DRY RUN]\033[0m Would prepend generated git-cliff release notes for %s to %s",
+                "v1.2.3",
+                Path("CHANGELOG.md"),
             )
             mock_run_command.assert_any_call(
                 ["git", "add", Path("CHANGELOG.md")],
@@ -1128,7 +1132,7 @@ class TestGitHubReleasePublishing:
         assert json.loads(requests[1]["data"].decode("utf-8")) == {
             "tag_name": "v1.2.3",
             "name": "v1.2.3",
-            "body": changelog.strip(),
+            "body": "- Fix critical bug",
             "draft": False,
             "prerelease": False,
         }

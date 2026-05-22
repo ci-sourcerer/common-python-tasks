@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -200,10 +199,11 @@ def test_prepend_changelog_creates_scaffold_when_file_missing(tmp_path):
     changelog_path = tmp_path / "CHANGELOG.md"
 
     with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        mock_run_command.return_value = MagicMock(stdout="## [1.2.3] - 2026-05-22")
         prepend_changelog("v1.2.3", changelog_path)
 
-    assert (
-        changelog_path.read_text(encoding="utf-8") == "# Changelog\n\n## [Unreleased]\n"
+    assert changelog_path.read_text(encoding="utf-8") == (
+        "## [1.2.3] - 2026-05-22\n# Changelog\n\n## [Unreleased]\n"
     )
     mock_run_command.assert_called_once_with(
         [
@@ -211,10 +211,8 @@ def test_prepend_changelog_creates_scaffold_when_file_missing(tmp_path):
             "--unreleased",
             "--tag",
             "v1.2.3",
-            "--prepend",
-            changelog_path,
         ],
-        capture_output=False,
+        capture_output=True,
         acceptable_returncodes={0},
     )
 
@@ -224,19 +222,43 @@ def test_prepend_changelog_does_not_overwrite_existing_file(tmp_path):
     changelog_path.write_text("# Existing Changelog\n", encoding="utf-8")
 
     with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        mock_run_command.return_value = MagicMock(stdout="## [2.0.0] - 2026-05-22\n")
         prepend_changelog("v2.0.0", changelog_path)
 
-    assert changelog_path.read_text(encoding="utf-8") == "# Existing Changelog\n"
+    assert changelog_path.read_text(encoding="utf-8") == (
+        "## [2.0.0] - 2026-05-22\n# Existing Changelog\n"
+    )
     mock_run_command.assert_called_once_with(
         [
             "git-cliff",
             "--unreleased",
             "--tag",
             "v2.0.0",
-            "--prepend",
-            changelog_path,
         ],
-        capture_output=False,
+        capture_output=True,
+        acceptable_returncodes={0},
+    )
+
+
+def test_prepend_changelog_adds_trailing_newline_to_generated_section(tmp_path):
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text("# Existing Changelog", encoding="utf-8")
+
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        mock_run_command.return_value = MagicMock(stdout="## [2.0.0] - 2026-05-22")
+        prepend_changelog("v2.0.0", changelog_path)
+
+    assert changelog_path.read_text(encoding="utf-8") == (
+        "## [2.0.0] - 2026-05-22\n# Existing Changelog"
+    )
+    mock_run_command.assert_called_once_with(
+        [
+            "git-cliff",
+            "--unreleased",
+            "--tag",
+            "v2.0.0",
+        ],
+        capture_output=True,
         acceptable_returncodes={0},
     )
 
@@ -245,10 +267,11 @@ def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypat
     monkeypatch.chdir(tmp_path)
 
     with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        mock_run_command.return_value = MagicMock(stdout="## [1.0.0] - 2026-05-22\n")
         prepend_changelog("v1.0.0")
 
     assert (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8") == (
-        "# Changelog\n\n## [Unreleased]\n"
+        "## [1.0.0] - 2026-05-22\n# Changelog\n\n## [Unreleased]\n"
     )
     mock_run_command.assert_called_once_with(
         [
@@ -256,10 +279,8 @@ def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypat
             "--unreleased",
             "--tag",
             "v1.0.0",
-            "--prepend",
-            Path("CHANGELOG.md"),
         ],
-        capture_output=False,
+        capture_output=True,
         acceptable_returncodes={0},
     )
 
