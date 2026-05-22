@@ -8,6 +8,15 @@ from . import utils
 
 LOGGER = logging.getLogger(__name__)
 
+TRUTHY_VALUES = {
+    "1",
+    "true",
+    "yes",
+    "on",
+    "enabled",
+    "y",
+    "t",
+}
 WORKDIR_PATH_ENV_VAR = "WORKDIR_PATH"
 WORKDIR_PATH_DEFAULT = "/workspace"
 _AUTO_INJECTED_BUILD_ARG_ENV_VARS = (WORKDIR_PATH_ENV_VAR,)
@@ -20,17 +29,9 @@ def env_truthy(env_var: str) -> bool:
         env_var: The name of the environment variable.
 
     Returns:
-        True if the environment variable is set to a truthy value, False otherwise.
+        `True` if the environment variable is set to a truthy value, `False` otherwise.
     """
-    return os.getenv(env_var, "").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-        "enabled",
-        "y",
-        "t",
-    }
+    return os.getenv(env_var, "").lower() in TRUTHY_VALUES
 
 
 def get_workdir_path() -> str:
@@ -45,7 +46,7 @@ def get_workdir_path() -> str:
 def inject_auto_build_args_from_env(
     build_args: dict[str, str] | None,
 ) -> dict[str, str]:
-    """Inject configured env vars into Docker build args when present.
+    """Inject configured environment variables into Docker build args when present.
 
     Environment-driven build args are only injected if they are set, and never
     override explicitly provided build args.
@@ -143,9 +144,12 @@ def resolve_extension_content(descriptor: dict[str, str | None]) -> str:
 
 def get_cache_id_suffix(no_cache: bool) -> str:
     """Return a cache-break suffix for Docker cache mount IDs.
+    Args:
+        no_cache: Whether to disable the Docker cache.
 
-    If `no_cache` is enabled, this returns a stable random suffix for the
-    current task invocation; otherwise it returns an empty string.
+    Returns:
+        If `no_cache` is enabled, a stable random suffix for the
+        current task invocation; otherwise an empty string.
     """
     if not no_cache:
         return ""
@@ -154,7 +158,14 @@ def get_cache_id_suffix(no_cache: bool) -> str:
 
 
 def load_container_env_file(path: str | None = None) -> str | None:
-    """Return the contents of a container env file if it exists and is non-empty."""
+    """Return the contents of a container env file if it exists and is non-empty.
+
+    Args:
+        path: Path to the container env file.
+
+    Returns:
+        The contents of the container env file if it exists and is non-empty, otherwise `None`.
+    """
 
     if path is not None:
         container_env_path = Path(path)
@@ -170,7 +181,14 @@ def load_container_env_file(path: str | None = None) -> str | None:
 
 
 def split_colon_delimited_values(value: str) -> list[str]:
-    """Split a colon-delimited string while preserving quoted substrings."""
+    """Split a colon-delimited string while preserving quoted substrings.
+
+    Args:
+        value: The colon-delimited string to split.
+
+    Returns:
+        A list of strings representing the split values.
+    """
     if not value or not value.strip():
         return []
 
@@ -183,7 +201,14 @@ def split_colon_delimited_values(value: str) -> list[str]:
 
 
 def parse_container_env_tokens(value: str | list[str] | None) -> list[str]:
-    """Parse `KEY=VALUE` container env declarations from string or list input."""
+    """Parse `KEY=VALUE` container env declarations from string or list input.
+
+    Args:
+        value: The string or list of container env declarations.
+
+    Returns:
+        A list of parsed container env tokens.
+    """
     if value is None:
         return []
 

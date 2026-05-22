@@ -37,7 +37,7 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
         patch.object(release_script, "_get_task_docstring", return_value="Format code"),
         patch.object(
             release_script,
-            "_get_task_tags",
+            "get_task_tags",
             return_value=["common", "format"],
         ),
         patch.object(

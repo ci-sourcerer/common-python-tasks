@@ -92,6 +92,33 @@ def test_print_available_tasks_includes_docstrings(capsys):
     assert "Args:" not in captured.out
 
 
+def test_get_task_tags_excludes_synthetic_task_prefix_tags():
+    from common_python_tasks.__main__ import get_task_tags
+
+    assert get_task_tags("format") == ["common", "format"]
+
+
+def test_get_task_tags_returns_none_for_unknown_task():
+    from common_python_tasks.__main__ import get_task_tags
+
+    assert get_task_tags("non-existent-task") is None
+
+
+def test_clean_dist_only_removes_only_dist(tmp_path, monkeypatch):
+    from common_python_tasks.tasks import clean
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dist").mkdir()
+    (tmp_path / ".pytest_cache").mkdir()
+    (tmp_path / "foo.pyc").write_text("x")
+
+    clean(dist_only=True)
+
+    assert not (tmp_path / "dist").exists()
+    assert (tmp_path / ".pytest_cache").exists()
+    assert (tmp_path / "foo.pyc").exists()
+
+
 def test_public_tasks_defaults_to_common_profile():
     import common_python_tasks
 
@@ -221,6 +248,7 @@ class TestBumpVersion:
         assert tag_calls[-1] == "v1.2.4"
 
     def test_bump_version_defaults_to_auto(self, mock_clean_repo_with_tag, tag_calls):
+        from common_python_tasks.git import ReleaseComponent
         from common_python_tasks.tasks import bump_version
 
         def run_command_side_effect(command, *args, **kwargs):
@@ -241,7 +269,7 @@ class TestBumpVersion:
         with (
             patch(
                 "common_python_tasks.git.infer_bump_component_from_git_cliff",
-                return_value="minor",
+                return_value=ReleaseComponent.MINOR,
             ),
             patch(
                 "common_python_tasks.utils.run_command",
@@ -253,6 +281,7 @@ class TestBumpVersion:
         assert tag_calls[-1] == "v1.3.0"
 
     def test_bump_version_auto_for_pre_production_forces_patch(self, tag_calls):
+        from common_python_tasks.git import ReleaseComponent
         from common_python_tasks.tasks import bump_version
 
         def run_command_side_effect(command, *args, **kwargs):
@@ -274,7 +303,7 @@ class TestBumpVersion:
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch(
                 "common_python_tasks.git.infer_bump_component_from_git_cliff",
-                return_value="major",
+                return_value=ReleaseComponent.MAJOR,
             ),
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
@@ -1266,3 +1295,306 @@ class TestGitHubReleasePublishing:
         mock_repository.assert_not_called()
         mock_token.assert_not_called()
         mock_urlopen.assert_not_called()
+
+
+def test_build_with_containers_calls_task_build_image():
+    from common_python_tasks.tasks import build
+
+    with (
+        patch("common_python_tasks.tasks.build_package") as mock_build_package,
+        patch("common_python_tasks.tasks.build_image") as mock_build_image,
+    ):
+        build(
+            has_containers=True,
+            debug=True,
+            no_cache=True,
+            plain=True,
+            single_arch=True,
+        )
+
+    mock_build_package.assert_called_once_with()
+    mock_build_image.assert_called_once_with(
+        debug=True,
+        no_cache=True,
+        plain=True,
+        single_arch=True,
+        build_args=None,
+        container_env=None,
+        container_envfile=None,
+    )
+
+
+def test_build_forwards_container_build_options():
+    from common_python_tasks.tasks import build
+
+    with (
+        patch("common_python_tasks.tasks.build_package") as mock_build_package,
+        patch("common_python_tasks.tasks.build_image") as mock_build_image,
+    ):
+        build(
+            has_containers=True,
+            debug=True,
+            no_cache=True,
+            plain=True,
+            single_arch=True,
+            build_args=["FOO=bar"],
+            container_env=["X=1"],
+            container_envfile=["env1.env", "env2.env"],
+        )
+
+    mock_build_package.assert_called_once_with()
+    mock_build_image.assert_called_once_with(
+        debug=True,
+        no_cache=True,
+        plain=True,
+        single_arch=True,
+        build_args=["FOO=bar"],
+        container_env=["X=1"],
+        container_envfile=["env1.env", "env2.env"],
+    )
+
+
+def test_build_without_containers_skips_task_build_image():
+    from common_python_tasks.tasks import build
+
+    with (
+        patch("common_python_tasks.tasks.build_package") as mock_build_package,
+        patch("common_python_tasks.tasks.build_image") as mock_build_image,
+    ):
+        build(has_containers=False)
+
+    mock_build_package.assert_called_once_with()
+    mock_build_image.assert_not_called()
+
+
+def test_fastapi_stack_up_passes_container_build_options(
+    temp_project_dir,
+    mock_load_data_file,
+    mock_run_command,
+):
+    from common_python_tasks.tasks import fastapi_stack_up
+
+    build_image_calls: list[dict[str, object]] = []
+
+    def fake_build_image(*args, **kwargs):
+        build_image_calls.append(kwargs)
+        return ("version", "commit")
+
+    with (
+        patch("common_python_tasks.docker.build_image", new=fake_build_image),
+        patch(
+            "common_python_tasks.env.load_container_env_tokens", return_value=["X=1"]
+        ),
+        patch(
+            "common_python_tasks.docker_compose.ensure_secrets_generated"
+        ) as mock_secrets,  # noqa: F841
+        patch(
+            "common_python_tasks.docker_compose.load_and_prepare_compose",
+            return_value=([], [], [], {"API_PORT": "8080"}),
+        ),
+        patch("common_python_tasks.docker_compose.run_docker_compose_command"),
+    ):
+        fastapi_stack_up(
+            detach=True,
+            build_args=["FOO=bar"],
+            container_env=["X=1"],
+            container_envfile=["env1.env"],
+        )
+
+    assert len(build_image_calls) == 1
+    assert build_image_calls[0]["build_args"] == ["FOO=bar"]
+    assert build_image_calls[0]["container_env"] == ["X=1"]
+    assert build_image_calls[0]["container_envfile"] == ["env1.env"]
+
+
+def test_container_shell_selects_most_recent_tag(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_package_name,
+):
+    """When `tag` is None, `container_shell` should pick the most-recently-built tag (no build)."""
+    from common_python_tasks.tasks import container_shell
+
+    run_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original(command, *args, **kwargs)
+            result.stdout = (
+                "docker.io/test-package:abc123\n" "docker.io/test-package:1.0.0\n"
+            )
+            return result
+        if "docker" in command and "run" in command:
+            run_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    container_shell(no_echo_env=True)
+
+    assert len(run_calls) == 1
+    run_call = [str(part) for part in run_calls[0] if part is not None]
+
+    assert "test-package:abc123" in " ".join(run_call)
+    assert run_call[-2:] == [
+        "-c",
+        "$(command -v zsh || command -v fish || command -v ksh || command -v bash || command -v sh) || exit 127",
+    ]
+
+
+def test_run_container_passes_docker_runtime_options(
+    temp_project_dir,
+    mock_run_command,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """`run_container` should forward env, envfile, privileged, and volumes to docker run."""
+    from common_python_tasks import utils
+    from common_python_tasks.tasks import run_container
+
+    monkeypatch.setattr(utils, "get_full_image_name", lambda: "docker.io/test-package")
+
+    run_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "inspect"]:
+            result = original(command, *args, **kwargs)
+            result.returncode = 0
+            return result
+        if len(command) >= 2 and command[:2] == ["docker", "run"]:
+            run_calls.append([str(part) for part in command if part is not None])
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    run_container(
+        "custom-tag",
+        entrypoint="/bin/sh",
+        command="echo hi",
+        root=True,
+        echo_env=False,
+        env=["FOO=bar", "BAZ"],
+        envfile=[".env", ".env2"],
+        privileged=True,
+        volumes=["/tmp:/tmp", "/var/log:/var/log"],
+    )
+
+    assert len(run_calls) == 1
+    run_call = run_calls[0]
+    pairs = [run_call[i : i + 2] for i in range(len(run_call) - 1)]
+    assert ["-e", "FOO=bar"] in pairs
+    assert ["-e", "BAZ"] in pairs
+    assert ["--env-file", ".env"] in pairs
+    assert ["--env-file", ".env2"] in pairs
+    assert ["-v", "/tmp:/tmp"] in pairs
+    assert ["-v", "/var/log:/var/log"] in pairs
+    assert "--privileged" in run_call
+    assert run_call[-2:] == ["-c", "echo hi"]
+
+
+def test_container_shell_forwards_docker_run_runtime_flags(
+    temp_project_dir,
+    mock_run_command,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """`container_shell` should forward docker run env, envfile, privileged, and volumes options."""
+    from common_python_tasks import utils
+    from common_python_tasks.tasks import container_shell
+
+    monkeypatch.setattr(utils, "get_full_image_name", lambda: "docker.io/test-package")
+
+    run_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original(command, *args, **kwargs)
+            result.stdout = "docker.io/test-package:abc123\n"
+            return result
+        if len(command) >= 2 and command[:2] == ["docker", "run"]:
+            run_calls.append([str(part) for part in command if part is not None])
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    container_shell(
+        tag="custom",
+        shell="bash",
+        root=False,
+        no_echo_env=True,
+        env=["HELLO=WORLD"],
+        envfile=["/tmp/envfile"],
+        privileged=True,
+        volumes=["/tmp:/tmp"],
+    )
+
+    assert len(run_calls) == 1
+    run_call = run_calls[0]
+    pairs = [run_call[i : i + 2] for i in range(len(run_call) - 1)]
+    assert ["-e", "HELLO=WORLD"] in pairs
+    assert ["--env-file", "/tmp/envfile"] in pairs
+    assert ["-v", "/tmp:/tmp"] in pairs
+    assert "--privileged" in run_call
+    assert run_call[-2:] == ["-c", "$(command -v bash) || exit 127"]
+
+
+def test_container_shell_wraps_fallback_shell_with_env_dump(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_package_name,
+):
+    """`container_shell` should compose a shell fallback command that survives `echo_env=True`."""
+    from common_python_tasks.tasks import container_shell
+
+    run_calls: list[list[str | None]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original(command, *args, **kwargs)
+            result.stdout = "docker.io/test-package:abc123\n"
+            return result
+        if "docker" in command and "run" in command:
+            run_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    container_shell(no_echo_env=False)
+
+    assert len(run_calls) == 1
+    run_call = [str(part) for part in run_calls[0] if part is not None]
+    assert run_call[-2] == "-c"
+    assert (
+        run_call[-1]
+        == "echo '=== Container environment variables ===' && env | sort && echo '========================================' && exec $(command -v zsh || command -v fish || command -v ksh || command -v bash || command -v sh) || exit 127"
+    )
+
+
+def test_container_shell_fails_when_no_images(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_package_name,
+):
+    """`container_shell` should exit when no built images exist and `tag` is None."""
+    from common_python_tasks.tasks import container_shell
+
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
+            result = original(command, *args, **kwargs)
+            result.stdout = ""
+            return result
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    with pytest.raises(SystemExit):
+        container_shell()

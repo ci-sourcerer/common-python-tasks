@@ -13,7 +13,7 @@ def get_available_tasks(internal: bool = False) -> list[str]:
     """Return available task names for this package.
 
     Args:
-        internal: When True, include internal task names starting with '_'.
+        internal: If `True`, include internal task names starting with '_'.
 
     Returns:
         A list of task names.
@@ -39,7 +39,6 @@ def _extract_docstring_excerpt(doc: str) -> str:
 
 
 def _get_task_docstring(task_name: str) -> str | None:
-
     task_config = tasks()["tasks"].get(task_name)
     if not isinstance(task_config, dict):
         return None
@@ -50,11 +49,8 @@ def _get_task_docstring(task_name: str) -> str | None:
 
     module_name, func_name = script.split(":", 1)
 
-    try:
-        module = importlib.import_module(module_name)
-        func = getattr(module, func_name)
-    except (ImportError, AttributeError):
-        return None
+    module = importlib.import_module(module_name)
+    func = getattr(module, func_name)
 
     doc = inspect.getdoc(func)
     if not doc:
@@ -63,17 +59,25 @@ def _get_task_docstring(task_name: str) -> str | None:
     return _extract_docstring_excerpt(doc)
 
 
-def _get_task_tags(task_name: str) -> list[str] | None:
-    task_variants = getattr(tasks, "_tasks", {}).get(task_name)
-    if not task_variants:
-        return None
+def get_task_tags(task_name: str) -> list[str] | None:
+    """Return the tags associated with a task.
 
-    tags = {
-        tag
-        for variant in task_variants
-        for tag in getattr(variant, "tags", ())
-        if isinstance(tag, str) and not tag.startswith("task-")
-    }
+    Args:
+        task_name: The name of the task.
+
+    Returns:
+        A list of tags associated with the task, or `None` if no tags are found.
+    """
+    tags = set()
+    for task in tasks:
+        if task.name != task_name:
+            continue
+
+        for tag in task.tags:
+            # `task-...` tags are internal synthetic tags auto-added by TaskCollection.
+            if not tag.startswith("task-"):
+                tags.add(tag)
+
     return sorted(tags) or None
 
 
@@ -81,8 +85,8 @@ def print_available_tasks(internal: bool = False, include_docs: bool = False) ->
     """Print available tasks.
 
     Args:
-        internal: Whether or not to include internal task names starting with '_'.
-        include_docs: Whether or not to include task docstrings.
+        internal: If `True`, include internal task names starting with '_'.
+        include_docs: If `True`, include task docstrings.
     """
     print("\nAvailable tasks in this release:\n")
     for task_name in get_available_tasks(internal=internal):

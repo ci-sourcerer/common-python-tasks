@@ -4,13 +4,14 @@ import logging
 import os
 import re
 import subprocess
+import sys
 from enum import StrEnum
 from pathlib import Path
 
 from common_python_tasks.__main__ import (
     _get_task_docstring,
-    _get_task_tags,
     get_available_tasks,
+    get_task_tags,
 )
 
 
@@ -73,7 +74,7 @@ def _get_latest_release_version() -> str:
         None,
     )
     if latest_tag is None:
-        raise SystemExit("Unable to determine the latest Git tag for README updates")
+        sys.exit("Unable to determine the latest Git tag for README updates")
 
     return latest_tag.removeprefix("v")
 
@@ -84,12 +85,10 @@ def _resolve_release_phase(phase: ReleasePhase | None = None) -> ReleasePhase:
 
     phase_value = os.environ.get(RELEASE_SCRIPT_PHASE)
     if phase_value is None:
-        raise SystemExit(f"{RELEASE_SCRIPT_PHASE} must be set to 'pre'.")
+        sys.exit(f"{RELEASE_SCRIPT_PHASE} must be set to 'pre'.")
 
     if phase_value.lower() != "pre":
-        raise SystemExit(
-            f"Invalid {RELEASE_SCRIPT_PHASE!r}: {phase_value!r}. Expected 'pre'."
-        )
+        sys.exit(f"Invalid {RELEASE_SCRIPT_PHASE!r}: {phase_value!r}. Expected 'pre'.")
     return ReleasePhase.PRE
 
 
@@ -104,7 +103,7 @@ def build_tasks_table() -> str:
     for task_name in get_available_tasks(internal=False):
         doc = _get_task_docstring(task_name) or ""
         description = " ".join(doc.splitlines()).strip()
-        tags = _get_task_tags(task_name) or []
+        tags = get_task_tags(task_name) or []
         lines.append(f"| `{task_name}` | {description} | {', '.join(tags)} |")
 
     lines.append("<!-- end-tasks-table -->")
@@ -115,7 +114,7 @@ def _update_readme_for_pre_release(
     readme_text: str, current_version: str, release_version: str
 ) -> str:
     if current_version not in readme_text:
-        raise SystemExit(
+        sys.exit(
             "README.md does not contain the latest tagged version "
             f"{current_version!r} to update"
         )
@@ -166,7 +165,7 @@ def main() -> None:
     )
 
     if updated_text == readme_text:
-        raise SystemExit("README.md was not changed")
+        sys.exit("README.md was not changed")
 
     readme_path.write_text(updated_text, encoding="utf-8")
     _commit_readme_update(release_version)

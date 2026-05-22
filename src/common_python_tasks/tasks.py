@@ -21,7 +21,7 @@ class _ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-LOGGER = logging.getLogger("common_python_tasks")
+LOGGER = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 handler.setFormatter(_ColoredFormatter("[%(asctime)s] %(levelname)s: %(message)s"))
 LOGGER.addHandler(handler)
@@ -116,7 +116,7 @@ NO_PROMPT_ENV_VAR = "COMMON_PYTHON_TASKS_NO_PROMPT"
 
 
 def _should_update_release_changelog() -> bool:
-    from common_python_tasks.env import env_truthy
+    from .env import env_truthy
 
     return env_truthy("RELEASE_UPDATE_CHANGELOG")
 
@@ -135,7 +135,7 @@ def _confirm_release_with_uncommitted_changes(dirty_files: list[Path]) -> bool:
 
 
 def _resolve_allow_dirty_release(dirty_files: list[Path]) -> bool:
-    from common_python_tasks.utils import fatal
+    from .utils import fatal
 
     if not dirty_files:
         return False
@@ -155,7 +155,7 @@ def _resolve_allow_dirty_release(dirty_files: list[Path]) -> bool:
 
 
 def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
-    from common_python_tasks.utils import prepend_changelog, run_command
+    from .utils import prepend_changelog, run_command
 
     changelog_path = Path("CHANGELOG.md")
     if dry_run:
@@ -232,7 +232,7 @@ def _parse_build_args(
 @tasks.script(task_name="_black", tags=["format", "internal", "common"])
 def black() -> None:
     """Run black formatting."""
-    from common_python_tasks.utils import require_package, run_command
+    from .utils import require_package, run_command
 
     require_package("black")
     run_command(["black", "--quiet", "."])
@@ -241,7 +241,7 @@ def black() -> None:
 @tasks.script(task_name="_isort", tags=["format", "internal", "common"])
 def isort() -> None:
     """Run isort formatting."""
-    from common_python_tasks.utils import get_config_path, require_package, run_command
+    from .utils import get_config_path, require_package, run_command
 
     require_package("isort")
     isort_config_path = get_config_path(
@@ -265,7 +265,7 @@ def isort() -> None:
 @tasks.script(task_name="_autoflake", tags=["format", "internal", "common"])
 def autoflake() -> None:
     """Run autoflake to remove unused imports."""
-    from common_python_tasks.utils import require_package, run_command
+    from .utils import require_package, run_command
 
     require_package("autoflake")
     run_command(
@@ -283,7 +283,7 @@ def autoflake() -> None:
 @tasks.script(task_name="_black_check", tags=["lint", "internal", "common"])
 def black_check() -> None:
     """Run black in check mode."""
-    from common_python_tasks.utils import require_package, run_command
+    from .utils import require_package, run_command
 
     require_package("black")
     run_command(["black", "--quiet", "--diff", Path("."), "--check"])
@@ -292,7 +292,7 @@ def black_check() -> None:
 @tasks.script(task_name="_isort_check", tags=["lint", "common"])
 def isort_check() -> None:
     """Run isort linting."""
-    from common_python_tasks.utils import get_config_path, require_package, run_command
+    from .utils import get_config_path, require_package, run_command
 
     require_package("isort")
     isort_config_path = get_config_path(
@@ -317,7 +317,7 @@ def isort_check() -> None:
 @tasks.script(task_name="_autoflake_check", tags=["lint", "internal", "common"])
 def autoflake_check() -> None:
     """Run autoflake in check mode."""
-    from common_python_tasks.utils import require_package, run_command
+    from .utils import require_package, run_command
 
     require_package("autoflake")
     run_command(
@@ -335,7 +335,7 @@ def autoflake_check() -> None:
 @tasks.script(task_name="_flake8_check", tags=["lint", "common"])
 def flake8_check() -> None:
     """Run flake8 linting."""
-    from common_python_tasks.utils import get_config_path, require_package, run_command
+    from .utils import get_config_path, require_package, run_command
 
     require_package("flake8")
 
@@ -359,7 +359,7 @@ def test(quiet: bool = False) -> None:
     Args:
         quiet: If `True`, run tests in a quieter mode.
     """
-    from common_python_tasks.utils import (
+    from .utils import (
         get_config_path,
         get_package_name,
         is_package_installed,
@@ -422,25 +422,28 @@ def clean(dist_only: bool = False) -> None:
             artifacts), leaving other temporary files like `__pycache__` and
             `.pytest_cache` intact.
     """
-    import shutil
+    from .utils import remove_path
 
-    for item in [
-        *[Path(p) for p in [".pytest_cache", "dist", ".mypy_cache"]],
-        *Path(".").rglob("__pycache__"),
-        *Path(".").rglob("*.pyc"),
-        Path(".coverage"),
-        Path("coverage.xml"),
-    ]:
-        if item.is_dir():
-            shutil.rmtree(item, ignore_errors=True)
-        else:
-            item.unlink(missing_ok=True)
+    if dist_only:
+        remove_path(Path("dist"))
+        return
+    else:
+        to_clean = [
+            *[Path(p) for p in [".pytest_cache", "dist", ".mypy_cache"]],
+            *Path(".").rglob("__pycache__"),
+            *Path(".").rglob("*.pyc"),
+            Path(".coverage"),
+            Path("coverage.xml"),
+        ]
+
+    for item in to_clean:
+        remove_path(item)
 
 
 @tasks.script(task_name="format", tags=["format", "common"])
 def format_all() -> None:
     """Format Python code with autoflake, black, and isort."""
-    from common_python_tasks.utils import run_available_tools
+    from .utils import run_available_tools
 
     run_available_tools(
         [
@@ -455,7 +458,7 @@ def format_all() -> None:
 @tasks.script(task_name="lint", tags=["lint", "common"])
 def lint_all() -> None:
     """Lint Python code with autoflake, black, isort, and flake8."""
-    from common_python_tasks.utils import run_available_tools
+    from .utils import run_available_tools
 
     run_available_tools(
         [
@@ -495,12 +498,14 @@ def build_image(
     Precedence for container env declarations is: `.containerenv`, `container_envfile`, `CONTAINER_ENV`, then `container_env`.
     All supported sources are stacked in that order.
     """
-    from common_python_tasks.docker import (
+    from .docker import (
         build_deps_image,
-        build_image,
+    )
+    from .docker import build_image as _build_image
+    from .docker import (
         prune_images_keep,
     )
-    from common_python_tasks.env import (
+    from .env import (
         get_cache_id_suffix,
         get_container_deps_move_script,
         get_prune_keep,
@@ -512,11 +517,11 @@ def build_image(
         render_container_deps_move_script,
         resolve_extension_content,
     )
-    from common_python_tasks.project import (
+    from .project import (
         has_debug_dependency_group,
         resolve_container_entrypoint_command,
     )
-    from common_python_tasks.utils import (
+    from .utils import (
         fatal,
         get_full_image_name,
         get_package_name,
@@ -660,7 +665,7 @@ def build_image(
         },
     )
 
-    version_tag, commit_tag = build_image(
+    version_tag, commit_tag = _build_image(
         dockerfile_path=None,
         dockerfile_text=dockerfile_text,
         context_path=Path("."),
@@ -712,7 +717,7 @@ def run_container(
         privileged: Whether to run the container with `--privileged`.
         volumes: Repeated volume mounts to pass with `-v`.
     """
-    from common_python_tasks.utils import (
+    from .utils import (
         fatal,
         get_full_image_name,
         get_package_name,
@@ -815,11 +820,11 @@ def push_image(debug: bool = False) -> None:
     Args:
         debug: Push the debug image.
     """
-    from common_python_tasks.git import (
+    from .git import (
         get_image_tag,
         has_tags_later_in_history,
     )
-    from common_python_tasks.utils import (
+    from .utils import (
         get_full_image_name,
         run_command,
     )
@@ -846,7 +851,7 @@ def publish_package(build_first: bool = True) -> None:
     Args:
         build_first: If `True`, build the package before publishing.
     """
-    from common_python_tasks.utils import run_command
+    from .utils import run_command
 
     if build_first:
         build_package(clean_dist=True)
@@ -866,15 +871,13 @@ def publish_github_release(
     assets: list[str] | None = None,
 ) -> None:
     """Publish or update a GitHub Release for the current repository."""
-    from common_python_tasks.env import env_truthy
-    from common_python_tasks.github import (
+    from .env import env_truthy
+    from .github import (
         get_github_release_asset_paths,
     )
-    from common_python_tasks.github import (
-        publish_github_release as publish_github_release_helper,
-    )
-    from common_python_tasks.project import get_release_tag_from_poetry_version
-    from common_python_tasks.utils import fatal
+    from .github import publish_github_release as publish_github_release_helper
+    from .project import get_release_tag_from_poetry_version
+    from .utils import fatal
 
     resolved_tag_name = tag_name or os.getenv("GITHUB_RELEASE_TAG")
     if resolved_tag_name is None:
@@ -901,7 +904,7 @@ def publish_github_release(
 @tasks.script(task_name="build-package", tags=["packaging", "build", "common"])
 def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
     """Build the package (wheel and sdist)."""
-    from common_python_tasks.utils import run_command
+    from .utils import run_command
 
     command = ["poetry", "build"]
     if wheel_only:
@@ -933,12 +936,14 @@ def bump_version(
     Returns:
         The new version string that was/would be set.
     """
-    from common_python_tasks.git import (
+    from .git import (
         compute_next_release_version,
         ensure_on_default_branch,
         get_dirty_files,
+        parse_release_component,
+        parse_release_stage,
     )
-    from common_python_tasks.utils import (
+    from .utils import (
         fatal,
         log_dry_run,
         run_command,
@@ -952,7 +957,10 @@ def bump_version(
             "Please commit or stash changes before bumping version."
         )
 
-    result = compute_next_release_version(component, stage)
+    result = compute_next_release_version(
+        parse_release_component(component),
+        parse_release_stage(stage),
+    )
     new_version = result.version
 
     if dry_run:
@@ -966,15 +974,9 @@ def bump_version(
 @tasks.script(tags=["packaging", "release", "common"])
 def changelog() -> None:
     """Print the changelog for the current version based on git history and git-cliff."""
-    from common_python_tasks.utils import changelog as _changelog
+    from .utils import changelog as _changelog
 
     print(_changelog())
-
-
-def _normalize_release_stage(stage: str | None) -> str | None:
-    if stage is not None and stage.lower() == "none":
-        return None
-    return stage
 
 
 def _run_release_flow(
@@ -994,23 +996,26 @@ def _run_release_flow(
     pre_script: str | None = None,
     post_script: str | None = None,
 ) -> None:
-    from common_python_tasks.git import (
+    from .git import (
         build_release_hook_environment,
         ensure_on_default_branch,
         get_dirty_files,
+        parse_release_component,
+        parse_release_stage,
     )
-    from common_python_tasks.utils import (
+    from .utils import (
         log_dry_run,
         run_command,
     )
 
-    normalized_stage = _normalize_release_stage(stage)
+    release_component = parse_release_component(component)
+    release_stage = parse_release_stage(stage)
     pre_script = pre_script or os.getenv("RELEASE_PRE_SCRIPT")
     post_script = post_script or os.getenv("RELEASE_POST_SCRIPT")
 
     ensure_on_default_branch()
     allow_dirty = _resolve_allow_dirty_release(get_dirty_files())
-    hook_env = build_release_hook_environment(component, normalized_stage, dry_run)
+    hook_env = build_release_hook_environment(release_component, release_stage, dry_run)
     if allow_dirty:
         hook_env[NO_PROMPT_ENV_VAR] = "1"
     if pre_script:
@@ -1030,7 +1035,7 @@ def _run_release_flow(
 
     bump_version(
         component=hook_env["RELEASE_COMPONENT"],
-        stage=normalized_stage,
+        stage=release_stage.value if release_stage is not None else None,
         dry_run=dry_run,
         allow_dirty=allow_dirty,
     )
@@ -1058,9 +1063,9 @@ def _run_release_flow(
     publish_package(build_first=False)
 
     if include_containers:
-        from common_python_tasks.docker import build_image
+        from .docker import build_image as _build_image
 
-        build_image(
+        _build_image(
             debug=debug,
             no_cache=no_cache,
             plain=plain,
@@ -1075,7 +1080,7 @@ def _run_release_flow(
     try:
         publish_github_release(
             hook_env["RELEASE_TAG"],
-            prerelease=normalized_stage is not None,
+            prerelease=release_stage is not None,
             assets=assets,
         )
     except SystemExit:
@@ -1178,6 +1183,47 @@ def release_without_containers(
     )
 
 
+def build(
+    has_containers: bool,
+    debug: bool = False,
+    no_cache: bool = False,
+    plain: bool = False,
+    single_arch: bool = False,
+    build_args: list[str] | None = None,
+    container_env: list[str] | None = None,
+    container_envfile: list[str] | None = None,
+) -> None:
+    """Build the package and optionally the container image.
+
+    Args:
+        has_containers: When `True`, also build the Docker image after the
+            package.
+        debug: Build the debug container image stage.
+        no_cache: Pass `--no-cache` to the Docker build command.
+        plain: Pass `--progress plain` to the Docker build command.
+        single_arch: Build the container for the current host architecture only.
+        build_args: Additional build arguments for the Docker build as repeated
+            `KEY=VALUE` values.
+        container_env: Inline container environment variables as repeated
+            `KEY=VALUE` values.
+        container_envfile: Repeated list of container environment files.
+    """
+    from .tasks import build_image as _build_image
+    from .tasks import build_package
+
+    build_package()
+    if has_containers:
+        _build_image(
+            debug=debug,
+            no_cache=no_cache,
+            plain=plain,
+            single_arch=single_arch,
+            build_args=build_args,
+            container_env=container_env,
+            container_envfile=container_envfile,
+        )
+
+
 @tasks.script(
     task_name="build",
     tags=["packaging", "containers"],
@@ -1204,7 +1250,6 @@ def build_with_containers(
             `KEY=VALUE` values.
         container_envfile: Repeated list of container environment files.
     """
-    from common_python_tasks.docker import build
 
     build(
         True,
@@ -1221,7 +1266,6 @@ def build_with_containers(
 @tasks.script(task_name="build", tags=["packaging", "common"])
 def build_without_containers() -> None:
     """Build the project."""
-    from common_python_tasks.docker import build
 
     build(False)
 
@@ -1250,7 +1294,8 @@ def fastapi_stack_up(
             `KEY=VALUE` values.
         container_envfile: Repeated list of container environment files.
     """
-    from common_python_tasks.compose import (
+    from .docker import build_image
+    from .docker_compose import (
         build_exec_script,
         cleanup_temp_files,
         compose_cmd_prefix,
@@ -1259,16 +1304,15 @@ def fastapi_stack_up(
         load_and_prepare_compose,
         run_docker_compose_command,
     )
-    from common_python_tasks.docker import build_image
-    from common_python_tasks.env import (
+    from .env import (
         get_cache_id_suffix,
         load_container_env_tokens,
     )
-    from common_python_tasks.project import (
+    from .project import (
         has_debug_dependency_group,
         resolve_container_entrypoint_command,
     )
-    from common_python_tasks.utils import (
+    from .utils import (
         fatal,
         load_data_file,
         render_template_text,
@@ -1392,7 +1436,7 @@ def fastapi_stack_up(
 @tasks.script(task_name="stack-down", tags=["web", "containers", "fastapi"])
 def fastapi_stack_down() -> None:
     """Bring down the development stack for the application."""
-    from common_python_tasks.compose import (
+    from .docker_compose import (
         cleanup_temp_files,
         load_and_prepare_compose,
         run_docker_compose_command,
@@ -1419,8 +1463,8 @@ def fastapi_stack_down() -> None:
 @tasks.script(task_name="reset-db", tags=["web", "containers", "database", "fastapi"])
 def fastapi_reset_db() -> None:
     """Reset the database by deleting the database volume."""
-    from common_python_tasks.compose import load_and_prepare_compose
-    from common_python_tasks.utils import (
+    from .docker_compose import load_and_prepare_compose
+    from .utils import (
         get_package_name,
         run_command,
     )
@@ -1440,7 +1484,7 @@ def fastapi_reset_db() -> None:
 )
 def fastapi_run_db_migrations() -> None:
     """Run database migrations."""
-    from common_python_tasks.compose import (
+    from .docker_compose import (
         load_and_prepare_compose,
         run_docker_compose_command,
     )
@@ -1460,8 +1504,8 @@ def fastapi_run_db_migrations() -> None:
 @tasks.script(task_name="db-shell", tags=["web", "containers", "database", "fastapi"])
 def fastapi_db_shell() -> None:
     """Open a psql shell to the database container."""
-    from common_python_tasks.compose import load_and_prepare_compose
-    from common_python_tasks.utils import (
+    from .docker_compose import load_and_prepare_compose
+    from .utils import (
         get_package_name,
         run_command,
     )

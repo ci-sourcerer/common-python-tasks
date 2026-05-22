@@ -262,3 +262,18 @@ def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypat
         capture_output=False,
         acceptable_returncodes={0},
     )
+
+
+def test_render_template_text_injects_extension_content():
+    from common_python_tasks.utils import render_template_text
+
+    template = (
+        "FROM runtime\n{{ EXTENSION_CONTENT|default('') }}\nFROM runtime AS debug\n"
+    )
+    rendered = render_template_text(
+        template,
+        {"EXTENSION_CONTENT": "# ext1\nRUN echo ext1\n"},
+    )
+
+    assert "RUN echo ext1" in rendered
+    assert rendered.index("RUN echo ext1") < rendered.index("FROM runtime AS debug")

@@ -1,3 +1,5 @@
+import ast
+import logging
 import re
 import tomllib
 from functools import lru_cache
@@ -6,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from . import utils
+
+LOGGER = logging.getLogger(__name__)
 
 
 @lru_cache
@@ -118,11 +122,14 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
                 "run",
                 "python",
                 "-c",
-                f"from importlib import metadata; print(metadata.version({candidate!r}))",
+                "import importlib.metadata, sys; print(importlib.metadata.version(sys.argv[1]))",
+                candidate,
             ],
             capture_output=True,
             acceptable_returncodes={0, 1},
         )
+        if result is None:
+            return None
         if result.returncode == 0:
             version = result.stdout.strip()
             if version:
@@ -178,7 +185,7 @@ def has_debug_dependency_group() -> bool:
     """Return whether `pyproject.toml` declares a non-empty debug dependency group.
 
     Returns:
-        True when `[dependency-groups].debug` exists and has entries.
+        `True` when `[dependency-groups].debug` exists and has entries.
     """
     debug_group = read_pyproject_toml().get("dependency-groups", {}).get("debug")
     if isinstance(debug_group, (list, tuple, set)):
@@ -207,30 +214,22 @@ def resolve_container_entrypoint_command(custom_entrypoint: str | None = None) -
     return "python"
 
 
-def extract_poe_script_tags(include_script: str, argument_name: str) -> set[str] | None:
-    """Extract a tag list argument from a Poe include_script expression.
-
-    Args:
-        include_script: The raw Poe include_script value.
-        argument_name: The argument name to extract, such as `include_tags` or
-            `exclude_tags`.
-
-    Returns:
-        A set of parsed tag strings, or `None` if parsing fails.
-    """
-    import ast
-
-    match = re.search(rf"{argument_name}\s*=\s*(\[[^\]]*\])", include_script)
+def _extract_tags_from_script_argument(
+    script_value: str, *, script_key: str, argument_key: str
+) -> set[str] | None:
+    pattern = re.compile(rf"{re.escape(argument_key)}\s*=\s*(\[[^\]]*\])")
+    match = pattern.search(script_value)
     if match is None:
         return None
 
     try:
         parsed = ast.literal_eval(match.group(1))
     except (ValueError, SyntaxError):
-        utils.LOGGER.warning(
-            "Failed to parse %s from tool.poe.include_script: %s",
-            argument_name,
-            include_script,
+        LOGGER.warning(
+            "Failed to parse %s from tool.poe.%s: %s",
+            argument_key,
+            script_key,
+            script_value,
         )
         return None
 
@@ -240,27 +239,68 @@ def extract_poe_script_tags(include_script: str, argument_name: str) -> set[str]
     return {str(tag).strip() for tag in parsed if str(tag).strip()}
 
 
+def extract_poe_script_tags(
+    include_script: str | None = None,
+    exclude_script: str | None = None,
+) -> tuple[set[str] | None, set[str] | None]:
+    """Extract include and exclude tags from Poe script configuration.
+
+    Args:
+        include_script: The raw `tool.poe.include_script` value.
+        exclude_script: The raw `tool.poe.exclude_script` value.
+
+    Returns:
+        A tuple containing parsed include and exclude tags. Each tuple value is
+        a set of strings, or `None` when the corresponding tags are not present
+        or cannot be parsed.
+    """
+    include_tags = None
+    if isinstance(include_script, str):
+        include_tags = _extract_tags_from_script_argument(
+            include_script,
+            script_key="include_script",
+            argument_key="include_tags",
+        )
+
+    exclude_tags = None
+    if isinstance(exclude_script, str):
+        exclude_tags = _extract_tags_from_script_argument(
+            exclude_script,
+            script_key="exclude_script",
+            argument_key="exclude_tags",
+        )
+
+    if exclude_tags is None and isinstance(include_script, str):
+        exclude_tags = _extract_tags_from_script_argument(
+            include_script,
+            script_key="include_script",
+            argument_key="exclude_tags",
+        )
+
+    return include_tags, exclude_tags
+
+
 @lru_cache
 def is_task_tag_included(tag: str) -> bool:
-    """Return whether a task tag is included by current Poe include_script rules.
+    """Return whether a task tag is included by current Poe script rules.
 
     Args:
         tag: The task tag to evaluate.
 
     Returns:
-        True if the tag is included, False if it is excluded by Poe include_script.
+        `True` if the tag is included, `False` if it is excluded by Poe rules.
     """
     pyproject_data = read_pyproject_toml()
 
-    include_script = pyproject_data.get("tool", {}).get("poe", {}).get("include_script")
-    if not isinstance(include_script, str):
-        return True
+    poe_config = pyproject_data.get("tool", {}).get("poe", {})
+    include_tags, exclude_tags = extract_poe_script_tags(
+        include_script=poe_config.get("include_script"),
+        exclude_script=poe_config.get("exclude_script"),
+    )
 
-    include_tags = extract_poe_script_tags(include_script, "include_tags")
     if include_tags is not None:
         return tag in include_tags
 
-    exclude_tags = extract_poe_script_tags(include_script, "exclude_tags")
     if exclude_tags is not None:
         return tag not in exclude_tags
 

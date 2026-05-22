@@ -1,6 +1,7 @@
 import importlib.util
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from functools import lru_cache
@@ -89,6 +90,30 @@ def run_available_tools(
             ran_any = True
     if not ran_any:
         fatal(none_available_message)
+
+
+def directory_has_contents(path: Path) -> bool:
+    """Return whether a directory exists and contains at least one entry.
+
+    Args:
+        path: The directory to inspect.
+
+    Returns:
+        `True` when the directory exists and is not empty, otherwise `False`.
+    """
+    return path.is_dir() and any(path.iterdir())
+
+
+def remove_path(path: Path) -> None:
+    """Remove a file or directory if it exists.
+
+    Args:
+        path: The file or directory to remove.
+    """
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        path.unlink(missing_ok=True)
 
 
 def run_command(

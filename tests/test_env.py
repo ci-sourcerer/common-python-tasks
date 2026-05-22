@@ -51,7 +51,7 @@ def test_load_container_env_tokens_supports_colon_delimited_envfile_string(tmp_p
 
 
 def test_read_dotenv_parses_simple_key_value_pairs(tmp_path):
-    from common_python_tasks.compose import read_dotenv
+    from common_python_tasks.docker_compose import read_dotenv
 
     dotenv = tmp_path / ".env"
     dotenv.write_text("KEY1=value1\nKEY2=value2\n", encoding="utf-8")
@@ -62,7 +62,7 @@ def test_read_dotenv_parses_simple_key_value_pairs(tmp_path):
 
 
 def test_read_dotenv_skips_comments_and_empty_lines(tmp_path):
-    from common_python_tasks.compose import read_dotenv
+    from common_python_tasks.docker_compose import read_dotenv
 
     dotenv = tmp_path / ".env"
     dotenv.write_text(
@@ -76,7 +76,7 @@ def test_read_dotenv_skips_comments_and_empty_lines(tmp_path):
 
 
 def test_read_dotenv_returns_empty_dict_when_file_missing(tmp_path):
-    from common_python_tasks.compose import read_dotenv
+    from common_python_tasks.docker_compose import read_dotenv
 
     result = read_dotenv(tmp_path / "nonexistent.env")
 
@@ -84,7 +84,7 @@ def test_read_dotenv_returns_empty_dict_when_file_missing(tmp_path):
 
 
 def test_read_dotenv_strips_quotes(tmp_path):
-    from common_python_tasks.compose import read_dotenv
+    from common_python_tasks.docker_compose import read_dotenv
 
     dotenv = tmp_path / ".env"
     dotenv.write_text("KEY1=\"quoted\"\nKEY2='single'\n", encoding="utf-8")
@@ -95,7 +95,7 @@ def test_read_dotenv_strips_quotes(tmp_path):
 
 
 def test_append_dotenv_creates_header_comment(tmp_path, monkeypatch):
-    from common_python_tasks.compose import append_dotenv
+    from common_python_tasks.docker_compose import append_dotenv
 
     monkeypatch.chdir(tmp_path)
     dotenv = tmp_path / ".env"
@@ -110,7 +110,7 @@ def test_append_dotenv_creates_header_comment(tmp_path, monkeypatch):
 
 
 def test_get_or_generate_secret_returns_existing_env_var(monkeypatch):
-    from common_python_tasks.compose import get_or_generate_secret
+    from common_python_tasks.docker_compose import get_or_generate_secret
 
     monkeypatch.setenv("TEST_SECRET", "existing-value")
     result = get_or_generate_secret("TEST_SECRET")
@@ -119,7 +119,7 @@ def test_get_or_generate_secret_returns_existing_env_var(monkeypatch):
 
 
 def test_get_or_generate_secret_generates_and_stores_new_secret(tmp_path, monkeypatch):
-    from common_python_tasks.compose import get_or_generate_secret
+    from common_python_tasks.docker_compose import get_or_generate_secret
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("NEW_SECRET", raising=False)
@@ -162,3 +162,286 @@ def test_load_container_env_file_returns_none_for_empty_file(tmp_path):
     result = load_container_env_file(str(env_file))
 
     assert result is None
+
+
+class TestParseContainerExtensions:
+    """Tests for parse_container_extensions parameter parsing."""
+
+    def test_plain_bundle_name(self, monkeypatch):
+        from common_python_tasks.env import parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext")
+
+        result = parse_container_extensions()
+        assert len(result) == 1
+        assert result[0]["id"] == "some_ext"
+        assert result[0]["bundle_name"] == "some_ext"
+        assert result[0]["args"] is None
+
+    def test_parameterised_bundle(self, monkeypatch):
+        from common_python_tasks.env import parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl")
+
+        result = parse_container_extensions()
+        assert len(result) == 1
+        assert result[0]["id"] == "some_ext"
+        assert result[0]["bundle_name"] == "some_ext"
+        assert result[0]["args"] == "jq curl"
+
+    def test_mixed_parameterised_and_plain(self, monkeypatch):
+        from common_python_tasks.env import parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl wget:plain_ext")
+
+        result = parse_container_extensions()
+        assert len(result) == 2
+        assert result[0]["id"] == "some_ext"
+        assert result[0]["args"] == "jq curl wget"
+        assert result[1]["id"] == "plain_ext"
+        assert result[1]["args"] is None
+
+    def test_empty_args_treated_as_empty_string(self, monkeypatch):
+        from common_python_tasks.env import parse_container_extensions
+
+        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=")
+
+        result = parse_container_extensions()
+        assert len(result) == 1
+        assert result[0]["args"] == ""
+
+    def test_multiple_extension_files(self, monkeypatch, tmp_path):
+        from common_python_tasks.env import parse_container_extensions
+
+        ext1 = tmp_path / "Dockerfile.ext1"
+        ext1.write_text("# ext1\nRUN echo ext1\n", encoding="utf-8")
+        ext2 = tmp_path / "Dockerfile.ext2"
+        ext2.write_text("# ext2\nRUN echo ext2\n", encoding="utf-8")
+
+        monkeypatch.setenv("CONTAINER_EXTENSION_FILES", f"{ext1}:{ext2}")
+        monkeypatch.delenv("CONTAINER_EXTENSIONS", raising=False)
+
+        result = parse_container_extensions()
+
+        assert len(result) == 2
+        assert result[0]["id"] == "ext1"
+        assert result[0]["source"] == "file"
+        assert result[0]["path"] == str(ext1)
+        assert result[1]["id"] == "ext2"
+        assert result[1]["source"] == "file"
+        assert result[1]["path"] == str(ext2)
+
+
+class TestResolveExtensionContent:
+    """Tests for resolve_extension_content (no template substitution)."""
+
+    def test_template_contains_build_arg_variable(self, mock_load_data_file):
+        from common_python_tasks.env import resolve_extension_content
+
+        desc = {
+            "id": "template_bundle",
+            "source": "bundle",
+            "path": None,
+            "bundle_name": "template_bundle",
+            "args": "jq curl",
+        }
+        content = resolve_extension_content(desc)
+        assert "APT_PACKAGES" in content
+        assert "jq curl" not in content
+
+    def test_missing_args_do_not_affect_content(self, mock_load_data_file):
+        from common_python_tasks.env import resolve_extension_content
+
+        desc = {
+            "id": "template_bundle",
+            "source": "bundle",
+            "path": None,
+            "bundle_name": "template_bundle",
+            "args": None,
+        }
+        content = resolve_extension_content(desc)
+        assert "APT_PACKAGES" in content
+
+    def test_file_extension_without_placeholder_and_no_args(self, tmp_path):
+        from common_python_tasks.env import resolve_extension_content
+
+        ext_file = tmp_path / "Dockerfile.custom"
+        ext_file.write_text("RUN echo hello\n", encoding="utf-8")
+
+        desc = {
+            "id": "custom",
+            "source": "file",
+            "path": str(ext_file),
+            "bundle_name": None,
+            "args": None,
+        }
+        content = resolve_extension_content(desc)
+        assert content == "RUN echo hello\n"
+
+
+class TestParseContainerDeps:
+    """Tests for parse_container_deps env var handling."""
+
+    def test_returns_none_when_unset(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.delenv("CONTAINER_DEPS_FILE", raising=False)
+        assert parse_container_deps() is None
+
+    def test_returns_content_from_env(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps
+
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "RUN apt-get install -y curl")
+        assert parse_container_deps() == "RUN apt-get install -y curl"
+
+    def test_returns_content_from_file(self, monkeypatch, tmp_path):
+        from common_python_tasks.env import parse_container_deps
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        deps_file = tmp_path / "deps.Dockerfile"
+        deps_file.write_text("RUN pip install boto3\n", encoding="utf-8")
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", str(deps_file))
+        assert parse_container_deps() == "RUN pip install boto3"
+
+    def test_returns_content_from_multiple_files(self, monkeypatch, tmp_path):
+        from common_python_tasks.env import parse_container_deps
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        deps_file1 = tmp_path / "deps1.Dockerfile"
+        deps_file1.write_text("RUN pip install boto3\n", encoding="utf-8")
+        deps_file2 = tmp_path / "deps2.Dockerfile"
+        deps_file2.write_text("RUN pip install requests\n", encoding="utf-8")
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_FILE",
+            f"{deps_file1}:{deps_file2}",
+        )
+
+        assert (
+            parse_container_deps() == "RUN pip install boto3\nRUN pip install requests"
+        )
+
+    def test_file_source_returns_path_when_no_content(self, monkeypatch, tmp_path):
+        from common_python_tasks.env import parse_container_deps_source
+
+        deps_file = tmp_path / "deps.Dockerfile"
+        deps_file.write_text("FROM FILE\n", encoding="utf-8")
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", str(deps_file))
+
+        dockerfile_path, content = parse_container_deps_source()
+        assert dockerfile_path == deps_file
+        assert content is None
+
+    def test_file_source_returns_paths_when_multiple_files(self, monkeypatch, tmp_path):
+        from common_python_tasks.env import parse_container_deps_source
+
+        deps_file1 = tmp_path / "deps1.Dockerfile"
+        deps_file1.write_text("FROM FILE1\n", encoding="utf-8")
+        deps_file2 = tmp_path / "deps2.Dockerfile"
+        deps_file2.write_text("FROM FILE2\n", encoding="utf-8")
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_FILE",
+            f"{deps_file1}:{deps_file2}",
+        )
+
+        dockerfile_paths, content = parse_container_deps_source()
+        assert dockerfile_paths == [deps_file1, deps_file2]
+        assert content is None
+
+    def test_content_overrides_file_source(self, monkeypatch, tmp_path):
+        from common_python_tasks.env import parse_container_deps_source
+
+        deps_file = tmp_path / "deps.Dockerfile"
+        deps_file.write_text("FROM FILE\n", encoding="utf-8")
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "FROM ENV")
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", str(deps_file))
+
+        dockerfile_path, content = parse_container_deps_source()
+        assert dockerfile_path is None
+        assert content == "FROM ENV"
+
+    def test_file_missing_raises(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps
+
+        monkeypatch.delenv("CONTAINER_DEPS_CONTENT", raising=False)
+        monkeypatch.setenv("CONTAINER_DEPS_FILE", "/nonexistent/deps.Dockerfile")
+        with pytest.raises(SystemExit):
+            parse_container_deps()
+
+    def test_empty_content_returns_none(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps
+
+        monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "   ")
+        monkeypatch.delenv("CONTAINER_DEPS_FILE", raising=False)
+        assert parse_container_deps() is None
+
+
+class TestParseContainerDepsMappings:
+    """Tests for parse_container_deps_mappings env var handling."""
+
+    def test_returns_none_when_unset(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps_mappings
+
+        monkeypatch.delenv("CONTAINER_DEPS_MAPPINGS", raising=False)
+        assert parse_container_deps_mappings() is None
+
+    def test_parses_simple_mappings(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps_mappings
+
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_MAPPINGS",
+            "dep1:/opt/dep1 dep2:/usr/local/bin/dep2",
+        )
+        assert parse_container_deps_mappings() == {
+            "dep1": "/opt/dep1",
+            "dep2": "/usr/local/bin/dep2",
+        }
+
+    def test_parses_quoted_paths(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps_mappings
+
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_MAPPINGS",
+            "dep1:'/opt/dep one' dep2:\"/usr/local/bin/dep two\"",
+        )
+        assert parse_container_deps_mappings() == {
+            "dep1": "/opt/dep one",
+            "dep2": "/usr/local/bin/dep two",
+        }
+
+    def test_invalid_token_raises(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps_mappings
+
+        monkeypatch.setenv("CONTAINER_DEPS_MAPPINGS", "invalid-token")
+        with pytest.raises(SystemExit):
+            parse_container_deps_mappings()
+
+    def test_duplicate_name_raises(self, monkeypatch):
+        from common_python_tasks.env import parse_container_deps_mappings
+
+        monkeypatch.setenv(
+            "CONTAINER_DEPS_MAPPINGS",
+            "dep1:/opt/dep1 dep1:/opt/dep2",
+        )
+        with pytest.raises(SystemExit):
+            parse_container_deps_mappings()
+
+
+class TestRenderDepsMoveScript:
+    """Tests for generating the dependency move script."""
+
+    def test_script_contains_expected_move_logic(self):
+        from common_python_tasks.env import render_container_deps_move_script
+
+        script = render_container_deps_move_script(
+            {"dep1": "/opt/dep1", "dep2": "/usr/local/bin/dep2"}
+        )
+        assert "shutil.move" in script
+        assert 'source_root = pathlib.Path("/tmp/deps")' in script
+        assert "'dep1': '/opt/dep1'" in script

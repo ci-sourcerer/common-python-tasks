@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from common_python_tasks.compose import get_compose_env, get_required_vars_for_files
+from common_python_tasks.docker_compose import (
+    get_compose_env,
+    get_required_vars_for_files,
+)
 
 
 def test_get_compose_env_includes_workdir_path_default(monkeypatch):
@@ -26,7 +29,7 @@ def test_get_required_vars_for_files_includes_workdir_path_for_compose_db():
 
 
 def test_get_compose_type_returns_default_fastapi(monkeypatch):
-    from common_python_tasks.compose import get_compose_type
+    from common_python_tasks.docker_compose import get_compose_type
 
     monkeypatch.delenv("COMPOSE_TYPE", raising=False)
 
@@ -36,7 +39,7 @@ def test_get_compose_type_returns_default_fastapi(monkeypatch):
 
 
 def test_get_compose_type_returns_env_value(monkeypatch):
-    from common_python_tasks.compose import get_compose_type
+    from common_python_tasks.docker_compose import get_compose_type
 
     monkeypatch.setenv("COMPOSE_TYPE", "custom")
 
@@ -46,7 +49,7 @@ def test_get_compose_type_returns_env_value(monkeypatch):
 
 
 def test_read_dotenv_parses_simple_env_file(tmp_path):
-    from common_python_tasks.compose import read_dotenv
+    from common_python_tasks.docker_compose import read_dotenv
 
     dotenv = tmp_path / ".env"
     dotenv.write_text("API_PORT=8000\nDEBUG=true\n", encoding="utf-8")
@@ -58,7 +61,7 @@ def test_read_dotenv_parses_simple_env_file(tmp_path):
 
 
 def test_ensure_secrets_generated_creates_keys(tmp_path, monkeypatch):
-    from common_python_tasks.compose import ensure_secrets_generated
+    from common_python_tasks.docker_compose import ensure_secrets_generated
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("SECRET_KEY", raising=False)

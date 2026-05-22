@@ -15,9 +15,12 @@ def test_infer_bump_component_from_git_cliff_returns_expected_bump():
             return_value="1.3.2",
         ),
     ):
-        from common_python_tasks.git import infer_bump_component_from_git_cliff
+        from common_python_tasks.git import (
+            ReleaseComponent,
+            infer_bump_component_from_git_cliff,
+        )
 
-        assert infer_bump_component_from_git_cliff() == "major"
+        assert infer_bump_component_from_git_cliff() == ReleaseComponent.MAJOR
 
 
 class TestComputeNextReleaseVersion:
@@ -26,9 +29,21 @@ class TestComputeNextReleaseVersion:
             "common_python_tasks.project.get_project_version_from_poetry",
             return_value=current_version,
         ):
-            from common_python_tasks.git import compute_next_release_version
+            from common_python_tasks.git import (
+                compute_next_release_version,
+                parse_release_component,
+                parse_release_stage,
+            )
 
-            return compute_next_release_version(component, stage)
+            parsed_component = component
+            if isinstance(component, str):
+                parsed_component = parse_release_component(component)
+
+            parsed_stage = stage
+            if isinstance(stage, str) or stage is None:
+                parsed_stage = parse_release_stage(stage)
+
+            return compute_next_release_version(parsed_component, parsed_stage)
 
     def test_patch_bump(self):
         result = self._call("patch")
@@ -71,6 +86,8 @@ class TestComputeNextReleaseVersion:
         assert result.component == "patch"
 
     def test_auto_delegates_to_git_cliff(self):
+        from common_python_tasks.git import ReleaseComponent
+
         with (
             patch(
                 "common_python_tasks.project.get_project_version_from_poetry",
@@ -78,31 +95,31 @@ class TestComputeNextReleaseVersion:
             ),
             patch(
                 "common_python_tasks.git.infer_bump_component_from_git_cliff",
-                return_value="minor",
+                return_value=ReleaseComponent.MINOR,
             ),
         ):
-            from common_python_tasks.git import compute_next_release_version
-
-            result = compute_next_release_version("auto", None)
+            result = self._call("auto")
             assert result.version == "1.3.0"
             assert result.component == "minor"
 
     def test_auto_forces_patch_for_pre_production(self):
+        from common_python_tasks.git import ReleaseComponent
+
         with (
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
-                return_value="0.3.1",
-            ),
-            patch(
                 "common_python_tasks.git.infer_bump_component_from_git_cliff",
-                return_value="major",
+                return_value=ReleaseComponent.MAJOR,
             ),
         ):
-            from common_python_tasks.git import compute_next_release_version
-
-            result = compute_next_release_version("auto", None)
+            result = self._call("auto", current_version="0.3.1")
             assert result.version == "0.3.2"
             assert result.component == "patch"
+
+    def test_accepts_enum_inputs(self):
+        from common_python_tasks.git import ReleaseComponent, ReleaseStage
+
+        result = self._call(ReleaseComponent.PATCH, stage=ReleaseStage.BETA)
+        assert result.version == "1.2.4b1"
 
     def test_invalid_component_exits(self):
         with pytest.raises(SystemExit):

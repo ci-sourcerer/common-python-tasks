@@ -1,11 +1,15 @@
+import logging
 import re
 import shutil
+from enum import IntEnum, StrEnum, auto
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from dunamai import Style, Version
 
 from . import project, utils
+
+LOGGER = logging.getLogger(__name__)
 
 
 class NextReleaseVersion(NamedTuple):
@@ -15,68 +19,121 @@ class NextReleaseVersion(NamedTuple):
     component: str
 
 
+class ReleaseComponent(StrEnum):
+    """Supported semantic version components for release bumps."""
+
+    MAJOR = auto()
+    MINOR = auto()
+    PATCH = auto()
+
+
+class ReleaseComponentBump(IntEnum):
+    """Numeric bump positions expected by `Version.bump`."""
+
+    MAJOR = 0
+    MINOR = 1
+    PATCH = 2
+
+
+class ReleaseStage(StrEnum):
+    """Supported pre-release stages."""
+
+    ALPHA = auto()
+    BETA = auto()
+    RC = auto()
+
+
+def parse_release_component(component: str) -> ReleaseComponent | None:
+    """Parse a release component string.
+
+    Args:
+        component: The user-provided component string.
+
+    Returns:
+        A `ReleaseComponent`, or `None` when `component` is `"auto"`.
+    """
+    normalized_component = component.lower()
+    if normalized_component == "auto":
+        return None
+
+    try:
+        return ReleaseComponent(normalized_component)
+    except ValueError:
+        utils.fatal(
+            f'Invalid component "{component}". Must be one of: {", ".join((*[member.value for member in ReleaseComponent], "auto"))}.'
+        )
+
+
+def parse_release_stage(stage: str | None) -> ReleaseStage | None:
+    """Parse a release stage string.
+
+    Args:
+        stage: The user-provided stage string.
+
+    Returns:
+        A `ReleaseStage`, or `None` for stable releases.
+    """
+    if stage is None:
+        return None
+
+    normalized_stage = stage.lower()
+    if normalized_stage == "none":
+        return None
+    if normalized_stage == "a":
+        return ReleaseStage.ALPHA
+    if normalized_stage == "b":
+        return ReleaseStage.BETA
+
+    try:
+        return ReleaseStage(normalized_stage)
+    except ValueError:
+        utils.fatal(
+            f'Invalid stage "{stage}". Must be one of: alpha, beta, rc or empty for none.'
+        )
+
+
 def compute_next_release_version(
-    component: str, stage: str | None
+    component: ReleaseComponent | None, stage: ReleaseStage | None
 ) -> NextReleaseVersion:
     """Compute the next release version based on the given component and stage.
 
     Args:
-        component: The version component to bump (major, minor, patch, or auto).
-        stage: Optional pre-release stage (alpha, beta, rc, or None).
+        component: The version component to bump, or `None` for auto-inference.
+        stage: Optional pre-release stage.
 
     Returns:
         A `NextReleaseVersion` with the serialized new version and normalized component.
     """
-    component = component.lower()
-    normalized_stage = stage.lower() if stage is not None else None
-
     current_version_text = project.get_project_version_from_poetry()
-    if component == "auto":
-        component = infer_bump_component_from_git_cliff()
+    release_component = component
+    if release_component is None:
+        release_component = infer_bump_component_from_git_cliff()
         if re.match(r"^0\.", str(Version.parse(current_version_text).base)):
-            utils.LOGGER.info(
+            LOGGER.info(
                 "Current version %s is pre-production; using patch bump.",
                 current_version_text,
             )
-            component = "patch"
-
-    valid_components = {"major": 0, "minor": 1, "patch": 2}
-    if component not in valid_components:
-        utils.fatal(
-            f'Invalid component "{component}". Must be one of: {", ".join(valid_components.keys())}.'
-        )
-
-    if normalized_stage is not None and normalized_stage not in {
-        "alpha",
-        "a",
-        "beta",
-        "b",
-        "rc",
-    }:
-        utils.fatal(
-            f'Invalid stage "{normalized_stage}". Must be one of: alpha, beta, rc or empty for none.'
-        )
+            release_component = ReleaseComponent.PATCH
 
     bumped = Version.parse(Version.parse(current_version_text).base).bump(
-        valid_components[component]
+        ReleaseComponentBump[release_component.name]
     )
-    if normalized_stage is not None:
-        bumped.stage = {"a": "alpha", "b": "beta"}.get(
-            normalized_stage, normalized_stage
-        )
+    if stage is not None:
+        bumped.stage = stage.value
         bumped.revision = 1
 
-    return NextReleaseVersion(version=bumped.serialize(), component=component)
+    return NextReleaseVersion(
+        version=bumped.serialize(), component=release_component.value
+    )
 
 
 def build_release_hook_environment(
-    component: str,
-    stage: str | None,
-    dry_run: bool,
+    component: ReleaseComponent | None, stage: ReleaseStage | None, dry_run: bool
 ) -> dict[str, str]:
     """Build the environment variables passed into release hook scripts.
 
-    The following variables are set and available to all hook scripts:
+    The following variables are set and available to all hook scripts as environment
+    variables:
 
     - `RELEASE_COMPONENT`: The version component being bumped.
     - `RELEASE_STAGE`: The pre-release stage, or an empty string for a stable release.
@@ -84,25 +141,24 @@ def build_release_hook_environment(
     - `RELEASE_TAG`: The Git tag for the release (e.g. `"v1.2.3"`).
     - `RELEASE_DRY_RUN`: `"1"` if this is a dry run, `"0"` otherwise.
     - `RELEASE_SCRIPT_DRY_RUN`: `"1"` if this is a dry run, `"0"` otherwise.
-      Hook scripts should check this variable and, when set to `"1"`, print
+      Hook scripts should check this variable and, when set to `"1"`, log/print
       what they would do without making any changes, then exit successfully.
       This allows the release dry-run to show a complete preview of all
-      side effects, including those performed by hook scripts.
+      side effects.
 
     Args:
-        component: The component to bump (major, minor, patch, or auto).
-        stage: The release stage (alpha, beta, rc, or None).
+        component: The component to bump, or `None` for auto-inference.
+        stage: The release stage, or `None` for stable releases.
         dry_run: Whether this is a dry run.
 
     Returns:
         A dictionary of environment variables for the release hook.
     """
-    normalized_stage = stage.lower() if stage is not None else None
     result = compute_next_release_version(component, stage)
     dry_run_flag = "1" if dry_run else "0"
     return {
         "RELEASE_COMPONENT": result.component,
-        "RELEASE_STAGE": normalized_stage or "",
+        "RELEASE_STAGE": stage.value if stage is not None else "",
         "RELEASE_VERSION": result.version,
         "RELEASE_TAG": f"v{result.version}",
         "RELEASE_DRY_RUN": dry_run_flag,
@@ -110,11 +166,12 @@ def build_release_hook_environment(
     }
 
 
-def infer_bump_component_from_git_cliff() -> str:
+def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     """Infer the next semantic version bump type using git-cliff.
 
     Returns:
-        One of "major", "minor", or "patch".
+        One of `ReleaseComponent.MAJOR`, `ReleaseComponent.MINOR`, or
+        `ReleaseComponent.PATCH`.
     """
     if shutil.which("git-cliff") is None:
         utils.fatal(
@@ -167,11 +224,11 @@ def infer_bump_component_from_git_cliff() -> str:
     current_major, current_minor, current_patch = _parse_semver(current.base)
 
     if bumped_major != current_major:
-        return "major"
+        return ReleaseComponent.MAJOR
     if bumped_minor != current_minor:
-        return "minor"
+        return ReleaseComponent.MINOR
     if bumped_patch != current_patch:
-        return "patch"
+        return ReleaseComponent.PATCH
 
     utils.fatal(
         "git-cliff did not infer a version change beyond the current version "
@@ -220,7 +277,7 @@ def get_version(ignore: list[Path] | None = None) -> str:
         ignore = []
 
     dirty_files = get_dirty_files(ignore=ignore)
-    utils.LOGGER.debug("Dirty files: %s", dirty_files)
+    LOGGER.debug("Dirty files: %s", dirty_files)
 
     return Version.from_git().serialize(
         style=Style.Pep440,

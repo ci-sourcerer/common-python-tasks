@@ -7,18 +7,18 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
-
-from common_python_tasks.utils import changelog as _changelog
+from typing import Any, Literal
 
 from . import utils
 from .env import env_truthy
+from .utils import changelog as _changelog
 
 LOGGER = logging.getLogger(__name__)
 
+GitHubEndpoint = Literal["api", "uploads"]
+
 
 def _is_unreleased_placeholder(notes: str) -> bool:
-    """Return whether release notes are only an unreleased placeholder."""
     normalized_lines = [line.strip() for line in notes.splitlines() if line.strip()]
     if not normalized_lines:
         return True
@@ -28,7 +28,6 @@ def _is_unreleased_placeholder(notes: str) -> bool:
 
 
 def _latest_tagged_changelog() -> str | None:
-    """Return release notes for the latest tagged release from git-cliff."""
     result = utils.run_git_cliff(["--latest"], capture_output=True)
     changelog = result.stdout.strip()
     if not changelog:
@@ -84,10 +83,13 @@ def get_github_repository() -> str | None:
 
 
 def get_github_token() -> str | None:
-    """Return the GitHub token used for API requests.
+    """Return the GitHub token used for API requests. Check the following in order:
+    1. `GITHUB_TOKEN` environment variable
+    2. `GH_TOKEN` environment variable
+    3. GitHub CLI via `gh auth token`
 
     Returns:
-        The GitHub token from `GITHUB_TOKEN` or `GH_TOKEN`, or `None` if unset.
+        The GitHub token or `None` if it cannot be found.
     """
     token = (os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or "").strip()
     if token:
@@ -143,13 +145,19 @@ def get_github_api_base_url() -> str:
     return f"{server_url}/api/v3"
 
 
-def get_github_upload_api_base_url() -> str:
+def get_github_upload_api_base_url(api_base_url: str | None = None) -> str:
     """Return the GitHub upload API base URL.
 
     For GitHub.com uploads, this is a dedicated uploads host. For Enterprise
     installations, use the same API base URL.
+
+    Args:
+        api_base_url: Optional precomputed API base URL.
+
+    Returns:
+        The upload base URL for GitHub API requests.
     """
-    api_base = get_github_api_base_url()
+    api_base = api_base_url or get_github_api_base_url()
     if api_base == "https://api.github.com":
         return "https://uploads.github.com"
     return api_base
@@ -174,9 +182,15 @@ class GitHubClient:
 
         self.repository = repository
         self.token = token
+        api_base_url = get_github_api_base_url()
+        self.endpoint_base_urls: dict[GitHubEndpoint, str] = {
+            "api": api_base_url,
+            "uploads": get_github_upload_api_base_url(api_base_url),
+        }
 
     @property
     def is_available(self) -> bool:
+        """Whether the client has sufficient information to make authenticated API requests."""
         return self.repository is not None and self.token is not None
 
     def _build_headers(self, content_type: str | None = None) -> dict[str, str]:
@@ -190,56 +204,59 @@ class GitHubClient:
             headers["Content-Type"] = content_type
         return headers
 
-    def _build_url(self, path: str, upload: bool = False) -> str:
-        """Construct the full GitHub API URL for a given repository path.
+    def _get_base_url(self, endpoint: GitHubEndpoint) -> str:
+        return self.endpoint_base_urls[endpoint]
 
-        Args:
-            path: API path relative to the repository (e.g. '/releases').
-            upload: Whether to use the uploads host for file uploads.
+    def _build_url(self, path: str, endpoint: GitHubEndpoint = "api") -> str:
+        return f"{self._get_base_url(endpoint)}/repos/{self.repository}{path}"
 
-        Returns:
-            The full URL for the API request.
-        """
-        base_url = (
-            get_github_upload_api_base_url() if upload else get_github_api_base_url()
+    def _build_request(
+        self,
+        method: str,
+        path: str,
+        payload: bytes | None = None,
+        endpoint: GitHubEndpoint = "api",
+        content_type: str | None = None,
+    ) -> urllib.request.Request:
+        return urllib.request.Request(
+            self._build_url(path, endpoint=endpoint),
+            data=payload,
+            method=method,
+            headers=self._build_headers(content_type),
         )
-        return f"{base_url}/repos/{self.repository}{path}"
 
     def _request(
         self,
         method: str,
         path: str,
         payload: bytes | None = None,
-        upload: bool = False,
+        endpoint: GitHubEndpoint = "api",
         content_type: str | None = None,
-        allow_404_release_tag: bool = False,
+        allow_404: bool = False,
+        token_required: bool = False,
     ) -> dict[str, Any] | None:
         if self.repository is None:
             return None
         if self.token is None:
-            if upload:
+            if token_required:
                 utils.fatal(
-                    "GITHUB_TOKEN or GH_TOKEN environment variable must be set to publish GitHub Release assets"
+                    "An API token must be passed to publish GitHub Release assets"
                 )
             return None
 
-        request = urllib.request.Request(
-            self._build_url(path, upload=upload),
-            data=payload,
-            method=method,
-            headers=self._build_headers(content_type),
+        request = self._build_request(
+            method,
+            path,
+            payload=payload,
+            endpoint=endpoint,
+            content_type=content_type,
         )
 
         try:
             with urllib.request.urlopen(request) as response:
                 body = response.read().decode("utf-8").strip()
-        except urllib.error.HTTPError as exc:
-            if (
-                allow_404_release_tag
-                and method == "GET"
-                and exc.code == 404
-                and path.startswith("/releases/tags/")
-            ):
+        except urllib.error.HTTPError:
+            if allow_404:
                 return None
             raise
 
@@ -252,7 +269,7 @@ class GitHubClient:
         method: str,
         path: str,
         payload: dict[str, Any] | None = None,
-        allow_404_release_tag: bool = False,
+        allow_404: bool = False,
     ) -> dict[str, Any] | None:
         request_payload = (
             None if payload is None else json.dumps(payload).encode("utf-8")
@@ -262,9 +279,9 @@ class GitHubClient:
             method,
             path,
             payload=request_payload,
-            upload=False,
+            endpoint="api",
             content_type=content_type,
-            allow_404_release_tag=allow_404_release_tag,
+            allow_404=allow_404,
         )
 
     def upload_request(
@@ -293,8 +310,9 @@ class GitHubClient:
             method,
             path,
             payload=payload,
-            upload=True,
+            endpoint="uploads",
             content_type=content_type,
+            token_required=True,
         )
 
 
@@ -381,7 +399,7 @@ def publish_github_release(
     existing_release = client.api_request(
         "GET",
         f"/releases/tags/{encoded_tag_name}",
-        allow_404_release_tag=True,
+        allow_404=True,
     )
     if existing_release and isinstance(existing_release.get("id"), int):
         LOGGER.info("Updating GitHub Release for tag %s", tag_name)

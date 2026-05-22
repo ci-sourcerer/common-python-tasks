@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from common_python_tasks.project import (
+    extract_poe_script_tags,
     get_authors,
     get_installed_requirement_version,
     is_task_tag_included,
@@ -164,6 +165,16 @@ def test_is_task_tag_included_with_include_tags():
         assert is_task_tag_included("common") is False
 
 
+def test_extract_poe_script_tags_with_include_and_exclude_scripts():
+    include_tags, exclude_tags = extract_poe_script_tags(
+        include_script="common_python_tasks:tasks(include_tags=['format', 'containers'])",
+        exclude_script="common_python_tasks:tasks(exclude_tags=['fastapi'])",
+    )
+
+    assert include_tags == {"format", "containers"}
+    assert exclude_tags == {"fastapi"}
+
+
 def test_is_task_tag_included_with_common_include_tag():
     is_task_tag_included.cache_clear()
     with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
@@ -185,12 +196,21 @@ def test_is_task_tag_included_with_exclude_tags():
         mock_toml.return_value = {
             "tool": {
                 "poe": {
-                    "include_script": "common_python_tasks:tasks(exclude_tags=['containers', 'fastapi'])"
+                    "exclude_script": "common_python_tasks:tasks(exclude_tags=['containers', 'fastapi'])"
                 }
             }
         }
 
         assert is_task_tag_included("containers") is False
+
+
+def test_extract_poe_script_tags_falls_back_to_exclude_tags_in_include_script():
+    include_tags, exclude_tags = extract_poe_script_tags(
+        include_script="common_python_tasks:tasks(exclude_tags=['containers'])",
+    )
+
+    assert include_tags is None
+    assert exclude_tags == {"containers"}
 
 
 def test_is_task_tag_included_defaults_true_without_filters():

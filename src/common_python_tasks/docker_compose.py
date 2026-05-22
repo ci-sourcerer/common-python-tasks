@@ -1,3 +1,7 @@
+# This is a highly-specific module for handling Docker Compose for a cerrtain type of project layout
+# This is not yet fully tested and may be heavily changed or even removed in the future
+
+import logging
 import os
 import platform
 import tempfile
@@ -11,6 +15,8 @@ from poethepoet_tasks import TaskCollection
 from . import utils
 from .env import get_workdir_path
 from .project import get_poetry_version
+
+LOGGER = logging.getLogger(__name__)
 
 
 def ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
@@ -26,7 +32,7 @@ def ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
     """
     alembic_ini_path = Path("alembic.ini")
     if alembic_ini_path.exists():
-        utils.LOGGER.debug("Using existing alembic.ini")
+        LOGGER.debug("Using existing alembic.ini")
         return alembic_ini_path, False
 
     result = utils.load_data_file(
@@ -40,7 +46,7 @@ def ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
         package_name=utils.get_package_name(use_underscores=True),
     )
     alembic_ini_path.write_text(rendered, encoding="utf-8")
-    utils.LOGGER.debug("Rendered bundled alembic.ini.j2 to %s", alembic_ini_path)
+    LOGGER.debug("Rendered bundled alembic.ini.j2 to %s", alembic_ini_path)
     return alembic_ini_path, True
 
 
@@ -145,7 +151,7 @@ def read_dotenv(path: Path, error_on_fail: bool = False) -> dict[str, str]:
         if error_on_fail:
             utils.fatal(f"Failed to parse .env file {path}: {exc}")
         else:
-            utils.LOGGER.debug("Failed to parse .env file %s: %s", path, exc)
+            LOGGER.debug("Failed to parse .env file %s: %s", path, exc)
     return env
 
 
@@ -200,9 +206,9 @@ def get_or_generate_secret(
     token = secrets.token_hex(length_bytes)
     try:
         append_dotenv(dotenv_path, {key_name: token})
-        utils.LOGGER.info("Generated %s and stored it in .env", key_name)
+        LOGGER.info("Generated %s and stored it in .env", key_name)
     except Exception as exc:
-        utils.LOGGER.warning(
+        LOGGER.warning(
             "Failed to persist %s to .env (%s); using in-memory only", key_name, exc
         )
     if set_in_env:
@@ -371,7 +377,7 @@ def load_compose_files(
 
     compose_files_env = os.getenv("COMPOSE_FILE")
     if compose_files_env:
-        utils.LOGGER.debug(
+        LOGGER.debug(
             "Using compose files from environment variable COMPOSE_FILE: %s",
             compose_files_env,
         )
@@ -385,7 +391,7 @@ def load_compose_files(
     compose_addons_str = os.getenv("COMPOSE_ADDONS", "")
     compose_addons = [a.strip() for a in compose_addons_str.split(":") if a.strip()]
 
-    utils.LOGGER.debug(
+    LOGGER.debug(
         "Loading compose files for type '%s' with addons: %s%s",
         compose_type,
         compose_addons if compose_addons else "none",
@@ -454,7 +460,7 @@ def load_compose_files(
     overlay_files_str = os.getenv("COMPOSE_OVERLAY_FILES", "")
     if overlay_files_str:
         overlay_files = [f.strip() for f in overlay_files_str.split(":") if f.strip()]
-        utils.LOGGER.debug("Adding overlay compose files: %s", overlay_files)
+        LOGGER.debug("Adding overlay compose files: %s", overlay_files)
         for overlay_file in overlay_files:
             files_and_cleanups.append((Path(overlay_file), False))
 
@@ -621,5 +627,5 @@ def exec_script(script_path: Path | str, env: dict[str, str] | None = None) -> N
         This function never returns; it replaces the current process.
     """
 
-    utils.LOGGER.debug("Exec handoff to script: %s", script_path)
+    LOGGER.debug("Exec handoff to script: %s", script_path)
     os.execvpe("/bin/sh", ["/bin/sh", str(script_path)], env or os.environ)

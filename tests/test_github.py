@@ -1,6 +1,10 @@
 import subprocess
 
-from common_python_tasks.github import get_github_token
+from common_python_tasks.github import (
+    GitHubClient,
+    get_github_api_base_url,
+    get_github_token,
+)
 
 
 def test_get_github_token_uses_environment_variable(monkeypatch):
@@ -57,3 +61,40 @@ def test_get_github_token_warns_when_gh_cli_fails(monkeypatch, caplog):
     caplog.set_level("WARNING")
     assert get_github_token() is None
     assert "Failed to retrieve GitHub token" in caplog.text
+
+
+def test_get_github_api_base_url_uses_environment_variable(monkeypatch):
+    monkeypatch.setenv("GITHUB_API_URL", "https://example.com/api/")
+    monkeypatch.delenv("GITHUB_SERVER_URL", raising=False)
+
+    assert get_github_api_base_url() == "https://example.com/api"
+
+
+def test_get_github_api_base_url_defaults_to_github_com(monkeypatch):
+    monkeypatch.delenv("GITHUB_API_URL", raising=False)
+    monkeypatch.delenv("GITHUB_SERVER_URL", raising=False)
+
+    assert get_github_api_base_url() == "https://api.github.com"
+
+
+def test_get_github_api_base_url_uses_enterprise_api_path(monkeypatch):
+    monkeypatch.delenv("GITHUB_API_URL", raising=False)
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://ghe.example.com/")
+
+    assert get_github_api_base_url() == "https://ghe.example.com/api/v3"
+
+
+def test_github_client_build_url_uses_selected_endpoint(monkeypatch):
+    monkeypatch.delenv("GITHUB_API_URL", raising=False)
+    monkeypatch.delenv("GITHUB_SERVER_URL", raising=False)
+
+    client = GitHubClient(repository="owner/repo", token="token")
+
+    assert (
+        client._build_url("/releases", endpoint="api")
+        == "https://api.github.com/repos/owner/repo/releases"
+    )
+    assert (
+        client._build_url("/releases/1/assets", endpoint="uploads")
+        == "https://uploads.github.com/repos/owner/repo/releases/1/assets"
+    )
