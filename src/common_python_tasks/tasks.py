@@ -21,7 +21,7 @@ class _ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("common_python_tasks")
 handler = logging.StreamHandler()
 handler.setFormatter(_ColoredFormatter("[%(asctime)s] %(levelname)s: %(message)s"))
 LOGGER.addHandler(handler)
