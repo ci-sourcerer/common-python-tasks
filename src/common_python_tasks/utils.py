@@ -347,6 +347,36 @@ def run_git_cliff(
     )
 
 
+def get_prepended_changelog_contents(
+    tag_name: str,
+    changelog_path: Path = Path("CHANGELOG.md"),
+) -> str:
+    """Return changelog content with release notes prepended for the given tag.
+
+    Args:
+        tag_name: The release tag to generate changelog entries for.
+        changelog_path: The changelog file to read as the base content.
+
+    Returns:
+        The full changelog text as it would look after prepending release notes.
+    """
+    existing_changelog = (
+        changelog_path.read_text(encoding="utf-8")
+        if changelog_path.exists()
+        else "# Changelog\n\n## [Unreleased]\n"
+    )
+    release_notes = run_git_cliff(
+        ["--unreleased", "--tag", tag_name], capture_output=True
+    ).stdout
+    if release_notes.strip():
+        # Ensure the prepended section is separated from existing content.
+        release_notes = release_notes.rstrip("\n") + "\n\n"
+    else:
+        release_notes = ""
+
+    return release_notes + existing_changelog
+
+
 def prepend_changelog(
     tag_name: str,
     changelog_path: Path = Path("CHANGELOG.md"),
@@ -360,16 +390,10 @@ def prepend_changelog(
         tag_name: The release tag to generate changelog entries for.
         changelog_path: The path to the changelog file to prepend to.
     """
-    if not changelog_path.exists():
-        changelog_path.write_text("# Changelog\n\n## [Unreleased]\n", encoding="utf-8")
-    release_notes = run_git_cliff(
-        ["--unreleased", "--tag", tag_name], capture_output=True
-    ).stdout
-    if release_notes and not release_notes.endswith("\n"):
-        release_notes += "\n"
-
-    existing_changelog = changelog_path.read_text(encoding="utf-8")
-    changelog_path.write_text(release_notes + existing_changelog, encoding="utf-8")
+    changelog_path.write_text(
+        get_prepended_changelog_contents(tag_name, changelog_path),
+        encoding="utf-8",
+    )
 
 
 def changelog() -> str | None:

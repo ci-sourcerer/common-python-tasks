@@ -166,10 +166,20 @@ def _resolve_allow_dirty_release(dirty_files: list[Path]) -> bool:
 
 
 def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
-    from .utils import log_dry_run, prepend_changelog, run_command
+    from .utils import (
+        get_prepended_changelog_contents,
+        log_dry_run,
+        prepend_changelog,
+        run_command,
+    )
 
     changelog_path = Path("CHANGELOG.md")
     if dry_run:
+        LOGGER.debug(
+            "Dry-run rendered %s contents:\n%s",
+            changelog_path,
+            get_prepended_changelog_contents(release_tag, changelog_path),
+        )
         log_dry_run(
             "Would prepend generated git-cliff release notes for %s to %s",
             release_tag,

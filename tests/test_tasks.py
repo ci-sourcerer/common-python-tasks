@@ -696,9 +696,14 @@ class TestBumpVersion:
                 "common_python_tasks.github.get_github_release_asset_paths",
                 return_value=[],
             ),
+            patch(
+                "common_python_tasks.utils.get_prepended_changelog_contents",
+                return_value="## [1.2.3] - 2026-05-22\n\n# Changelog\n",
+            ),
             patch("common_python_tasks.docker.build_image") as mock_build_image,
             patch("common_python_tasks.tasks.push_image") as mock_push_image,
             patch("common_python_tasks.utils.LOGGER") as mock_logger,
+            patch("common_python_tasks.tasks.LOGGER") as mock_tasks_logger,
             patch(
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
@@ -722,6 +727,11 @@ class TestBumpVersion:
                 "\033[93m[DRY RUN]\033[0m Would prepend generated git-cliff release notes for %s to %s",
                 "v1.2.3",
                 Path("CHANGELOG.md"),
+            )
+            mock_tasks_logger.debug.assert_any_call(
+                "Dry-run rendered %s contents:\n%s",
+                Path("CHANGELOG.md"),
+                "## [1.2.3] - 2026-05-22\n\n# Changelog\n",
             )
             mock_run_command.assert_any_call(
                 ["git", "add", Path("CHANGELOG.md")],

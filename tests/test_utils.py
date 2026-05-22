@@ -203,7 +203,7 @@ def test_prepend_changelog_creates_scaffold_when_file_missing(tmp_path):
         prepend_changelog("v1.2.3", changelog_path)
 
     assert changelog_path.read_text(encoding="utf-8") == (
-        "## [1.2.3] - 2026-05-22\n# Changelog\n\n## [Unreleased]\n"
+        "## [1.2.3] - 2026-05-22\n\n# Changelog\n\n## [Unreleased]\n"
     )
     mock_run_command.assert_called_once_with(
         [
@@ -226,7 +226,7 @@ def test_prepend_changelog_does_not_overwrite_existing_file(tmp_path):
         prepend_changelog("v2.0.0", changelog_path)
 
     assert changelog_path.read_text(encoding="utf-8") == (
-        "## [2.0.0] - 2026-05-22\n# Existing Changelog\n"
+        "## [2.0.0] - 2026-05-22\n\n# Existing Changelog\n"
     )
     mock_run_command.assert_called_once_with(
         [
@@ -249,7 +249,7 @@ def test_prepend_changelog_adds_trailing_newline_to_generated_section(tmp_path):
         prepend_changelog("v2.0.0", changelog_path)
 
     assert changelog_path.read_text(encoding="utf-8") == (
-        "## [2.0.0] - 2026-05-22\n# Existing Changelog"
+        "## [2.0.0] - 2026-05-22\n\n# Existing Changelog"
     )
     mock_run_command.assert_called_once_with(
         [
@@ -271,7 +271,7 @@ def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypat
         prepend_changelog("v1.0.0")
 
     assert (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8") == (
-        "## [1.0.0] - 2026-05-22\n# Changelog\n\n## [Unreleased]\n"
+        "## [1.0.0] - 2026-05-22\n\n# Changelog\n\n## [Unreleased]\n"
     )
     mock_run_command.assert_called_once_with(
         [
