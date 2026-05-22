@@ -1,6 +1,7 @@
 import importlib.util
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -370,5 +371,11 @@ def changelog() -> str | None:
     notes = result.stdout.strip()
     if not notes:
         LOGGER.warning("git-cliff produced no release notes for unreleased commits")
+        return notes
 
-    return notes
+    return re.sub(
+        r"(?im)\A##\s*\[?unreleased\]?\s*\n?",
+        "",
+        notes,
+        count=1,
+    ).strip()
