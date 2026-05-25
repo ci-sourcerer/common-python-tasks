@@ -3,11 +3,10 @@ import logging
 import mimetypes
 import os
 import re
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any, Literal
+
+import requests
 
 from . import utils
 from .env import env_truthy
@@ -210,21 +209,6 @@ class GitHubClient:
     def _build_url(self, path: str, endpoint: GitHubEndpoint = "api") -> str:
         return f"{self._get_base_url(endpoint)}/repos/{self.repository}{path}"
 
-    def _build_request(
-        self,
-        method: str,
-        path: str,
-        payload: bytes | None = None,
-        endpoint: GitHubEndpoint = "api",
-        content_type: str | None = None,
-    ) -> urllib.request.Request:
-        return urllib.request.Request(
-            self._build_url(path, endpoint=endpoint),
-            data=payload,
-            method=method,
-            headers=self._build_headers(content_type),
-        )
-
     def _request(
         self,
         method: str,
@@ -244,25 +228,22 @@ class GitHubClient:
                 )
             return None
 
-        request = self._build_request(
-            method,
-            path,
-            payload=payload,
-            endpoint=endpoint,
-            content_type=content_type,
+        response = requests.request(
+            method=method,
+            url=self._build_url(path, endpoint=endpoint),
+            data=payload,
+            headers=self._build_headers(content_type),
+            timeout=30,
         )
 
-        try:
-            with urllib.request.urlopen(request) as response:
-                body = response.read().decode("utf-8").strip()
-        except urllib.error.HTTPError:
-            if allow_404:
-                return None
-            raise
+        if allow_404 and response.status_code == 404:
+            return None
+        response.raise_for_status()
 
+        body = response.text.strip()
         if not body:
             return None
-        return json.loads(body)
+        return response.json()
 
     def api_request(
         self,
@@ -395,7 +376,7 @@ def publish_github_release(
     }
 
     client = GitHubClient(repository=repository, token=token)
-    encoded_tag_name = urllib.parse.quote(tag_name, safe="")
+    encoded_tag_name = requests.utils.quote(tag_name, safe="")
     existing_release = client.api_request(
         "GET",
         f"/releases/tags/{encoded_tag_name}",
@@ -563,7 +544,7 @@ def upload_github_release_asset(
     content_type = content_type or "application/octet-stream"
     return github_upload_request(
         "POST",
-        f"/releases/{release_id}/assets?name={urllib.parse.quote(asset_path.name, safe='')}",
+        f"/releases/{release_id}/assets?name={requests.utils.quote(asset_path.name, safe='')}",
         payload=asset_path.read_bytes(),
         content_type=content_type,
     )
