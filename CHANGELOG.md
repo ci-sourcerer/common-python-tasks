@@ -1,3 +1,23 @@
+## [0.3.1] - 2026-05-26
+
+### 🐛 Bug Fixes
+
+- Auto-add newlines to changelog
+
+### 💼 Other
+
+- Add newline to changelog
+
+### 🚜 Refactor
+
+- Improve type hints and error handling in utility functions
+- Remove `ReleaseComponentBump`
+- Add `git cliff` data file and correctly version bump pre-1.0.0 releases
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.3.1
+
 ## [0.3.0] - 2026-05-22
 
 ### 🐛 Bug Fixes
