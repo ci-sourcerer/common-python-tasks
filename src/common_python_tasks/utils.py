@@ -257,9 +257,7 @@ def get_registry_username() -> str:
         The configured registry username, falling back to the current system
         user.
     """
-    return (
-        os.getenv("REGISTRY_USERNAME") or os.getenv("DOCKERHUB_USERNAME") or getuser()
-    )
+    return os.getenv("REGISTRY_USERNAME") or getuser()
 
 
 def get_registry_namespace() -> str | None:
@@ -268,24 +266,30 @@ def get_registry_namespace() -> str | None:
     return namespace.strip() if namespace and namespace.strip() else None
 
 
-def get_dockerhub_username() -> str:
-    """Return the legacy Docker Hub username helper for compatibility."""
-    return get_registry_username()
-
-
 def get_container_registry_url() -> str:
-    """Get the container registry URL from the environment or fallback to a
-    Docker Hub-style default.
+    """Get the container registry URL from the environment or fallback.
+
+    If `CONTAINER_REGISTRY_URL` is a host only and
+    `CONTAINER_REGISTRY_NAMESPACE` is set, the namespace is appended.
+    If `CONTAINER_REGISTRY_URL` already contains a namespace path, it is used
+    as-is.
 
     Returns:
         The registry prefix, which may include a namespace such as
         `ghcr.io/org` or `docker.io/user`.
     """
     registry = normalize_registry(os.getenv("CONTAINER_REGISTRY_URL"))
+    namespace = get_registry_namespace()
+
     if registry:
+        if registry == "docker.io":
+            if namespace:
+                return normalize_registry(f"docker.io/{namespace}") or "docker.io"
+            return "docker.io"
+        if namespace and "/" not in registry:
+            return f"{registry}/{namespace}"
         return registry
 
-    namespace = get_registry_namespace()
     if namespace:
         return normalize_registry(f"docker.io/{namespace}") or "docker.io"
 

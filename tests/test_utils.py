@@ -4,6 +4,7 @@ import pytest
 from common_python_tasks.utils import (
     compose_image_name,
     fatal,
+    get_container_registry_url,
     get_package_name,
     is_package_installed,
     normalize_registry,
@@ -114,6 +115,20 @@ def test_compose_image_name_creates_fully_qualified_reference():
     )
     assert compose_image_name("repo", "1.0", namespace="org") == "org/repo:1.0"
     assert compose_image_name("repo", "1.0", fully_qualified=False) == "repo:1.0"
+
+
+def test_get_container_registry_url_appends_namespace_to_host_only_registry(monkeypatch):
+    monkeypatch.setenv("CONTAINER_REGISTRY_URL", "ghcr.io")
+    monkeypatch.setenv("CONTAINER_REGISTRY_NAMESPACE", "acme")
+
+    assert get_container_registry_url() == "ghcr.io/acme"
+
+
+def test_get_container_registry_url_ignores_namespace_when_registry_includes_path(monkeypatch):
+    monkeypatch.setenv("CONTAINER_REGISTRY_URL", "ghcr.io/acme")
+    monkeypatch.setenv("CONTAINER_REGISTRY_NAMESPACE", "other")
+
+    assert get_container_registry_url() == "ghcr.io/acme"
 
 
 def test_run_command_executes_shell_command():

@@ -193,8 +193,8 @@ The following environment variables configure package and container behavior.
 
 - `PACKAGE_NAME` overrides the package name (default is from `pyproject.toml`)
 - `POETRY_VERSION` overrides the Poetry version for container builds
-- `DOCKERHUB_USERNAME` specifies the Docker Hub username for image tagging (default is current local user)
-- `CONTAINER_REGISTRY_URL` specifies the registry URL (default is `docker.io/{username}`)
+- `REGISTRY_USERNAME` specifies the registry namespace username used for default image naming (default is current local user)
+- `CONTAINER_REGISTRY_URL` specifies the registry URL (default is `docker.io/{REGISTRY_USERNAME}`)
 - `CONTAINER_BUILD_ARGS` provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
 - `CONTAINER_EXTENSION_FILES` specifies colon-delimited local extension Dockerfile paths to include in the rendered build.
 - `CONTAINER_EXTENSIONS` specifies colon-delimited extension bundle names or parameterized bundle values to include in the rendered build.
@@ -275,7 +275,7 @@ dependencies = ["common-python-tasks==0.3.0"]
 include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
 
 [tool.poe.env]
-DOCKERHUB_USERNAME = "myusername"
+REGISTRY_USERNAME = "myusername"
 PACKAGE_NAME = "containerized-app"
 ```
 
