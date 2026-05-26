@@ -97,15 +97,9 @@ def compute_next_release_version(
         A `NextReleaseVersion` with the serialized new version and normalized component.
     """
     current_version_text = project.get_project_version_from_poetry()
-    release_component = component
-    if release_component is None:
-        release_component = infer_bump_component_from_git_cliff()
-        if re.match(r"^0\.", str(Version.parse(current_version_text).base)):
-            LOGGER.info(
-                "Current version %s is pre-production; using patch bump.",
-                current_version_text,
-            )
-            release_component = ReleaseComponent.PATCH
+    release_component = (
+        infer_bump_component_from_git_cliff() if component is None else component
+    )
 
     bumped = Version.parse(Version.parse(current_version_text).base).bump(
         list(ReleaseComponent).index(release_component)
@@ -171,10 +165,8 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
             "Install git-cliff or pass one of: major, minor, patch."
         )
 
-    result = utils.run_command(
-        ["git-cliff", "--bumped-version", "--unreleased"],
-        capture_output=True,
-        acceptable_returncodes={0},
+    result = utils.run_git_cliff(
+        ["--bumped-version", "--unreleased"], capture_output=True
     )
     version_text = result.stdout.strip()
     if not version_text:

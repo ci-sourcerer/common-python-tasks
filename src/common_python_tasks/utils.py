@@ -358,8 +358,13 @@ def run_git_cliff(
     Returns:
         The `CompletedProcess` result, or `None` for dry-run invocations.
     """
+    config_path = get_config_path(
+        "GIT_CLIFF_CONFIG",
+        "cliff.toml",
+        "cliff.toml",
+    )
     return run_command(
-        ["git-cliff", *args],
+        ["git-cliff", "--config", config_path if config_path else None, *args],
         capture_output=capture_output,
         acceptable_returncodes={0},
     )

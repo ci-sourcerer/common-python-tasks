@@ -102,7 +102,7 @@ class TestComputeNextReleaseVersion:
             assert result.version == "1.3.0"
             assert result.component == "minor"
 
-    def test_auto_forces_patch_for_pre_production(self):
+    def test_auto_uses_git_cliff_inference_for_pre_production(self):
         from common_python_tasks.git import ReleaseComponent
 
         with (
@@ -112,8 +112,8 @@ class TestComputeNextReleaseVersion:
             ),
         ):
             result = self._call("auto", current_version="0.3.1")
-            assert result.version == "0.3.2"
-            assert result.component == "patch"
+            assert result.version == "1.0.0"
+            assert result.component == "major"
 
     def test_accepts_enum_inputs(self):
         from common_python_tasks.git import ReleaseComponent, ReleaseStage
