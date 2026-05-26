@@ -1,7 +1,7 @@
 import logging
 import re
 import shutil
-from enum import IntEnum, StrEnum, auto
+from enum import StrEnum, auto
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -25,14 +25,6 @@ class ReleaseComponent(StrEnum):
     MAJOR = auto()
     MINOR = auto()
     PATCH = auto()
-
-
-class ReleaseComponentBump(IntEnum):
-    """Numeric bump positions expected by `Version.bump`."""
-
-    MAJOR = 0
-    MINOR = 1
-    PATCH = 2
 
 
 class ReleaseStage(StrEnum):
@@ -116,7 +108,7 @@ def compute_next_release_version(
             release_component = ReleaseComponent.PATCH
 
     bumped = Version.parse(Version.parse(current_version_text).base).bump(
-        ReleaseComponentBump[release_component.name]
+        list(ReleaseComponent).index(release_component)
     )
     if stage is not None:
         bumped.stage = stage.value
