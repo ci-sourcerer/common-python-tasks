@@ -400,7 +400,19 @@ def build_image(
             tag = BuildTag.LATEST if not git.has_tags_later_in_history() else None
 
         version_tag = f"{version_string}{suffix}"
-        commit_tag = f"{utils.run_command(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True).stdout.strip()}{'-dirty' if git.get_dirty_files(ignore=files_to_ignore) else ''}{suffix}"
+        if git.git_available():
+            commit_hash = utils.run_command(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                acceptable_returncodes={0},
+            ).stdout.strip()
+            dirty_suffix = (
+                "-dirty" if git.get_dirty_files(ignore=files_to_ignore) else ""
+            )
+            commit_tag = f"{commit_hash}{dirty_suffix}{suffix}"
+        else:
+            commit_tag = version_tag
+
         python_version = platform.python_version()
         poetry_version = project.get_poetry_version()
 

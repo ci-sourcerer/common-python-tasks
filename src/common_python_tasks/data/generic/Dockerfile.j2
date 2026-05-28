@@ -13,8 +13,12 @@ FROM python:${PYTHON_VERSION} AS builder
 ARG POETRY_VERSION
 ARG POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION
 ARG POETRY_PLUGIN_EXPORT_VERSION
+ARG POETRY_DYNAMIC_VERSIONING_COMMANDS
 ARG TOMLKIT_VERSION
 
+{% if POETRY_DYNAMIC_VERSIONING_COMMANDS is defined %}
+ENV POETRY_DYNAMIC_VERSIONING_COMMANDS=${POETRY_DYNAMIC_VERSIONING_COMMANDS}
+{% endif %}
 # Install Poetry and required Poetry plugins for build
 RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} pip install --root-user-action=ignore \
     "poetry==$POETRY_VERSION" \

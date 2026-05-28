@@ -283,3 +283,10 @@ class TestGetImageTag:
             mock_version.return_value = "2.0.0+dirty"
             result = get_image_tag(ignore=[Path("CHANGELOG.md")])
             assert result == "2.0.0-dirty"
+
+    def test_get_version_falls_back_when_git_unavailable(self):
+        from common_python_tasks.git import get_image_tag, get_version
+
+        with patch("common_python_tasks.git.shutil.which", return_value=None):
+            assert get_version() == "0.0.0"
+            assert get_image_tag() == "0.0.0"

@@ -220,6 +220,20 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     )
 
 
+def git_available() -> bool:
+    """Return `True` if Git is installed and the current directory is a repository."""
+
+    if shutil.which("git") is None:
+        return False
+
+    result = utils.run_command(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        acceptable_returncodes={0, 1, 128},
+    )
+    return result.returncode == 0
+
+
 def get_dirty_files(ignore: list[Path] | None = None) -> list[Path]:
     """Get dirty git files excluding any specified paths.
 
@@ -232,6 +246,9 @@ def get_dirty_files(ignore: list[Path] | None = None) -> list[Path]:
 
     if ignore is None:
         ignore = []
+
+    if not git_available():
+        return []
 
     ignore_set = {Path(p) for p in ignore}
 
@@ -259,6 +276,10 @@ def get_version(ignore: list[Path] | None = None) -> str:
     """
     if ignore is None:
         ignore = []
+
+    if not git_available():
+        LOGGER.warning("Git is unavailable. Falling back to placeholder version 0.0.0.")
+        return "0.0.0"
 
     dirty_files = get_dirty_files(ignore=ignore)
     LOGGER.debug("Dirty files: %s", dirty_files)
@@ -295,6 +316,9 @@ def has_tags_later_in_history() -> bool:
     Returns:
         `True` if tags are later in history, else `False`.
     """
+
+    if not git_available():
+        return False
 
     result = utils.run_command(
         ["git", "tag"],

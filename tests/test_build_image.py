@@ -653,6 +653,52 @@ def test_build_image_includes_workdir_path_from_env(
     assert any("WORKDIR_PATH=/app" in str(a) for a in base_build_cmd)
 
 
+def test_build_image_injects_poetry_dynamic_versioning_commands_from_env(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("POETRY_DYNAMIC_VERSIONING_COMMANDS", "")
+    monkeypatch.delenv("CONTAINER_BUILD_ARGS", raising=False)
+
+    build_calls: list[list[str]] = []
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    assert len(build_calls) == 1
+    base_build_cmd = build_calls[0]
+    assert any("POETRY_DYNAMIC_VERSIONING_COMMANDS=" in str(a) for a in base_build_cmd)
+
+
+def test_dockerfile_template_supports_poetry_dynamic_versioning_commands():
+    from common_python_tasks.utils import load_data_file, render_template_text
+
+    template = load_data_file("Dockerfile.j2")[1]
+    rendered = render_template_text(
+        template, {"POETRY_DYNAMIC_VERSIONING_COMMANDS": ""}
+    )
+
+    assert "ARG POETRY_DYNAMIC_VERSIONING_COMMANDS" in rendered
+    assert (
+        "ENV POETRY_DYNAMIC_VERSIONING_COMMANDS=${POETRY_DYNAMIC_VERSIONING_COMMANDS}"
+        in rendered
+    )
+
+
 def test_build_image_explicit_workdir_path_build_arg_overrides_env(
     temp_project_dir,
     mock_run_command,
