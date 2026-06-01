@@ -247,10 +247,17 @@ def _parse_build_args(
 @tasks.script(task_name="_black", tags=["format", "internal", "common"])
 def black() -> None:
     """Run black formatting."""
+    from .project import get_black_target_version
     from .utils import require_package, run_command
 
     require_package("black")
-    run_command(["black", "--quiet", "."])
+    target_version = get_black_target_version()
+    command = ["black", "--quiet"]
+    if target_version:
+        command.extend(["--target-version", target_version])
+    command.append(".")
+
+    run_command(command)
 
 
 @tasks.script(task_name="_isort", tags=["format", "internal", "common"])
@@ -298,10 +305,17 @@ def autoflake() -> None:
 @tasks.script(task_name="_black_check", tags=["lint", "internal", "common"])
 def black_check() -> None:
     """Run black in check mode."""
+    from .project import get_black_target_version
     from .utils import require_package, run_command
 
     require_package("black")
-    run_command(["black", "--quiet", "--diff", Path("."), "--check"])
+    target_version = get_black_target_version()
+    command = ["black", "--quiet"]
+    if target_version:
+        command.extend(["--target-version", target_version])
+    command.extend(["--diff", Path("."), "--check"])
+
+    run_command(command)
 
 
 @tasks.script(task_name="_isort_check", tags=["lint", "common"])

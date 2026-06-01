@@ -5,6 +5,7 @@ import pytest
 from common_python_tasks.project import (
     extract_poe_script_tags,
     get_authors,
+    get_black_target_version,
     get_installed_requirement_version,
     is_task_tag_included,
 )
@@ -148,6 +149,30 @@ def test_get_installed_requirement_version_returns_none_when_not_installed():
     get_installed_requirement_version.cache_clear()
     with patch("importlib.metadata.version", side_effect=version_side_effect):
         assert get_installed_requirement_version("no-such-package") is None
+
+
+def test_get_black_target_version_from_requires_python():
+    with patch(
+        "common_python_tasks.project.read_pyproject_toml",
+        return_value={"project": {"requires-python": ">=3.11,<4.0"}},
+    ):
+        assert get_black_target_version() == "py311"
+
+
+def test_get_black_target_version_returns_none_for_missing_requires_python():
+    with patch(
+        "common_python_tasks.project.read_pyproject_toml",
+        return_value={"project": {}},
+    ):
+        assert get_black_target_version() is None
+
+
+def test_get_black_target_version_returns_none_for_invalid_specifier():
+    with patch(
+        "common_python_tasks.project.read_pyproject_toml",
+        return_value={"project": {"requires-python": "not-a-spec"}},
+    ):
+        assert get_black_target_version() is None
 
 
 def test_is_task_tag_included_with_include_tags():

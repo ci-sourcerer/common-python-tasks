@@ -66,6 +66,50 @@ def test_format_all_fails_when_no_tools_installed(mock_find_spec):
         assert exc_info.value.code == 1
 
 
+def test_black_uses_target_version_from_project_metadata():
+    from common_python_tasks.tasks import black
+
+    with (
+        patch(
+            "common_python_tasks.project.get_black_target_version", return_value="py311"
+        ),
+        patch("common_python_tasks.utils.require_package") as mock_require_package,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        black()
+
+    mock_require_package.assert_called_once_with("black")
+    mock_run_command.assert_called_once_with(
+        ["black", "--quiet", "--target-version", "py311", "."]
+    )
+
+
+def test_black_check_uses_target_version_from_project_metadata():
+    from common_python_tasks.tasks import black_check
+
+    with (
+        patch(
+            "common_python_tasks.project.get_black_target_version", return_value="py311"
+        ),
+        patch("common_python_tasks.utils.require_package") as mock_require_package,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        black_check()
+
+    mock_require_package.assert_called_once_with("black")
+    mock_run_command.assert_called_once_with(
+        [
+            "black",
+            "--quiet",
+            "--target-version",
+            "py311",
+            "--diff",
+            Path("."),
+            "--check",
+        ]
+    )
+
+
 def test_confirm_loops_until_valid_response():
     from common_python_tasks.tasks import _confirm
 
