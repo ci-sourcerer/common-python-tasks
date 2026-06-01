@@ -513,9 +513,6 @@ def build_image(
     Precedence for container env declarations is: `.containerenv`, `container_envfile`, `CONTAINER_ENV`, then `container_env`.
     All supported sources are stacked in that order.
     """
-    from .docker import (
-        build_deps_image,
-    )
     from .docker import build_image as _build_image
     from .docker import (
         prune_images_keep,
@@ -652,15 +649,11 @@ def build_image(
     cache_id_suffix = get_cache_id_suffix(no_cache)
 
     if deps_content or deps_dockerfile_path:
-        deps_image_tag = build_deps_image(
-            deps_content=deps_content,
-            deps_dockerfile_path=deps_dockerfile_path,
-            context_path=Path("."),
+        deps_image_tag = build_deps_image_task(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
-            extra_build_args=top_level_build_args or None,
-            cache_id_suffix=cache_id_suffix,
+            build_args=build_args,
         )
         if merged_build_args is None:
             merged_build_args = {}
@@ -701,6 +694,53 @@ def build_image(
         prune_images_keep(
             get_full_image_name(), get_package_name(), keep, protect_tags=protect
         )
+
+
+@tasks.script(task_name="build-deps-image", tags=["containers", "build"])
+def build_deps_image_task(
+    no_cache: bool = False,
+    plain: bool = False,
+    single_arch: bool = False,
+    build_args: list[str] | None = None,
+) -> None:
+    """Build only the container dependency collector image for this project.
+
+    Args:
+        no_cache: Do not use cache when building the deps image.
+        plain: Do not pretty-print output.
+        single_arch: Build images for a single architecture.
+        build_args: Additional build arguments as repeated `KEY=VALUE` values.
+            Overrides `CONTAINER_BUILD_ARGS` if provided.
+    """
+    from .docker import build_deps_image
+    from .env import (
+        get_cache_id_suffix,
+        inject_auto_build_args_from_env,
+        parse_container_deps_source,
+    )
+    from .utils import fatal
+
+    deps_dockerfile_path, deps_content = parse_container_deps_source()
+    if deps_dockerfile_path is None and deps_content is None:
+        fatal(
+            "No container dependency source found. Set CONTAINER_DEPS_CONTENT or CONTAINER_DEPS_FILE."
+        )
+
+    parsed_build_args = _parse_build_args(build_args, os.getenv("CONTAINER_BUILD_ARGS"))
+    extra_build_args = inject_auto_build_args_from_env(parsed_build_args or {})
+    cache_id_suffix = get_cache_id_suffix(no_cache)
+
+    LOGGER.info("Building container dependency image")
+    return build_deps_image(
+        deps_content=deps_content,
+        deps_dockerfile_path=deps_dockerfile_path,
+        context_path=Path("."),
+        no_cache=no_cache,
+        plain=plain,
+        single_arch=single_arch,
+        extra_build_args=extra_build_args or None,
+        cache_id_suffix=cache_id_suffix,
+    )
 
 
 @tasks.script(tags=["containers"])
