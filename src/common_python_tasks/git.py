@@ -1,7 +1,7 @@
 import logging
 import re
 import shutil
-from enum import IntEnum, StrEnum, auto
+from enum import StrEnum, auto
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -25,14 +25,6 @@ class ReleaseComponent(StrEnum):
     MAJOR = auto()
     MINOR = auto()
     PATCH = auto()
-
-
-class ReleaseComponentBump(IntEnum):
-    """Numeric bump positions expected by `Version.bump`."""
-
-    MAJOR = 0
-    MINOR = 1
-    PATCH = 2
 
 
 class ReleaseStage(StrEnum):
@@ -105,18 +97,12 @@ def compute_next_release_version(
         A `NextReleaseVersion` with the serialized new version and normalized component.
     """
     current_version_text = project.get_project_version_from_poetry()
-    release_component = component
-    if release_component is None:
-        release_component = infer_bump_component_from_git_cliff()
-        if re.match(r"^0\.", str(Version.parse(current_version_text).base)):
-            LOGGER.info(
-                "Current version %s is pre-production; using patch bump.",
-                current_version_text,
-            )
-            release_component = ReleaseComponent.PATCH
+    release_component = (
+        infer_bump_component_from_git_cliff() if component is None else component
+    )
 
     bumped = Version.parse(Version.parse(current_version_text).base).bump(
-        ReleaseComponentBump[release_component.name]
+        list(ReleaseComponent).index(release_component)
     )
     if stage is not None:
         bumped.stage = stage.value
@@ -179,10 +165,8 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
             "Install git-cliff or pass one of: major, minor, patch."
         )
 
-    result = utils.run_command(
-        ["git-cliff", "--bumped-version", "--unreleased"],
-        capture_output=True,
-        acceptable_returncodes={0},
+    result = utils.run_git_cliff(
+        ["--bumped-version", "--unreleased"], capture_output=True
     )
     version_text = result.stdout.strip()
     if not version_text:
@@ -236,6 +220,20 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     )
 
 
+def git_available() -> bool:
+    """Return `True` if Git is installed and the current directory is a repository."""
+
+    if shutil.which("git") is None:
+        return False
+
+    result = utils.run_command(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        acceptable_returncodes={0, 1, 128},
+    )
+    return result.returncode == 0
+
+
 def get_dirty_files(ignore: list[Path] | None = None) -> list[Path]:
     """Get dirty git files excluding any specified paths.
 
@@ -248,6 +246,9 @@ def get_dirty_files(ignore: list[Path] | None = None) -> list[Path]:
 
     if ignore is None:
         ignore = []
+
+    if not git_available():
+        return []
 
     ignore_set = {Path(p) for p in ignore}
 
@@ -275,6 +276,10 @@ def get_version(ignore: list[Path] | None = None) -> str:
     """
     if ignore is None:
         ignore = []
+
+    if not git_available():
+        LOGGER.warning("Git is unavailable. Falling back to placeholder version 0.0.0.")
+        return "0.0.0"
 
     dirty_files = get_dirty_files(ignore=ignore)
     LOGGER.debug("Dirty files: %s", dirty_files)
@@ -311,6 +316,9 @@ def has_tags_later_in_history() -> bool:
     Returns:
         `True` if tags are later in history, else `False`.
     """
+
+    if not git_available():
+        return False
 
     result = utils.run_command(
         ["git", "tag"],

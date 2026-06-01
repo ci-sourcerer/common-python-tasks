@@ -14,6 +14,17 @@ def test_inject_auto_build_args_from_env_adds_value(monkeypatch):
     assert result["WORKDIR_PATH"] == "/app"
 
 
+def test_inject_auto_build_args_from_env_adds_poetry_dynamic_versioning_commands(
+    monkeypatch,
+):
+    monkeypatch.setenv("POETRY_DYNAMIC_VERSIONING_COMMANDS", "")
+
+    result = inject_auto_build_args_from_env({})
+
+    assert "POETRY_DYNAMIC_VERSIONING_COMMANDS" in result
+    assert result["POETRY_DYNAMIC_VERSIONING_COMMANDS"] == ""
+
+
 def test_inject_auto_build_args_from_env_preserves_explicit_value(monkeypatch):
     monkeypatch.setenv("WORKDIR_PATH", "/app")
 

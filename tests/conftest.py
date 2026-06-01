@@ -38,7 +38,13 @@ def mock_run_command():
         def side_effect(command, *args, **kwargs):
             result = MagicMock(spec=subprocess.CompletedProcess)
             result.returncode = 0
-            if "git" in command and "status" in command and "--porcelain" in command:
+            if (
+                "git" in command
+                and "rev-parse" in command
+                and "--is-inside-work-tree" in command
+            ):
+                result.stdout = "true"
+            elif "git" in command and "status" in command and "--porcelain" in command:
                 result.stdout = ""
             elif "git" in command and "rev-parse" in command:
                 result.stdout = "abc1234"

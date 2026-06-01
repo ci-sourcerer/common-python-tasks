@@ -1,0 +1,5 @@
+[git]
+conventional_commits = true
+
+[bump]
+breaking_always_bump_major = false

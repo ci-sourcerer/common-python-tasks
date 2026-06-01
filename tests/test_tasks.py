@@ -289,7 +289,9 @@ class TestBumpVersion:
 
         assert tag_calls[-1] == "v1.3.0"
 
-    def test_bump_version_auto_for_pre_production_forces_patch(self, tag_calls):
+    def test_bump_version_auto_for_pre_production_uses_git_cliff_inference(
+        self, tag_calls
+    ):
         from common_python_tasks.git import ReleaseComponent
         from common_python_tasks.tasks import bump_version
 
@@ -329,7 +331,7 @@ class TestBumpVersion:
         ):
             bump_version()
 
-        assert tag_calls[-1] == "v0.2.6"
+        assert tag_calls[-1] == "v1.0.0"
 
     def test_bump_version_requires_default_branch(self, tag_calls):
         from common_python_tasks.tasks import bump_version
@@ -475,7 +477,13 @@ class TestBumpVersion:
         ):
             mock_run_command.side_effect = _release_run_command_side_effect()
 
-            release(debug=True, no_cache=True, plain=True, single_arch=True)
+            release(
+                "patch",
+                debug=True,
+                no_cache=True,
+                plain=True,
+                single_arch=True,
+            )
 
             mock_clean.assert_called_once_with()
             mock_bump.assert_called_once_with(

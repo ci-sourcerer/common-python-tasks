@@ -1028,7 +1028,7 @@ def changelog() -> None:
 
 
 def _run_release_flow(
-    component: str = "patch",
+    component: str = "auto",
     *,
     stage: str | None = None,
     dry_run: bool = False,
@@ -1148,7 +1148,7 @@ def _run_release_flow(
 
 @tasks.script(task_name="release", tags=["packaging", "release", "containers"])
 def release(
-    component: str = "patch",
+    component: str = "auto",
     *,
     stage: str | None = None,
     dry_run: bool = False,
@@ -1202,7 +1202,7 @@ def release(
 
 @tasks.script(task_name="release", tags=["packaging", "release", "common"])
 def release_without_containers(
-    component: str = "patch",
+    component: str = "auto",
     *,
     stage: str | None = None,
     dry_run: bool = False,

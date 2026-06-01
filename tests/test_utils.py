@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -241,13 +242,18 @@ def test_run_available_tools_runs_all_when_all_installed(mock_find_spec):
 
 
 def test_run_git_cliff_passes_args_and_capture_output_to_run_command():
-    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+    with (
+        patch(
+            "common_python_tasks.utils.get_config_path", return_value=Path("cliff.toml")
+        ),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
         mock_run_command.return_value = MagicMock(stdout="notes", returncode=0)
 
         result = run_git_cliff(["--unreleased"], capture_output=True)
 
         mock_run_command.assert_called_once_with(
-            ["git-cliff", "--unreleased"],
+            ["git-cliff", "--config", Path("cliff.toml"), "--unreleased"],
             capture_output=True,
             acceptable_returncodes={0},
         )
@@ -255,11 +261,16 @@ def test_run_git_cliff_passes_args_and_capture_output_to_run_command():
 
 
 def test_run_git_cliff_defaults_to_no_capture():
-    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+    with (
+        patch(
+            "common_python_tasks.utils.get_config_path", return_value=Path("cliff.toml")
+        ),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
         run_git_cliff(["--tag", "v1.0.0"])
 
         mock_run_command.assert_called_once_with(
-            ["git-cliff", "--tag", "v1.0.0"],
+            ["git-cliff", "--config", Path("cliff.toml"), "--tag", "v1.0.0"],
             capture_output=False,
             acceptable_returncodes={0},
         )
@@ -268,7 +279,12 @@ def test_run_git_cliff_defaults_to_no_capture():
 def test_prepend_changelog_creates_scaffold_when_file_missing(tmp_path):
     changelog_path = tmp_path / "CHANGELOG.md"
 
-    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+    with (
+        patch(
+            "common_python_tasks.utils.get_config_path", return_value=Path("cliff.toml")
+        ),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
         mock_run_command.return_value = MagicMock(stdout="## [1.2.3] - 2026-05-22")
         prepend_changelog("v1.2.3", changelog_path)
 
@@ -278,6 +294,8 @@ def test_prepend_changelog_creates_scaffold_when_file_missing(tmp_path):
     mock_run_command.assert_called_once_with(
         [
             "git-cliff",
+            "--config",
+            Path("cliff.toml"),
             "--unreleased",
             "--tag",
             "v1.2.3",
@@ -291,7 +309,12 @@ def test_prepend_changelog_does_not_overwrite_existing_file(tmp_path):
     changelog_path = tmp_path / "CHANGELOG.md"
     changelog_path.write_text("# Existing Changelog\n", encoding="utf-8")
 
-    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+    with (
+        patch(
+            "common_python_tasks.utils.get_config_path", return_value=Path("cliff.toml")
+        ),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
         mock_run_command.return_value = MagicMock(stdout="## [2.0.0] - 2026-05-22\n")
         prepend_changelog("v2.0.0", changelog_path)
 
@@ -301,6 +324,8 @@ def test_prepend_changelog_does_not_overwrite_existing_file(tmp_path):
     mock_run_command.assert_called_once_with(
         [
             "git-cliff",
+            "--config",
+            Path("cliff.toml"),
             "--unreleased",
             "--tag",
             "v2.0.0",
@@ -314,7 +339,12 @@ def test_prepend_changelog_adds_trailing_newline_to_generated_section(tmp_path):
     changelog_path = tmp_path / "CHANGELOG.md"
     changelog_path.write_text("# Existing Changelog", encoding="utf-8")
 
-    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+    with (
+        patch(
+            "common_python_tasks.utils.get_config_path", return_value=Path("cliff.toml")
+        ),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
         mock_run_command.return_value = MagicMock(stdout="## [2.0.0] - 2026-05-22")
         prepend_changelog("v2.0.0", changelog_path)
 
@@ -324,6 +354,8 @@ def test_prepend_changelog_adds_trailing_newline_to_generated_section(tmp_path):
     mock_run_command.assert_called_once_with(
         [
             "git-cliff",
+            "--config",
+            Path("cliff.toml"),
             "--unreleased",
             "--tag",
             "v2.0.0",
@@ -336,7 +368,12 @@ def test_prepend_changelog_adds_trailing_newline_to_generated_section(tmp_path):
 def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
-    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+    with (
+        patch(
+            "common_python_tasks.utils.get_config_path", return_value=Path("cliff.toml")
+        ),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
         mock_run_command.return_value = MagicMock(stdout="## [1.0.0] - 2026-05-22\n")
         prepend_changelog("v1.0.0")
 
@@ -346,6 +383,8 @@ def test_prepend_changelog_uses_changelog_md_as_default_path(tmp_path, monkeypat
     mock_run_command.assert_called_once_with(
         [
             "git-cliff",
+            "--config",
+            Path("cliff.toml"),
             "--unreleased",
             "--tag",
             "v1.0.0",
