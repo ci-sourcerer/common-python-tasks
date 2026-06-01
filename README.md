@@ -315,13 +315,6 @@ include_script = "common_python_tasks:tasks(exclude_tags=['internal'])"
 includes = "common_python_tasks:tasks"
 ```
 
-### Version bump fails with "no changes since last tag"
-
-This is expected behavior. The `bump-version` task requires commits between the last tag and HEAD. You can resolve this in one of the following ways.
-
-- Make changes and commit them first
-- Delete the old tag (for example, `git tag -d v0.0.1`). This is not recommended. Versions should be immutable, and if you need to fix something, you should create a new patch version instead. Rarely do you want to pass off new code as an old version
-
 ### Config files not being used
 
 Check the configuration precedence (see [How it works](#how-it-works)). Use debug logging to see which config is selected.
@@ -373,7 +366,7 @@ If `SECRET_KEY` or `DB_PASS` aren't auto-generated:
 
 ## Design choices
 
-### Dockerfile (see [src/common_python_tasks/data/Dockerfile](src/common_python_tasks/data/Dockerfile))
+### Dockerfile (see [`src/common_python_tasks/data/generic/Dockerfile.j2`](src/common_python_tasks/data/generic/Dockerfile.j2))
 
 The standard Python Dockerfile incorporates several intentional design choices.
 
