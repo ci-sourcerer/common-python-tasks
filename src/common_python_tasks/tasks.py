@@ -218,32 +218,6 @@ def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
     )
 
 
-def _parse_build_args(
-    cli_build_args: list[str] | None,
-    env_build_args: str | None,
-) -> dict[str, str] | None:
-    if cli_build_args is not None:
-        build_arg_tokens = [
-            token.strip() for token in cli_build_args if token and token.strip()
-        ]
-    elif env_build_args:
-        build_arg_tokens = [
-            token.strip() for token in env_build_args.split(":") if token.strip()
-        ]
-    else:
-        return None
-
-    parsed_build_args: dict[str, str] = {}
-    for token in build_arg_tokens:
-        if "=" not in token:
-            LOGGER.warning("Ignoring invalid build-arg token: %s", token)
-            continue
-        key, value = token.split("=", 1)
-        parsed_build_args[key.strip()] = value.strip()
-
-    return parsed_build_args or None
-
-
 @tasks.script(task_name="_black", tags=["format", "internal", "common"])
 def black() -> None:
     """Run black formatting."""
@@ -526,6 +500,7 @@ def build_image(
         get_prune_keep,
         inject_auto_build_args_from_env,
         load_container_env_tokens,
+        parse_container_build_args,
         parse_container_deps_mappings,
         parse_container_deps_source,
         parse_container_extensions,
@@ -556,7 +531,10 @@ def build_image(
     # bundles or files and avoid calling resolution logic multiple times.
     resolved_fragments = [resolve_extension_content(desc) for desc in extensions]
 
-    parsed_build_args = _parse_build_args(build_args, os.getenv("CONTAINER_BUILD_ARGS"))
+    parsed_build_args = parse_container_build_args(
+        build_args,
+        os.getenv("CONTAINER_BUILD_ARGS"),
+    )
 
     has_debug_deps = has_debug_dependency_group()
     if debug and not has_debug_deps:

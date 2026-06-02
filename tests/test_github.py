@@ -1,8 +1,10 @@
 import subprocess
+from pathlib import Path
 
 from common_python_tasks.github import (
     GitHubClient,
     get_github_api_base_url,
+    get_github_release_asset_paths,
     get_github_token,
 )
 
@@ -98,3 +100,20 @@ def test_github_client_build_url_uses_selected_endpoint(monkeypatch):
         client._build_url("/releases/1/assets", endpoint="uploads")
         == "https://uploads.github.com/repos/owner/repo/releases/1/assets"
     )
+
+
+def test_get_github_release_asset_paths_supports_quoted_colon_delimited_env(
+    monkeypatch,
+    tmp_path,
+):
+    asset_a = tmp_path / "dist one.txt"
+    asset_b = tmp_path / "other.txt"
+    asset_a.write_text("x", encoding="utf-8")
+    asset_b.write_text("y", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_RELEASE_ASSETS", '"dist one.txt":other.txt')
+
+    result = get_github_release_asset_paths()
+
+    assert result == [Path("dist one.txt"), Path("other.txt")]

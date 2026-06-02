@@ -471,21 +471,19 @@ def get_github_release_asset_paths(
     Returns:
         A sorted list of existing asset paths.
     """
+    from .env import split_colon_delimited_values
+
     if asset_sources is not None:
         explicit_assets = True
         if isinstance(asset_sources, list):
             source_items = [item.strip() for item in asset_sources if item.strip()]
         else:
-            source_items = [
-                item.strip() for item in asset_sources.split(":") if item.strip()
-            ]
+            source_items = split_colon_delimited_values(asset_sources)
     else:
         env_asset_sources = os.getenv("GITHUB_RELEASE_ASSETS")
         explicit_assets = bool(env_asset_sources)
         if env_asset_sources:
-            source_items = [
-                item.strip() for item in env_asset_sources.split(":") if item.strip()
-            ]
+            source_items = split_colon_delimited_values(env_asset_sources)
         else:
             source_items = ["dist/*"]
 
