@@ -7,6 +7,9 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
+
 from . import utils
 
 LOGGER = logging.getLogger(__name__)
@@ -178,6 +181,32 @@ def read_pyproject_toml() -> dict[str, Any]:
         A dictionary representing the contents of the `pyproject.toml` file.
     """
     return tomllib.loads(Path("pyproject.toml").read_text())
+
+
+BLACK_TARGET_PYTHON_CANDIDATES = [Version(f"3.{minor}") for minor in range(7, 17)]
+
+
+def get_black_target_version() -> str | None:
+    """Return the Black target-version token based on `project.requires-python`.
+
+    Returns:
+        The lowest supported Python version in Black format, such as
+        `py311`, or `None` when the project metadata is missing or invalid.
+    """
+    requires_python = read_pyproject_toml().get("project", {}).get("requires-python")
+    if not isinstance(requires_python, str):
+        return None
+
+    try:
+        specifier_set = SpecifierSet(requires_python)
+    except Exception:
+        LOGGER.warning("Unable to parse requires-python specifier: %s", requires_python)
+        return None
+
+    for candidate in BLACK_TARGET_PYTHON_CANDIDATES:
+        if specifier_set.contains(candidate):
+            return f"py{candidate.major}{candidate.minor:02d}"
+    return None
 
 
 @lru_cache
