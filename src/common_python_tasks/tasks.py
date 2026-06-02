@@ -218,32 +218,6 @@ def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
     )
 
 
-def _parse_build_args(
-    cli_build_args: list[str] | None,
-    env_build_args: str | None,
-) -> dict[str, str] | None:
-    if cli_build_args is not None:
-        build_arg_tokens = [
-            token.strip() for token in cli_build_args if token and token.strip()
-        ]
-    elif env_build_args:
-        build_arg_tokens = [
-            token.strip() for token in env_build_args.split(":") if token.strip()
-        ]
-    else:
-        return None
-
-    parsed_build_args: dict[str, str] = {}
-    for token in build_arg_tokens:
-        if "=" not in token:
-            LOGGER.warning("Ignoring invalid build-arg token: %s", token)
-            continue
-        key, value = token.split("=", 1)
-        parsed_build_args[key.strip()] = value.strip()
-
-    return parsed_build_args or None
-
-
 @tasks.script(task_name="_black", tags=["format", "internal", "common"])
 def black() -> None:
     """Run black formatting."""
@@ -527,9 +501,6 @@ def build_image(
     Precedence for container env declarations is: `.containerenv`, `container_envfile`, `CONTAINER_ENV`, then `container_env`.
     All supported sources are stacked in that order.
     """
-    from .docker import (
-        build_deps_image,
-    )
     from .docker import build_image as _build_image
     from .docker import (
         prune_images_keep,
@@ -540,6 +511,7 @@ def build_image(
         get_prune_keep,
         inject_auto_build_args_from_env,
         load_container_env_tokens,
+        parse_container_build_args,
         parse_container_deps_mappings,
         parse_container_deps_source,
         parse_container_extensions,
@@ -570,7 +542,10 @@ def build_image(
     # bundles or files and avoid calling resolution logic multiple times.
     resolved_fragments = [resolve_extension_content(desc) for desc in extensions]
 
-    parsed_build_args = _parse_build_args(build_args, os.getenv("CONTAINER_BUILD_ARGS"))
+    parsed_build_args = parse_container_build_args(
+        build_args,
+        os.getenv("CONTAINER_BUILD_ARGS"),
+    )
 
     has_debug_deps = has_debug_dependency_group()
     if debug and not has_debug_deps:
@@ -666,15 +641,11 @@ def build_image(
     cache_id_suffix = get_cache_id_suffix(no_cache)
 
     if deps_content or deps_dockerfile_path:
-        deps_image_tag = build_deps_image(
-            deps_content=deps_content,
-            deps_dockerfile_path=deps_dockerfile_path,
-            context_path=Path("."),
+        deps_image_tag = build_deps_image_task(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
-            extra_build_args=top_level_build_args or None,
-            cache_id_suffix=cache_id_suffix,
+            build_args=build_args,
         )
         if merged_build_args is None:
             merged_build_args = {}
@@ -717,6 +688,57 @@ def build_image(
         )
 
 
+@tasks.script(task_name="build-deps-image", tags=["containers", "build"])
+def build_deps_image_task(
+    no_cache: bool = False,
+    plain: bool = False,
+    single_arch: bool = False,
+    build_args: list[str] | None = None,
+) -> None:
+    """Build only the container dependency collector image for this project.
+
+    Args:
+        no_cache: Do not use cache when building the deps image.
+        plain: Do not pretty-print output.
+        single_arch: Build images for a single architecture.
+        build_args: Additional build arguments as repeated `KEY=VALUE` values.
+            Overrides `CONTAINER_BUILD_ARGS` if provided.
+    """
+    from .docker import build_deps_image
+    from .env import (
+        get_cache_id_suffix,
+        inject_auto_build_args_from_env,
+        parse_container_build_args,
+        parse_container_deps_source,
+    )
+    from .utils import fatal
+
+    deps_dockerfile_path, deps_content = parse_container_deps_source()
+    if deps_dockerfile_path is None and deps_content is None:
+        fatal(
+            "No container dependency source found. Set CONTAINER_DEPS_CONTENT or CONTAINER_DEPS_FILE."
+        )
+
+    parsed_build_args = parse_container_build_args(
+        build_args,
+        os.getenv("CONTAINER_BUILD_ARGS"),
+    )
+    extra_build_args = inject_auto_build_args_from_env(parsed_build_args or {})
+    cache_id_suffix = get_cache_id_suffix(no_cache)
+
+    LOGGER.info("Building container dependency image")
+    return build_deps_image(
+        deps_content=deps_content,
+        deps_dockerfile_path=deps_dockerfile_path,
+        context_path=Path("."),
+        no_cache=no_cache,
+        plain=plain,
+        single_arch=single_arch,
+        extra_build_args=extra_build_args or None,
+        cache_id_suffix=cache_id_suffix,
+    )
+
+
 @tasks.script(tags=["containers"])
 def run_container(
     tag: str | None = None,
@@ -747,9 +769,11 @@ def run_container(
         volumes: Repeated volume mounts to pass with `-v`.
     """
     from .utils import (
+        compose_image_name,
         fatal,
         get_full_image_name,
         get_package_name,
+        parse_image_reference,
         run_command,
     )
 
@@ -758,6 +782,14 @@ def run_container(
         fatal("PACKAGE_NAME could not be resolved")
 
     full_name = get_full_image_name()
+    parsed_full_name = parse_image_reference(full_name)
+    full_repo_name = compose_image_name(
+        package_name,
+        registry=parsed_full_name["registry"],
+        namespace=parsed_full_name["namespace"],
+        fully_qualified=True,
+    )
+    short_repo_name = compose_image_name(package_name, fully_qualified=False)
     selected_image: str | None = None
 
     def _image_exists(image: str) -> bool:
@@ -770,16 +802,31 @@ def run_container(
 
     if tag:
         # Prefer short name, fall back to full name if necessary
-        for candidate in (f"{package_name}:{tag}", f"{full_name}:{tag}"):
+        for candidate in (
+            compose_image_name(package_name, tag=tag, fully_qualified=False),
+            compose_image_name(
+                package_name,
+                tag=tag,
+                registry=parsed_full_name["registry"],
+                namespace=parsed_full_name["namespace"],
+                fully_qualified=True,
+            ),
+        ):
             if _image_exists(candidate):
                 selected_image = candidate
                 break
         if selected_image is None:
             # Not found locally — assume full name (allow docker to pull if needed)
-            selected_image = f"{full_name}:{tag}"
+            selected_image = compose_image_name(
+                package_name,
+                tag=tag,
+                registry=parsed_full_name["registry"],
+                namespace=parsed_full_name["namespace"],
+                fully_qualified=True,
+            )
     else:
         # Find the most-recently-built tag (newest first) for the image
-        for repo in (full_name, package_name):
+        for repo in (full_repo_name, short_repo_name):
             res = run_command(
                 [
                     "docker",
@@ -854,7 +901,9 @@ def push_image(debug: bool = False) -> None:
         has_tags_later_in_history,
     )
     from .utils import (
+        compose_image_name,
         get_full_image_name,
+        parse_image_reference,
         run_command,
     )
 
@@ -865,10 +914,16 @@ def push_image(debug: bool = False) -> None:
         suffix = ""
         # Only push 'latest' tag if there are no tags later in history
         tag = "latest" if not has_tags_later_in_history() else None
-    full_name = get_full_image_name()
+    parsed_full_name = parse_image_reference(get_full_image_name())
     tags_to_push = [t for t in [tag, f"{get_image_tag()}{suffix}"] if t is not None]
     for t in tags_to_push:
-        full_tag = f"{full_name}:{t}"
+        full_tag = compose_image_name(
+            parsed_full_name["repository"],
+            tag=t,
+            registry=parsed_full_name["registry"],
+            namespace=parsed_full_name["namespace"],
+            fully_qualified=True,
+        )
         LOGGER.info("Pushing image %s", full_tag)
         run_command(["docker", "push", full_tag])
 

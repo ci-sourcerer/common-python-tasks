@@ -225,27 +225,172 @@ def load_data_file(
         return None
 
 
-def get_dockerhub_username() -> str:
-    """Get the Docker Hub username from the environment variable or fallback to the
-    current system user.
+def normalize_registry(registry: str | None) -> str | None:
+    """Normalize a container registry string for image reference composition.
+
+    Args:
+        registry: A registry string which may include a URL scheme or trailing
+            slash.
 
     Returns:
-        The Docker Hub username as a string.
+        The normalized registry string without a scheme or trailing slash, or
+        `None` when the input is empty.
     """
-    return os.getenv("DOCKERHUB_USERNAME") or getuser()
+    if not registry:
+        return None
+
+    registry = registry.strip()
+    if not registry:
+        return None
+
+    for prefix in ("https://", "http://"):
+        if registry.startswith(prefix):
+            registry = registry[len(prefix) :]
+
+    return registry.rstrip("/")
+
+
+def get_registry_username() -> str:
+    """Get the container registry username from environment or fallback.
+
+    Returns:
+        The configured registry username, falling back to the current system
+        user.
+    """
+    return os.getenv("REGISTRY_USERNAME") or getuser()
+
+
+def get_registry_namespace() -> str | None:
+    """Return the container registry namespace from the environment, if set."""
+    namespace = os.getenv("CONTAINER_REGISTRY_NAMESPACE")
+    return namespace.strip() if namespace and namespace.strip() else None
 
 
 def get_container_registry_url() -> str:
-    """Get the container registry URL from the environment variable or fallback to
-    Docker Hub with the username.
+    """Get the container registry URL from the environment or fallback.
+
+    If `CONTAINER_REGISTRY_URL` is a host only and
+    `CONTAINER_REGISTRY_NAMESPACE` is set, the namespace is appended.
+    If `CONTAINER_REGISTRY_URL` already contains a namespace path, it is used
+    as-is.
 
     Returns:
-        The container registry URL as a string.
+        The registry prefix, which may include a namespace such as
+        `ghcr.io/org` or `docker.io/user`.
     """
-    return os.environ.get(
-        "CONTAINER_REGISTRY_URL",
-        f"docker.io/{get_dockerhub_username()}",
-    ).strip()
+    registry = normalize_registry(os.getenv("CONTAINER_REGISTRY_URL"))
+    namespace = get_registry_namespace()
+
+    if registry:
+        if registry == "docker.io":
+            if namespace:
+                return normalize_registry(f"docker.io/{namespace}") or "docker.io"
+            return "docker.io"
+        if namespace and "/" not in registry:
+            return f"{registry}/{namespace}"
+        return registry
+
+    if namespace:
+        return normalize_registry(f"docker.io/{namespace}") or "docker.io"
+
+    return f"docker.io/{get_registry_username()}"
+
+
+def parse_image_reference(image_reference: str) -> dict[str, str | None]:
+    """Parse a Docker image reference into registry, namespace, repository, and tag.
+
+    Args:
+        image_reference: A Docker image reference like
+            `ghcr.io/org/repo:tag` or `repo:tag`.
+
+    Returns:
+        A dictionary containing parsed image components.
+    """
+    if not image_reference or not image_reference.strip():
+        raise ValueError("Image reference must not be empty")
+
+    from docker.utils import parse_repository_tag
+
+    reference = image_reference.strip()
+
+    # parse_repository_tag handles both @ (digest) and : (tag) separation
+    name, tag_or_digest = parse_repository_tag(reference)
+
+    # Distinguish digest from tag (digests are algorithm:encoded, e.g., sha256:...)
+    tag = None
+    digest = None
+    if tag_or_digest:
+        if tag_or_digest.startswith(("sha256:", "sha512:")):
+            digest = tag_or_digest
+        else:
+            tag = tag_or_digest
+
+    # Parse name into registry/namespace/repository
+    parts = name.split("/")
+    registry = None
+    namespace = None
+    repository = parts[-1]
+    if len(parts) > 1 and (
+        "." in parts[0] or ":" in parts[0] or parts[0] == "localhost"
+    ):
+        registry = parts[0]
+        namespace = "/".join(parts[1:-1]) if len(parts) > 2 else None
+    elif len(parts) > 1:
+        namespace = "/".join(parts[:-1])
+
+    return {
+        "registry": registry,
+        "namespace": namespace,
+        "repository": repository,
+        "tag": tag,
+        "digest": digest,
+    }
+
+
+def compose_image_name(
+    repository: str,
+    tag: str | None = None,
+    registry: str | None = None,
+    namespace: str | None = None,
+    fully_qualified: bool = True,
+) -> str:
+    """Compose a Docker image name from registry, namespace, repository, and tag.
+
+    Args:
+        repository: The repository name.
+        tag: Optional image tag.
+        registry: Optional registry prefix, e.g. `ghcr.io` or `ghcr.io/org`.
+        namespace: Optional namespace to include when registry does not already
+            contain one.
+        fully_qualified: Whether to return the fully-qualified image reference.
+
+    Returns:
+        A Docker image reference string.
+    """
+    if not repository:
+        raise ValueError("Repository name is required")
+
+    registry_prefix = normalize_registry(registry) if registry else None
+    if registry_prefix and namespace and "/" in registry_prefix:
+        LOGGER.debug(
+            "Registry '%s' already includes a namespace; ignoring CONTAINER_REGISTRY_NAMESPACE",
+            registry_prefix,
+        )
+        namespace = None
+
+    if fully_qualified:
+        if registry_prefix:
+            if namespace:
+                registry_prefix = f"{registry_prefix}/{namespace}"
+            image_name = f"{registry_prefix}/{repository}"
+        elif namespace:
+            image_name = f"{namespace}/{repository}"
+        else:
+            image_name = repository
+    else:
+        image_name = f"{namespace}/{repository}" if namespace else repository
+
+    return f"{image_name}:{tag}" if tag else image_name
 
 
 @lru_cache
@@ -282,7 +427,15 @@ def get_full_image_name() -> str:
     Returns:
         The fully qualified image name including registry and package name.
     """
-    return f"{get_container_registry_url()}/{get_package_name()}"
+    package_name = get_package_name()
+    if package_name is None:
+        return get_container_registry_url()
+
+    return compose_image_name(
+        package_name,
+        registry=get_container_registry_url(),
+        fully_qualified=True,
+    )
 
 
 def get_config_path(

@@ -1,7 +1,6 @@
 import importlib
 import json
 import os
-import urllib.error
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, call, patch
 
@@ -1062,31 +1061,31 @@ class TestGitHubReleasePublishing:
         requests = []
 
         class FakeResponse:
-            def __init__(self, payload: dict[str, object]):
-                self._payload = json.dumps(payload).encode("utf-8")
+            def __init__(self, status_code: int, payload: dict[str, object]):
+                self.status_code = status_code
+                self._payload = payload
 
-            def __enter__(self):
-                return self
+            @property
+            def text(self):
+                return json.dumps(self._payload)
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self):
+            def json(self):
                 return self._payload
 
-        def urlopen_side_effect(request):
+            def raise_for_status(self):
+                return None
+
+        def request_side_effect(method, url, data=None, headers=None, timeout=30):
             requests.append(
                 {
-                    "method": request.get_method(),
-                    "url": request.full_url,
-                    "data": request.data,
+                    "method": method,
+                    "url": url,
+                    "data": data,
                 }
             )
-            if request.get_method() == "GET":
-                raise urllib.error.HTTPError(
-                    request.full_url, 404, "Not Found", None, None
-                )
-            return FakeResponse({"id": 123, "tag_name": "v1.2.3"})
+            if method == "GET":
+                return FakeResponse(404, {"message": "Not Found"})
+            return FakeResponse(200, {"id": 123, "tag_name": "v1.2.3"})
 
         with (
             patch(
@@ -1103,8 +1102,8 @@ class TestGitHubReleasePublishing:
                 return_value=[],
             ) as mock_get_assets,
             patch(
-                "common_python_tasks.github.urllib.request.urlopen",
-                side_effect=urlopen_side_effect,
+                "common_python_tasks.github.requests.request",
+                side_effect=request_side_effect,
             ),
         ):
             result = publish_github_release(
@@ -1134,31 +1133,31 @@ class TestGitHubReleasePublishing:
         changelog = "## Unreleased\n- Fix critical bug\n"
 
         class FakeResponse:
-            def __init__(self, payload: dict[str, object]):
-                self._payload = json.dumps(payload).encode("utf-8")
+            def __init__(self, status_code: int, payload: dict[str, object]):
+                self.status_code = status_code
+                self._payload = payload
 
-            def __enter__(self):
-                return self
+            @property
+            def text(self):
+                return json.dumps(self._payload)
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self):
+            def json(self):
                 return self._payload
 
-        def urlopen_side_effect(request):
+            def raise_for_status(self):
+                return None
+
+        def request_side_effect(method, url, data=None, headers=None, timeout=30):
             requests.append(
                 {
-                    "method": request.get_method(),
-                    "url": request.full_url,
-                    "data": request.data,
+                    "method": method,
+                    "url": url,
+                    "data": data,
                 }
             )
-            if request.get_method() == "GET":
-                raise urllib.error.HTTPError(
-                    request.full_url, 404, "Not Found", None, None
-                )
-            return FakeResponse({"id": 123, "tag_name": "v1.2.3"})
+            if method == "GET":
+                return FakeResponse(404, {"message": "Not Found"})
+            return FakeResponse(200, {"id": 123, "tag_name": "v1.2.3"})
 
         with (
             patch(
@@ -1180,8 +1179,8 @@ class TestGitHubReleasePublishing:
                 return_value=[],
             ),
             patch(
-                "common_python_tasks.github.urllib.request.urlopen",
-                side_effect=urlopen_side_effect,
+                "common_python_tasks.github.requests.request",
+                side_effect=request_side_effect,
             ),
         ):
             result = publish_github_release(
@@ -1209,31 +1208,31 @@ class TestGitHubReleasePublishing:
         latest_tagged_notes = "## v1.2.3\n- Fix critical bug\n"
 
         class FakeResponse:
-            def __init__(self, payload: dict[str, object]):
-                self._payload = json.dumps(payload).encode("utf-8")
+            def __init__(self, status_code: int, payload: dict[str, object]):
+                self.status_code = status_code
+                self._payload = payload
 
-            def __enter__(self):
-                return self
+            @property
+            def text(self):
+                return json.dumps(self._payload)
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self):
+            def json(self):
                 return self._payload
 
-        def urlopen_side_effect(request):
+            def raise_for_status(self):
+                return None
+
+        def request_side_effect(method, url, data=None, headers=None, timeout=30):
             requests.append(
                 {
-                    "method": request.get_method(),
-                    "url": request.full_url,
-                    "data": request.data,
+                    "method": method,
+                    "url": url,
+                    "data": data,
                 }
             )
-            if request.get_method() == "GET":
-                raise urllib.error.HTTPError(
-                    request.full_url, 404, "Not Found", None, None
-                )
-            return FakeResponse({"id": 123, "tag_name": "v1.2.3"})
+            if method == "GET":
+                return FakeResponse(404, {"message": "Not Found"})
+            return FakeResponse(200, {"id": 123, "tag_name": "v1.2.3"})
 
         with (
             patch(
@@ -1257,8 +1256,8 @@ class TestGitHubReleasePublishing:
                 return_value=[],
             ),
             patch(
-                "common_python_tasks.github.urllib.request.urlopen",
-                side_effect=urlopen_side_effect,
+                "common_python_tasks.github.requests.request",
+                side_effect=request_side_effect,
             ),
         ):
             result = publish_github_release(
@@ -1282,29 +1281,33 @@ class TestGitHubReleasePublishing:
         requests = []
 
         class FakeResponse:
-            def __init__(self, payload: dict[str, object]):
-                self._payload = json.dumps(payload).encode("utf-8")
+            def __init__(self, status_code: int, payload: dict[str, object]):
+                self.status_code = status_code
+                self._payload = payload
 
-            def __enter__(self):
-                return self
+            @property
+            def text(self):
+                return json.dumps(self._payload)
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self):
+            def json(self):
                 return self._payload
 
-        def urlopen_side_effect(request):
+            def raise_for_status(self):
+                return None
+
+        def request_side_effect(method, url, data=None, headers=None, timeout=30):
             requests.append(
                 {
-                    "method": request.get_method(),
-                    "url": request.full_url,
-                    "data": request.data,
+                    "method": method,
+                    "url": url,
+                    "data": data,
                 }
             )
-            if request.get_method() == "GET":
-                return FakeResponse({"id": 321, "tag_name": "v1.2.3"})
-            return FakeResponse({"id": 321, "tag_name": "v1.2.3", "body": "Updated"})
+            if method == "GET":
+                return FakeResponse(200, {"id": 321, "tag_name": "v1.2.3"})
+            return FakeResponse(
+                200, {"id": 321, "tag_name": "v1.2.3", "body": "Updated"}
+            )
 
         with (
             patch(
@@ -1321,8 +1324,8 @@ class TestGitHubReleasePublishing:
                 return_value=[],
             ),
             patch(
-                "common_python_tasks.github.urllib.request.urlopen",
-                side_effect=urlopen_side_effect,
+                "common_python_tasks.github.requests.request",
+                side_effect=request_side_effect,
             ),
         ):
             result = publish_github_release(
@@ -1354,13 +1357,13 @@ class TestGitHubReleasePublishing:
                 "common_python_tasks.github.get_github_repository"
             ) as mock_repository,
             patch("common_python_tasks.github.get_github_token") as mock_token,
-            patch("common_python_tasks.github.urllib.request.urlopen") as mock_urlopen,
+            patch("common_python_tasks.github.requests.request") as mock_request,
         ):
             assert publish_github_release("v1.2.3") is None
 
         mock_repository.assert_not_called()
         mock_token.assert_not_called()
-        mock_urlopen.assert_not_called()
+        mock_request.assert_not_called()
 
 
 def test_build_with_containers_calls_task_build_image():
@@ -1387,6 +1390,40 @@ def test_build_with_containers_calls_task_build_image():
         build_args=None,
         container_env=None,
         container_envfile=None,
+    )
+
+
+def test_build_deps_image_task_builds_dependency_image():
+    from common_python_tasks.tasks import build_deps_image_task as task_build_deps_image
+
+    with (
+        patch("common_python_tasks.docker.build_deps_image") as mock_build_deps_image,
+        patch(
+            "common_python_tasks.env.parse_container_deps_source",
+            return_value=(None, "RUN apt-get install -y curl"),
+        ),
+        patch(
+            "common_python_tasks.env.inject_auto_build_args_from_env",
+            side_effect=lambda args: args,
+        ),
+        patch("common_python_tasks.env.get_cache_id_suffix", return_value=""),
+    ):
+        task_build_deps_image(
+            no_cache=True,
+            plain=True,
+            single_arch=True,
+            build_args=["FOO=bar"],
+        )
+
+    mock_build_deps_image.assert_called_once_with(
+        deps_content="RUN apt-get install -y curl",
+        deps_dockerfile_path=None,
+        context_path=Path("."),
+        no_cache=True,
+        plain=True,
+        single_arch=True,
+        extra_build_args={"FOO": "bar"},
+        cache_id_suffix="",
     )
 
 
@@ -1664,3 +1701,79 @@ def test_container_shell_fails_when_no_images(
 
     with pytest.raises(SystemExit):
         container_shell()
+
+
+def test_push_image_uses_full_registry_reference(monkeypatch):
+    """`push_image` should push fully-qualified tags derived from full image name."""
+    from common_python_tasks.tasks import push_image
+
+    pushed_refs: list[str] = []
+
+    with (
+        patch(
+            "common_python_tasks.utils.get_full_image_name",
+            return_value="ghcr.io/acme/test-package",
+        ),
+        patch("common_python_tasks.git.get_image_tag", return_value="1.2.3"),
+        patch("common_python_tasks.git.has_tags_later_in_history", return_value=False),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+
+        def side_effect(command, *args, **kwargs):
+            if command[:2] == ["docker", "push"]:
+                pushed_refs.append(command[2])
+            return MagicMock(returncode=0, stdout="")
+
+        mock_run_command.side_effect = side_effect
+
+        push_image(debug=False)
+
+    assert pushed_refs == [
+        "ghcr.io/acme/test-package:latest",
+        "ghcr.io/acme/test-package:1.2.3",
+    ]
+
+
+def test_run_container_falls_back_to_full_image_reference_when_short_missing(
+    mock_get_package_name,
+):
+    """`run_container` should inspect short then full references and run the available one."""
+    from common_python_tasks.tasks import run_container
+
+    inspect_calls: list[str] = []
+    run_calls: list[list[str]] = []
+
+    with (
+        patch(
+            "common_python_tasks.utils.get_full_image_name",
+            return_value="ghcr.io/acme/test-package",
+        ),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+
+        def side_effect(command, *args, **kwargs):
+            if command[:3] == ["docker", "image", "inspect"]:
+                image_ref = command[3]
+                inspect_calls.append(image_ref)
+                return MagicMock(
+                    returncode=(
+                        0 if image_ref == "ghcr.io/acme/test-package:custom-tag" else 1
+                    ),
+                    stdout="",
+                )
+
+            if command[:2] == ["docker", "run"]:
+                run_calls.append([str(part) for part in command if part is not None])
+
+            return MagicMock(returncode=0, stdout="")
+
+        mock_run_command.side_effect = side_effect
+
+        run_container("custom-tag")
+
+    assert inspect_calls == [
+        "test-package:custom-tag",
+        "ghcr.io/acme/test-package:custom-tag",
+    ]
+    assert len(run_calls) == 1
+    assert run_calls[0][-1] == "ghcr.io/acme/test-package:custom-tag"

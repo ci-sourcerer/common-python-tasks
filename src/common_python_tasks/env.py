@@ -1,8 +1,8 @@
 import logging
 import os
 import secrets
+import shlex
 from pathlib import Path
-from shlex import split as shlex_split
 
 from . import utils
 
@@ -79,7 +79,7 @@ def parse_container_extensions() -> list[dict]:
     exts: list[dict] = []
     files_raw = os.getenv("CONTAINER_EXTENSION_FILES")
     if files_raw:
-        for part in [p.strip() for p in files_raw.split(":") if p.strip()]:
+        for part in split_colon_delimited_values(files_raw):
             pth = Path(part)
             exts.append(
                 {
@@ -95,7 +95,7 @@ def parse_container_extensions() -> list[dict]:
             )
     bundles_raw = os.getenv("CONTAINER_EXTENSIONS")
     if bundles_raw:
-        for part in (p.strip() for p in bundles_raw.split(":")):
+        for part in split_colon_delimited_values(bundles_raw):
             if not part:
                 continue
             if "=" in part:
@@ -184,24 +184,64 @@ def load_container_env_file(path: str | None = None) -> str | None:
     return container_env if container_env else None
 
 
-def split_colon_delimited_values(value: str) -> list[str]:
-    """Split a colon-delimited string while preserving quoted substrings.
+def split_delimited_values(
+    value: str,
+    separators: str = ":",
+    allow_whitespace: bool = False,
+) -> list[str]:
+    """Split a delimited string while preserving quoted substrings.
 
     Args:
-        value: The colon-delimited string to split.
+        value: The string to split.
+        separators: Explicit separator characters to use.
+        allow_whitespace: Treat whitespace as additional separators.
 
     Returns:
-        A list of strings representing the split values.
+        A list of strings representing the parsed tokens.
     """
     if not value or not value.strip():
         return []
 
-    try:
-        tokens = shlex_split(value.replace(":", " "), comments=True)
-    except ValueError as exc:
-        raise ValueError(f"Unable to parse colon-delimited values: {exc}") from exc
+    lexer = shlex.shlex(value, posix=True)
+    lexer.whitespace = separators + (" \t\r\n" if allow_whitespace else "")
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    return [token for token in lexer if token.strip()]
 
-    return [token for token in tokens if token.strip()]
+
+def split_colon_delimited_values(value: str) -> list[str]:
+    """Split a colon- or whitespace-delimited string while preserving quoted substrings."""
+    return split_delimited_values(value, separators=":", allow_whitespace=True)
+
+
+def split_colon_or_whitespace_delimited_values(value: str) -> list[str]:
+    """Split a colon- or whitespace-delimited string while preserving quoted substrings."""
+    return split_colon_delimited_values(value)
+
+
+def parse_container_build_args(
+    cli_build_args: list[str] | None,
+    env_build_args: str | None,
+) -> dict[str, str] | None:
+    """Parse container build args from CLI or environment input."""
+    if cli_build_args is not None:
+        build_arg_tokens = [
+            token.strip() for token in cli_build_args if token and token.strip()
+        ]
+    elif env_build_args:
+        build_arg_tokens = split_colon_delimited_values(env_build_args)
+    else:
+        return None
+
+    parsed_build_args: dict[str, str] = {}
+    for token in build_arg_tokens:
+        if "=" not in token:
+            LOGGER.warning("Ignoring invalid build-arg token: %s", token)
+            continue
+        key, value = token.split("=", 1)
+        parsed_build_args[key.strip()] = value.strip()
+
+    return parsed_build_args or None
 
 
 def parse_container_env_tokens(value: str | list[str] | None) -> list[str]:

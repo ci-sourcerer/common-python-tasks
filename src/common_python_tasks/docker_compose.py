@@ -375,6 +375,8 @@ def load_compose_files(
         cleaned up **after** `docker compose` down`.
     """
 
+    from .env import split_colon_delimited_values
+
     compose_files_env = os.getenv("COMPOSE_FILE")
     if compose_files_env:
         LOGGER.debug(
@@ -382,14 +384,14 @@ def load_compose_files(
             compose_files_env,
         )
         return (
-            [Path(f.strip()) for f in compose_files_env.split(":") if f.strip()],
+            [Path(path) for path in split_colon_delimited_values(compose_files_env)],
             [],
             [],
         )
 
     compose_type = os.environ["COMPOSE_TYPE"]
     compose_addons_str = os.getenv("COMPOSE_ADDONS", "")
-    compose_addons = [a.strip() for a in compose_addons_str.split(":") if a.strip()]
+    compose_addons = split_colon_delimited_values(compose_addons_str)
 
     LOGGER.debug(
         "Loading compose files for type '%s' with addons: %s%s",
@@ -459,7 +461,7 @@ def load_compose_files(
 
     overlay_files_str = os.getenv("COMPOSE_OVERLAY_FILES", "")
     if overlay_files_str:
-        overlay_files = [f.strip() for f in overlay_files_str.split(":") if f.strip()]
+        overlay_files = split_colon_delimited_values(overlay_files_str)
         LOGGER.debug("Adding overlay compose files: %s", overlay_files)
         for overlay_file in overlay_files:
             files_and_cleanups.append((Path(overlay_file), False))
