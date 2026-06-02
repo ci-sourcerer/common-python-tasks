@@ -257,7 +257,7 @@ def get_registry_username() -> str:
         The configured registry username, falling back to the current system
         user.
     """
-    return os.getenv("REGISTRY_USERNAME") or getuser()
+    return os.getenv("CONTAINER_REGISTRY_USERNAME") or getuser()
 
 
 def get_registry_namespace() -> str | None:

@@ -1473,6 +1473,7 @@ def fastapi_stack_up(
                 *up_args,
                 compose_files=compose_files,
                 compose_env=compose_env,
+                tasks=tasks,
             )
             LOGGER.info("Application has started! To stop it, run poe stack-down")
         else:
@@ -1536,6 +1537,7 @@ def fastapi_stack_down() -> None:
             "-v",
             compose_files=compose_files,
             compose_env=compose_env,
+            tasks=tasks,
         )
     finally:
         cleanup_temp_files(temp_compose_files, temp_config_files)
@@ -1571,13 +1573,14 @@ def fastapi_run_db_migrations() -> None:
     )
 
     services = ["db", "migrator"]
-    fastapi_stack_up(debug=False, detach=True, services=",".join(services))
+    fastapi_stack_up(debug=False, detach=True, services=services)
     compose_files, _, _, compose_env = load_and_prepare_compose()
     run_docker_compose_command(
         "logs",
         "migrator",
         compose_files=compose_files,
         compose_env=compose_env,
+        tasks=tasks,
     )
     fastapi_stack_down()
 
@@ -1591,7 +1594,7 @@ def fastapi_db_shell() -> None:
         run_command,
     )
 
-    fastapi_stack_up(debug=False, no_cache=True, detach=True, services="db")
+    fastapi_stack_up(debug=False, no_cache=True, detach=True, services=["db"])
     try:
         compose_files, _, _, compose_env = load_and_prepare_compose()
 

@@ -194,15 +194,15 @@ The following environment variables configure package and container behavior.
 
 - `PACKAGE_NAME`: Overrides the package name; the default comes from `pyproject.toml`
 - `POETRY_VERSION`: Overrides the Poetry version for container builds
-- `DOCKERHUB_USERNAME`: Specifies the Docker Hub username for image tagging; the default is the current local user
+- `CONTAINER_REGISTRY_USERNAME`: Specifies the container registry username for image tagging; the default is the current local user
 - `CONTAINER_REGISTRY_URL`: Specifies the registry URL (default: `docker.io/{username}`)
 - `CONTAINER_BUILD_ARGS`: Provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
 - `CONTAINER_EXTENSION_FILES`: Specifies colon delimited local extension Dockerfile paths to include in the rendered build
 - `CONTAINER_EXTENSIONS`: Specifies colon delimited extension bundle names or parameterized bundle values to include in the rendered build
 - `CONTAINER_ENV`: Provides colon delimited `KEY=VALUE` declarations to inject into the builder stage of the rendered Dockerfile
-- `.containerenv`: Can also supply the same declarations from a file in the project root. It is the fallback source when neither `container_envfile` nor `CONTAINER_ENV` is provided
+- `.containerenv`: Can also supply the same declarations from a file in the project root. It is loaded first, then `container_envfile`, then `CONTAINER_ENV`, and finally `container_env`.
 - `CONTAINER_PRUNE_KEEP`: Controls image pruning after builds (`-1` keeps all, `0` keeps the latest only, `N` keeps the latest plus `N` previous)
-- `CUSTOM_IMAGE_ENTRYPOINT`: Specifies a custom entrypoint script name for containers
+- `CUSTOM_ENTRYPOINT`: Specifies a custom entrypoint script name for containers
 - `CONTAINER_DEPS_CONTENT`: Supplies inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`
 - `CONTAINER_DEPS_FILE`: Points to one or more explicit Dockerfiles to build the dependency image. It may be a colon delimited list of file paths and is used only when `CONTAINER_DEPS_CONTENT` is unset
 - `CONTAINER_DEPS_MAPPINGS`: Maps copied dependency names from `/tmp/deps` into destination paths as space separated `name:/target/path` entries. This is used only when `CONTAINER_DEPS_MOVE_SCRIPT` or `CONTAINER_DEPS_MOVE_SCRIPT_PATH` is not set
@@ -276,7 +276,7 @@ dependencies = ["common-python-tasks==0.3.1"]
 include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
 
 [tool.poe.env]
-REGISTRY_USERNAME = "myusername"
+CONTAINER_REGISTRY_USERNAME = "myusername"
 PACKAGE_NAME = "containerized-app"
 ```
 

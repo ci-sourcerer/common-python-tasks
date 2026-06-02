@@ -509,7 +509,9 @@ class TestBumpVersion:
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
             ),
-            patch("common_python_tasks.docker.build_image") as mock_low_level_build_image,
+            patch(
+                "common_python_tasks.docker.build_image"
+            ) as mock_low_level_build_image,
             patch("common_python_tasks.tasks.build_image") as mock_task_build_image,
             patch("common_python_tasks.tasks.push_image") as mock_push_image,
             patch(
@@ -1512,6 +1514,76 @@ def test_fastapi_stack_up_passes_container_build_options(
     assert build_image_calls[0]["container_env"] == ["X=1"]
     assert build_image_calls[0]["container_envfile"] == ["env1.env"]
     assert mock_low_level_build_image.call_count == 0
+
+
+def test_fastapi_stack_up_detach_passes_tasks_to_compose_command(
+    temp_project_dir,
+    mock_load_data_file,
+    mock_run_command,
+):
+    from common_python_tasks.tasks import fastapi_stack_up
+
+    with (
+        patch(
+            "common_python_tasks.tasks.build_image", return_value=("version", "commit")
+        ),
+        patch(
+            "common_python_tasks.env.load_container_env_tokens", return_value=["X=1"]
+        ),
+        patch("common_python_tasks.docker_compose.ensure_secrets_generated"),
+        patch(
+            "common_python_tasks.docker_compose.load_and_prepare_compose",
+            return_value=([], [], [], {"API_PORT": "8080"}),
+        ),
+        patch(
+            "common_python_tasks.docker_compose.run_docker_compose_command"
+        ) as mock_run,
+    ):
+        fastapi_stack_up(detach=True)
+
+    assert mock_run.call_count == 1
+    assert "tasks" in mock_run.call_args.kwargs
+
+
+def test_fastapi_run_db_migrations_passes_service_list(monkeypatch):
+    from common_python_tasks.tasks import fastapi_run_db_migrations
+
+    with (
+        patch("common_python_tasks.tasks.fastapi_stack_up") as mock_stack_up,
+        patch(
+            "common_python_tasks.docker_compose.load_and_prepare_compose",
+            return_value=([], [], [], {"API_PORT": "8080"}),
+        ),
+        patch(
+            "common_python_tasks.docker_compose.run_docker_compose_command"
+        ) as mock_run,
+        patch("common_python_tasks.tasks.fastapi_stack_down") as mock_stack_down,
+    ):
+        fastapi_run_db_migrations()
+
+    mock_stack_up.assert_called_once_with(
+        debug=False, detach=True, services=["db", "migrator"]
+    )
+    mock_run.assert_called_once()
+    mock_stack_down.assert_called_once()
+
+
+def test_fastapi_stack_down_passes_tasks_to_compose_command():
+    from common_python_tasks.tasks import fastapi_stack_down
+
+    with (
+        patch(
+            "common_python_tasks.docker_compose.load_and_prepare_compose",
+            return_value=([], [], [], {"API_PORT": "8080"}),
+        ),
+        patch(
+            "common_python_tasks.docker_compose.run_docker_compose_command"
+        ) as mock_run,
+    ):
+        fastapi_stack_down()
+
+    assert mock_run.call_count == 1
+    assert "tasks" in mock_run.call_args.kwargs
 
 
 def test_container_shell_selects_most_recent_tag(

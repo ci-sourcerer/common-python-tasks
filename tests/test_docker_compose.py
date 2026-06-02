@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from common_python_tasks.docker_compose import (
     get_compose_env,
@@ -46,6 +47,55 @@ def test_get_compose_type_returns_env_value(monkeypatch):
     result = get_compose_type()
 
     assert result == "custom"
+
+
+def test_load_compose_files_uses_default_compose_type(monkeypatch):
+    from common_python_tasks import docker_compose
+
+    monkeypatch.delenv("COMPOSE_TYPE", raising=False)
+
+    dummy_path = Path("compose-base.yml")
+    with patch("common_python_tasks.docker_compose.render_file") as mock_render_file:
+        mock_render_file.return_value = (dummy_path, False)
+
+        results, temp_compose_files, temp_config_files = (
+            docker_compose.load_compose_files()
+        )
+
+    assert results == [dummy_path]
+    assert temp_compose_files == []
+    assert temp_config_files == []
+    mock_render_file.assert_called_once()
+    assert mock_render_file.call_args.args[0] == "FASTAPI_COMPOSE_BASE"
+
+
+def test_run_docker_compose_command_includes_env_files(monkeypatch, tmp_path):
+    from common_python_tasks.docker_compose import run_docker_compose_command
+
+    class DummyTasks:
+        envfile = [Path(".env1"), Path(".env2")]
+
+    called = []
+
+    def fake_run_command(command, **kwargs):
+        called.append(command)
+        return MagicMock(returncode=0, stdout="")
+
+    monkeypatch.setattr(
+        "common_python_tasks.docker_compose.utils.run_command", fake_run_command
+    )
+
+    run_docker_compose_command(
+        "up",
+        compose_files=[tmp_path / "compose.yml"],
+        compose_env={"A": "B"},
+        tasks=DummyTasks(),
+    )
+
+    assert called
+    assert "--env-file" in called[0]
+    assert str(Path(".env1")) in called[0]
+    assert str(Path(".env2")) in called[0]
 
 
 def test_load_compose_files_supports_quoted_colon_delimited_paths(

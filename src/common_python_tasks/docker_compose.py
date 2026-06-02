@@ -389,7 +389,7 @@ def load_compose_files(
             [],
         )
 
-    compose_type = os.environ["COMPOSE_TYPE"]
+    compose_type = get_compose_type()
     compose_addons_str = os.getenv("COMPOSE_ADDONS", "")
     compose_addons = split_colon_delimited_values(compose_addons_str)
 
@@ -499,6 +499,7 @@ def run_docker_compose_command(
     *args: str | None,
     compose_files: list[Path],
     compose_env: dict[str, str],
+    tasks: TaskCollection,
 ) -> None:
     """Run `docker compose` with standard file and env-file arguments.
 
@@ -514,7 +515,7 @@ def run_docker_compose_command(
 
     utils.run_command(
         [
-            *compose_cmd_prefix(compose_files),
+            *compose_cmd_prefix(compose_files, tasks),
             *[arg for arg in args if arg is not None],
         ],
         env=compose_env,
