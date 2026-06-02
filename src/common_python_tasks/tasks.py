@@ -773,9 +773,11 @@ def run_container(
         volumes: Repeated volume mounts to pass with `-v`.
     """
     from .utils import (
+        compose_image_name,
         fatal,
         get_full_image_name,
         get_package_name,
+        parse_image_reference,
         run_command,
     )
 
@@ -784,6 +786,14 @@ def run_container(
         fatal("PACKAGE_NAME could not be resolved")
 
     full_name = get_full_image_name()
+    parsed_full_name = parse_image_reference(full_name)
+    full_repo_name = compose_image_name(
+        package_name,
+        registry=parsed_full_name["registry"],
+        namespace=parsed_full_name["namespace"],
+        fully_qualified=True,
+    )
+    short_repo_name = compose_image_name(package_name, fully_qualified=False)
     selected_image: str | None = None
 
     def _image_exists(image: str) -> bool:
@@ -796,16 +806,31 @@ def run_container(
 
     if tag:
         # Prefer short name, fall back to full name if necessary
-        for candidate in (f"{package_name}:{tag}", f"{full_name}:{tag}"):
+        for candidate in (
+            compose_image_name(package_name, tag=tag, fully_qualified=False),
+            compose_image_name(
+                package_name,
+                tag=tag,
+                registry=parsed_full_name["registry"],
+                namespace=parsed_full_name["namespace"],
+                fully_qualified=True,
+            ),
+        ):
             if _image_exists(candidate):
                 selected_image = candidate
                 break
         if selected_image is None:
             # Not found locally — assume full name (allow docker to pull if needed)
-            selected_image = f"{full_name}:{tag}"
+            selected_image = compose_image_name(
+                package_name,
+                tag=tag,
+                registry=parsed_full_name["registry"],
+                namespace=parsed_full_name["namespace"],
+                fully_qualified=True,
+            )
     else:
         # Find the most-recently-built tag (newest first) for the image
-        for repo in (full_name, package_name):
+        for repo in (full_repo_name, short_repo_name):
             res = run_command(
                 [
                     "docker",
@@ -880,7 +905,9 @@ def push_image(debug: bool = False) -> None:
         has_tags_later_in_history,
     )
     from .utils import (
+        compose_image_name,
         get_full_image_name,
+        parse_image_reference,
         run_command,
     )
 
@@ -891,10 +918,16 @@ def push_image(debug: bool = False) -> None:
         suffix = ""
         # Only push 'latest' tag if there are no tags later in history
         tag = "latest" if not has_tags_later_in_history() else None
-    full_name = get_full_image_name()
+    parsed_full_name = parse_image_reference(get_full_image_name())
     tags_to_push = [t for t in [tag, f"{get_image_tag()}{suffix}"] if t is not None]
     for t in tags_to_push:
-        full_tag = f"{full_name}:{t}"
+        full_tag = compose_image_name(
+            parsed_full_name["repository"],
+            tag=t,
+            registry=parsed_full_name["registry"],
+            namespace=parsed_full_name["namespace"],
+            fully_qualified=True,
+        )
         LOGGER.info("Pushing image %s", full_tag)
         run_command(["docker", "push", full_tag])
 

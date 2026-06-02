@@ -3,9 +3,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from common_python_tasks.utils import (
+    compose_image_name,
     fatal,
+    get_container_registry_url,
     get_package_name,
     is_package_installed,
+    normalize_registry,
+    parse_image_reference,
     prepend_changelog,
     require_package,
     run_available_tools,
@@ -60,6 +64,72 @@ def test_get_package_name_reads_pyproject_when_env_missing(monkeypatch):
         return_value='[project]\nname = "test-package"\n',
     ):
         assert get_package_name() == "test-package"
+
+
+def test_normalize_registry_strips_scheme_and_slashes():
+    assert normalize_registry("https://ghcr.io/org/") == "ghcr.io/org"
+    assert (
+        normalize_registry("http://registry.example.com:5000/")
+        == "registry.example.com:5000"
+    )
+    assert normalize_registry("docker.io") == "docker.io"
+    assert normalize_registry(None) is None
+
+
+def test_parse_image_reference_parses_registry_namespace_repository_tag():
+    result = parse_image_reference("ghcr.io/org/repo:1.2.3")
+
+    assert result == {
+        "registry": "ghcr.io",
+        "namespace": "org",
+        "repository": "repo",
+        "tag": "1.2.3",
+        "digest": None,
+    }
+
+
+def test_parse_image_reference_parses_short_names():
+    assert parse_image_reference("repo:latest") == {
+        "registry": None,
+        "namespace": None,
+        "repository": "repo",
+        "tag": "latest",
+        "digest": None,
+    }
+    assert parse_image_reference("user/repo:latest") == {
+        "registry": None,
+        "namespace": "user",
+        "repository": "repo",
+        "tag": "latest",
+        "digest": None,
+    }
+
+
+def test_compose_image_name_creates_fully_qualified_reference():
+    assert (
+        compose_image_name("repo", "1.0", registry="ghcr.io", namespace="org")
+        == "ghcr.io/org/repo:1.0"
+    )
+    assert (
+        compose_image_name("repo", "1.0", registry="ghcr.io/org")
+        == "ghcr.io/org/repo:1.0"
+    )
+    assert compose_image_name("repo", "1.0", namespace="org") == "org/repo:1.0"
+    assert compose_image_name("repo", "1.0", fully_qualified=False) == "repo:1.0"
+
+
+def test_get_container_registry_url_appends_namespace_to_host_only_registry(monkeypatch):
+    monkeypatch.setenv("CONTAINER_REGISTRY_URL", "ghcr.io")
+    monkeypatch.setenv("CONTAINER_REGISTRY_NAMESPACE", "acme")
+
+    assert get_container_registry_url() == "ghcr.io/acme"
+
+
+def test_get_container_registry_url_ignores_namespace_when_registry_includes_path(monkeypatch):
+    monkeypatch.setenv("CONTAINER_REGISTRY_URL", "ghcr.io/acme")
+    monkeypatch.setenv("CONTAINER_REGISTRY_NAMESPACE", "other")
+
+    assert get_container_registry_url() == "ghcr.io/acme"
 
 
 def test_run_command_executes_shell_command():

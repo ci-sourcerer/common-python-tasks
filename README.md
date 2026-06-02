@@ -276,7 +276,7 @@ dependencies = ["common-python-tasks==0.3.1"]
 include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
 
 [tool.poe.env]
-DOCKERHUB_USERNAME = "myusername"
+REGISTRY_USERNAME = "myusername"
 PACKAGE_NAME = "containerized-app"
 ```
 
