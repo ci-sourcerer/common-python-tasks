@@ -1163,7 +1163,9 @@ def test_build_image_uses_build_deps_image_task(
 
     mock_load_data_file.side_effect = load_data_file_side_effect
 
-    with patch("common_python_tasks.tasks.build_deps_image_task", return_value="deps-image") as mock_task:
+    with patch(
+        "common_python_tasks.tasks.build_deps_image_task", return_value="deps-image"
+    ) as mock_task:
         build_image(single_arch=True, build_args=["FOO=bar"])
 
     mock_task.assert_called_once_with(
