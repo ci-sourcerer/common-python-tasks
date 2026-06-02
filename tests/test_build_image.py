@@ -230,7 +230,7 @@ def test_build_arg_with_multiple_packages(
 ):
     from common_python_tasks.tasks import build_image
 
-    monkeypatch.setenv("CONTAINER_BUILD_ARGS", "APT_PACKAGES=jq curl")
+    monkeypatch.setenv("CONTAINER_BUILD_ARGS", 'APT_PACKAGES="jq curl"')
 
     original_load_data_file = mock_load_data_file.side_effect
 

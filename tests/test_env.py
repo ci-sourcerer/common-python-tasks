@@ -2,41 +2,66 @@ import pytest
 from common_python_tasks.env import (
     inject_auto_build_args_from_env,
     load_container_env_tokens,
+    parse_container_build_args,
     parse_container_env_tokens,
+    split_colon_delimited_values,
 )
 
 
-def test_inject_auto_build_args_from_env_adds_value(monkeypatch):
-    monkeypatch.setenv("WORKDIR_PATH", "/app")
-
-    result = inject_auto_build_args_from_env({})
-
-    assert result["WORKDIR_PATH"] == "/app"
-
-
-def test_inject_auto_build_args_from_env_adds_poetry_dynamic_versioning_commands(
-    monkeypatch,
+@pytest.mark.parametrize(
+    ("env_var", "env_value", "input_map", "expected"),
+    [
+        ("WORKDIR_PATH", "/app", {}, {"WORKDIR_PATH": "/app"}),
+        (
+            "POETRY_DYNAMIC_VERSIONING_COMMANDS",
+            "",
+            {},
+            {"POETRY_DYNAMIC_VERSIONING_COMMANDS": ""},
+        ),
+        (
+            "WORKDIR_PATH",
+            "/app",
+            {"WORKDIR_PATH": "/custom"},
+            {"WORKDIR_PATH": "/custom"},
+        ),
+    ],
+)
+def test_inject_auto_build_args_from_env(
+    monkeypatch, env_var, env_value, input_map, expected
 ):
-    monkeypatch.setenv("POETRY_DYNAMIC_VERSIONING_COMMANDS", "")
+    monkeypatch.setenv(env_var, env_value)
 
-    result = inject_auto_build_args_from_env({})
+    result = inject_auto_build_args_from_env(input_map)
 
-    assert "POETRY_DYNAMIC_VERSIONING_COMMANDS" in result
-    assert result["POETRY_DYNAMIC_VERSIONING_COMMANDS"] == ""
-
-
-def test_inject_auto_build_args_from_env_preserves_explicit_value(monkeypatch):
-    monkeypatch.setenv("WORKDIR_PATH", "/app")
-
-    result = inject_auto_build_args_from_env({"WORKDIR_PATH": "/custom"})
-
-    assert result["WORKDIR_PATH"] == "/custom"
+    for key, value in expected.items():
+        assert result[key] == value
 
 
 def test_parse_container_env_tokens_accepts_list_values():
     result = parse_container_env_tokens(["A=one", "B=two"])
 
     assert result == ["A=one", "B=two"]
+
+
+def test_split_colon_delimited_values_preserves_quoted_substrings():
+    result = split_colon_delimited_values('path:"my path/with:colon":other')
+
+    assert result == ["path", "my path/with:colon", "other"]
+
+
+def test_parse_container_build_args_preserves_spaces_in_values():
+    result = parse_container_build_args(None, 'APT_PACKAGES="jq curl":OTHER=two')
+
+    assert result == {
+        "APT_PACKAGES": "jq curl",
+        "OTHER": "two",
+    }
+
+
+def test_parse_container_env_tokens_supports_whitespace_delimited_values():
+    result = parse_container_env_tokens("A=one B='two with spaces'")
+
+    assert result == ["A=one", "B=two with spaces"]
 
 
 def test_load_container_env_tokens_accepts_list_container_envfile(tmp_path):
@@ -61,29 +86,26 @@ def test_load_container_env_tokens_supports_colon_delimited_envfile_string(tmp_p
     assert result == ["A=one", "B=two"]
 
 
-def test_read_dotenv_parses_simple_key_value_pairs(tmp_path):
+@pytest.mark.parametrize(
+    ("dotenv_contents", "expected"),
+    [
+        ("KEY1=value1\nKEY2=value2\n", {"KEY1": "value1", "KEY2": "value2"}),
+        (
+            "# Comment\nKEY1=value1\n\n# Another comment\nKEY2=value2\n",
+            {"KEY1": "value1", "KEY2": "value2"},
+        ),
+        ("KEY1=\"quoted\"\nKEY2='single'\n", {"KEY1": "quoted", "KEY2": "single"}),
+    ],
+)
+def test_read_dotenv_parses_various_formats(tmp_path, dotenv_contents, expected):
     from common_python_tasks.docker_compose import read_dotenv
 
     dotenv = tmp_path / ".env"
-    dotenv.write_text("KEY1=value1\nKEY2=value2\n", encoding="utf-8")
+    dotenv.write_text(dotenv_contents, encoding="utf-8")
 
     result = read_dotenv(dotenv)
 
-    assert result == {"KEY1": "value1", "KEY2": "value2"}
-
-
-def test_read_dotenv_skips_comments_and_empty_lines(tmp_path):
-    from common_python_tasks.docker_compose import read_dotenv
-
-    dotenv = tmp_path / ".env"
-    dotenv.write_text(
-        "# Comment\nKEY1=value1\n\n# Another comment\nKEY2=value2\n",
-        encoding="utf-8",
-    )
-
-    result = read_dotenv(dotenv)
-
-    assert result == {"KEY1": "value1", "KEY2": "value2"}
+    assert result == expected
 
 
 def test_read_dotenv_returns_empty_dict_when_file_missing(tmp_path):
@@ -92,17 +114,6 @@ def test_read_dotenv_returns_empty_dict_when_file_missing(tmp_path):
     result = read_dotenv(tmp_path / "nonexistent.env")
 
     assert result == {}
-
-
-def test_read_dotenv_strips_quotes(tmp_path):
-    from common_python_tasks.docker_compose import read_dotenv
-
-    dotenv = tmp_path / ".env"
-    dotenv.write_text("KEY1=\"quoted\"\nKEY2='single'\n", encoding="utf-8")
-
-    result = read_dotenv(dotenv)
-
-    assert result == {"KEY1": "quoted", "KEY2": "single"}
 
 
 def test_append_dotenv_creates_header_comment(tmp_path, monkeypatch):
@@ -178,52 +189,55 @@ def test_load_container_env_file_returns_none_for_empty_file(tmp_path):
 class TestParseContainerExtensions:
     """Tests for parse_container_extensions parameter parsing."""
 
-    def test_plain_bundle_name(self, monkeypatch):
+    @pytest.mark.parametrize(
+        ("extensions_value", "expected"),
+        [
+            (
+                "some_ext",
+                [
+                    {
+                        "id": "some_ext",
+                        "bundle_name": "some_ext",
+                        "args": None,
+                    }
+                ],
+            ),
+            (
+                'some_ext="jq curl"',
+                [
+                    {
+                        "id": "some_ext",
+                        "bundle_name": "some_ext",
+                        "args": "jq curl",
+                    }
+                ],
+            ),
+            (
+                'some_ext="jq curl wget":plain_ext',
+                [
+                    {"id": "some_ext", "args": "jq curl wget"},
+                    {"id": "plain_ext", "args": None},
+                ],
+            ),
+            (
+                "some_ext=",
+                [{"id": "some_ext", "args": ""}],
+            ),
+        ],
+    )
+    def test_parse_container_extensions(self, monkeypatch, extensions_value, expected):
         from common_python_tasks.env import parse_container_extensions
 
         monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
-        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext")
+        monkeypatch.setenv("CONTAINER_EXTENSIONS", extensions_value)
 
         result = parse_container_extensions()
-        assert len(result) == 1
-        assert result[0]["id"] == "some_ext"
-        assert result[0]["bundle_name"] == "some_ext"
-        assert result[0]["args"] is None
-
-    def test_parameterised_bundle(self, monkeypatch):
-        from common_python_tasks.env import parse_container_extensions
-
-        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
-        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl")
-
-        result = parse_container_extensions()
-        assert len(result) == 1
-        assert result[0]["id"] == "some_ext"
-        assert result[0]["bundle_name"] == "some_ext"
-        assert result[0]["args"] == "jq curl"
-
-    def test_mixed_parameterised_and_plain(self, monkeypatch):
-        from common_python_tasks.env import parse_container_extensions
-
-        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
-        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=jq curl wget:plain_ext")
-
-        result = parse_container_extensions()
-        assert len(result) == 2
-        assert result[0]["id"] == "some_ext"
-        assert result[0]["args"] == "jq curl wget"
-        assert result[1]["id"] == "plain_ext"
-        assert result[1]["args"] is None
-
-    def test_empty_args_treated_as_empty_string(self, monkeypatch):
-        from common_python_tasks.env import parse_container_extensions
-
-        monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
-        monkeypatch.setenv("CONTAINER_EXTENSIONS", "some_ext=")
-
-        result = parse_container_extensions()
-        assert len(result) == 1
-        assert result[0]["args"] == ""
+        assert len(result) == len(expected)
+        for actual, expected_item in zip(result, expected):
+            assert actual["id"] == expected_item["id"]
+            if "bundle_name" in expected_item:
+                assert actual["bundle_name"] == expected_item["bundle_name"]
+            assert actual["args"] == expected_item["args"]
 
     def test_multiple_extension_files(self, monkeypatch, tmp_path):
         from common_python_tasks.env import parse_container_extensions
