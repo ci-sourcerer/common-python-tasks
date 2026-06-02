@@ -694,6 +694,7 @@ def build_deps_image_task(
     from .env import (
         get_cache_id_suffix,
         inject_auto_build_args_from_env,
+        parse_container_build_args,
         parse_container_deps_source,
     )
     from .utils import fatal
@@ -704,7 +705,10 @@ def build_deps_image_task(
             "No container dependency source found. Set CONTAINER_DEPS_CONTENT or CONTAINER_DEPS_FILE."
         )
 
-    parsed_build_args = _parse_build_args(build_args, os.getenv("CONTAINER_BUILD_ARGS"))
+    parsed_build_args = parse_container_build_args(
+        build_args,
+        os.getenv("CONTAINER_BUILD_ARGS"),
+    )
     extra_build_args = inject_auto_build_args_from_env(parsed_build_args or {})
     cache_id_suffix = get_cache_id_suffix(no_cache)
 
