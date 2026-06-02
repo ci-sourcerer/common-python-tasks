@@ -509,7 +509,8 @@ class TestBumpVersion:
                 "common_python_tasks.project.get_project_version_from_poetry",
                 return_value="1.2.2",
             ),
-            patch("common_python_tasks.docker.build_image") as mock_build_image,
+            patch("common_python_tasks.docker.build_image") as mock_low_level_build_image,
+            patch("common_python_tasks.tasks.build_image") as mock_task_build_image,
             patch("common_python_tasks.tasks.push_image") as mock_push_image,
             patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
@@ -557,7 +558,8 @@ class TestBumpVersion:
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
             mock_publish.assert_called_once_with(build_first=False)
-            mock_build_image.assert_called_once_with(
+            mock_low_level_build_image.assert_not_called()
+            mock_task_build_image.assert_called_once_with(
                 debug=True,
                 no_cache=True,
                 plain=True,
@@ -1484,7 +1486,8 @@ def test_fastapi_stack_up_passes_container_build_options(
         return ("version", "commit")
 
     with (
-        patch("common_python_tasks.docker.build_image", new=fake_build_image),
+        patch("common_python_tasks.docker.build_image") as mock_low_level_build_image,
+        patch("common_python_tasks.tasks.build_image", new=fake_build_image),
         patch(
             "common_python_tasks.env.load_container_env_tokens", return_value=["X=1"]
         ),
@@ -1508,6 +1511,7 @@ def test_fastapi_stack_up_passes_container_build_options(
     assert build_image_calls[0]["build_args"] == ["FOO=bar"]
     assert build_image_calls[0]["container_env"] == ["X=1"]
     assert build_image_calls[0]["container_envfile"] == ["env1.env"]
+    assert mock_low_level_build_image.call_count == 0
 
 
 def test_container_shell_selects_most_recent_tag(

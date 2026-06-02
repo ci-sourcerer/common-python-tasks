@@ -1147,9 +1147,7 @@ def _run_release_flow(
     publish_package(build_first=False)
 
     if include_containers:
-        from .docker import build_image as _build_image
-
-        _build_image(
+        build_image(
             debug=debug,
             no_cache=no_cache,
             plain=plain,
@@ -1378,7 +1376,6 @@ def fastapi_stack_up(
             `KEY=VALUE` values.
         container_envfile: Repeated list of container environment files.
     """
-    from .docker import build_image
     from .docker_compose import (
         build_exec_script,
         cleanup_temp_files,
