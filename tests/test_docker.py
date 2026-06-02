@@ -515,3 +515,49 @@ class TestBuildExtensionImage:
 
         assert "--build-arg" in captured_command
         assert "MY_CUSTOM_ARG=my-value" in captured_command
+
+
+def test_prune_images_keep_handles_full_and_short_references(mock_run_command):
+    """`prune_images_keep` should delete old tags for both short and full refs."""
+    from common_python_tasks.docker import prune_images_keep
+
+    removed_refs: list[str] = []
+
+    def side_effect(command, *args, **kwargs):
+        result = MagicMock(spec=subprocess.CompletedProcess)
+        result.returncode = 0
+        result.stdout = ""
+
+        if command[:3] == ["docker", "image", "ls"]:
+            reference_filter = command[command.index("--filter") + 1]
+            if reference_filter == "reference=ghcr.io/acme/test-package:*":
+                result.stdout = (
+                    "ghcr.io/acme/test-package:latest\n"
+                    "ghcr.io/acme/test-package:older-tag\n"
+                    "ghcr.io/acme/test-package:old-tag\n"
+                )
+            elif reference_filter == "reference=test-package:*":
+                result.stdout = (
+                    "test-package:latest\n"
+                    "test-package:older-tag\n"
+                    "test-package:old-tag\n"
+                )
+
+        if command[:2] == ["docker", "rmi"]:
+            removed_refs.append(command[2])
+
+        return result
+
+    mock_run_command.side_effect = side_effect
+
+    prune_images_keep(
+        "ghcr.io/acme/test-package",
+        "test-package",
+        0,
+        protect_tags=["latest"],
+    )
+
+    assert removed_refs == [
+        "test-package:old-tag",
+        "ghcr.io/acme/test-package:old-tag",
+    ]

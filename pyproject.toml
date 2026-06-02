@@ -25,10 +25,12 @@ dependencies = [
     "poethepoet-tasks (>=0.3.0,<0.4.0)",
     "pytest-cov (>=7.0.0,<8.0.0)",
     "pytest (>=9.0.3,<10.0.0)",
+    "docker (>=7.1.0,<8.0.0)",
     "tomlkit (>=0.13.3,<0.14.0)",
     "jinja2 (>=3.1.6,<4.0.0)",
     "git-cliff (>=2.12.0,<3.0.0)",
     "packaging (>=26.2,<27.0)",
+    "requests (>=2.34.2,<3.0.0)",
 ]
 dynamic = ["version"]
 

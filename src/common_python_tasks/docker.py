@@ -152,35 +152,60 @@ def prune_images_keep(
 
     retain_count = int(keep) + 1
 
-    res = utils.run_command(
-        [
-            "docker",
-            "image",
-            "ls",
-            "--format",
-            "{{.Repository}}:{{.Tag}}",
-            "--filter",
-            f"reference={full_name}:*",
-        ],
-        capture_output=True,
-        acceptable_returncodes={0, 1},
-    )
-    if res.returncode != 0:
-        LOGGER.exception("Failed to list images for pruning: %s", full_name)
-        return
+    def _list_images_for_reference(reference: str) -> list[str]:
+        res = utils.run_command(
+            [
+                "docker",
+                "image",
+                "ls",
+                "--format",
+                "{{.Repository}}:{{.Tag}}",
+                "--filter",
+                f"reference={reference}:*",
+            ],
+            capture_output=True,
+            acceptable_returncodes={0, 1},
+        )
+        if res.returncode != 0:
+            LOGGER.warning("Failed to list images for pruning: %s", reference)
+            return []
 
-    lines = [
-        line.strip()
-        for line in res.stdout.splitlines()
-        if line.strip() and not line.strip().startswith("<none>")
+        return [
+            line.strip()
+            for line in res.stdout.splitlines()
+            if line.strip() and not line.strip().startswith("<none>")
+        ]
+
+    parsed_full_name = utils.parse_image_reference(full_name)
+    short_reference = utils.compose_image_name(package_name, fully_qualified=False)
+    full_reference = utils.compose_image_name(
+        package_name,
+        registry=parsed_full_name["registry"],
+        namespace=parsed_full_name["namespace"],
+    )
+
+    lines = _list_images_for_reference(full_reference)
+    lines += [
+        line
+        for line in _list_images_for_reference(short_reference)
+        if line not in lines
     ]
-    tags_in_order = []
+
+    tags_in_order: list[str] = []
+    seen_tags: set[str] = set()
     for entry in lines:
-        if ":" not in entry:
+        try:
+            parsed_entry = utils.parse_image_reference(entry)
+        except ValueError:
             continue
-        repo, tag = entry.rsplit(":", 1)
-        if entry.startswith(full_name) or repo.endswith(package_name):
-            tags_in_order.append(tag)
+
+        if (
+            parsed_entry["repository"] == package_name
+            and parsed_entry["tag"]
+            and parsed_entry["tag"] not in seen_tags
+        ):
+            tags_in_order.append(parsed_entry["tag"])
+            seen_tags.add(parsed_entry["tag"])
 
     candidates = [t for t in tags_in_order if t not in protect_tags]
     if len(candidates) <= retain_count:
@@ -188,7 +213,18 @@ def prune_images_keep(
 
     to_delete = candidates[retain_count:]
     for tag in to_delete:
-        for img in (f"{package_name}:{tag}", f"{full_name}:{tag}"):
+        short_image = utils.compose_image_name(
+            package_name,
+            tag=tag,
+            fully_qualified=False,
+        )
+        full_image = utils.compose_image_name(
+            package_name,
+            tag=tag,
+            registry=parsed_full_name["registry"],
+            namespace=parsed_full_name["namespace"],
+        )
+        for img in (short_image, full_image):
             try:
                 LOGGER.info("Pruning image %s", img)
                 utils.run_command(["docker", "rmi", img], acceptable_returncodes={0, 1})
@@ -444,14 +480,27 @@ def build_image(
             image_name if image_name is not None else utils.get_package_name()
         )
         orig_full_name = utils.get_full_image_name()
-        if image_name is None:
-            image_full_name = orig_full_name
-        else:
-            if "/" in orig_full_name:
-                prefix = orig_full_name.rsplit("/", 1)[0]
-                image_full_name = f"{prefix}/{image_name}"
-            else:
-                image_full_name = image_name
+
+        parsed_full_name = utils.parse_image_reference(orig_full_name)
+        short_tags = [
+            utils.compose_image_name(image_short_name, tag=t, fully_qualified=False)
+            for t in tags_to_use
+        ]
+        full_tags = [
+            utils.compose_image_name(
+                image_short_name,
+                tag=t,
+                registry=parsed_full_name["registry"],
+                namespace=parsed_full_name["namespace"],
+            )
+            for t in tags_to_use
+        ]
+
+        all_tags: list[str] = []
+        for resolved_tag in [*short_tags, *full_tags]:
+            if resolved_tag not in all_tags:
+                all_tags.append(resolved_tag)
+
         build_cmd = _build_docker_build_command(
             context_path=context_path,
             dockerfile_path=dockerfile_path,
@@ -460,10 +509,7 @@ def build_image(
             no_cache=no_cache,
             plain=plain,
             target=None if omit_target else target,
-            tags=[
-                *[f"{image_short_name}:{t}" for t in tags_to_use],
-                *[f"{image_full_name}:{t}" for t in tags_to_use],
-            ],
+            tags=all_tags,
         )
         utils.run_command(build_cmd)
         delete_temp_file = True
