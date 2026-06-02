@@ -48,6 +48,28 @@ def test_get_compose_type_returns_env_value(monkeypatch):
     assert result == "custom"
 
 
+def test_load_compose_files_supports_quoted_colon_delimited_paths(
+    monkeypatch,
+    tmp_path,
+):
+    from common_python_tasks.docker_compose import load_compose_files
+
+    compose_a = tmp_path / "compose-base.yml"
+    compose_a.write_text("", encoding="utf-8")
+    compose_b = tmp_path / "compose with spaces.yml"
+    compose_b.write_text("", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(
+        "COMPOSE_FILE",
+        '"compose-base.yml":"compose with spaces.yml"',
+    )
+
+    results, _, _ = load_compose_files()
+
+    assert results == [Path("compose-base.yml"), Path("compose with spaces.yml")]
+
+
 def test_read_dotenv_parses_simple_env_file(tmp_path):
     from common_python_tasks.docker_compose import read_dotenv
 
