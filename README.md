@@ -73,6 +73,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `format` | Format Python code with autoflake, black, and isort. | common, format |
 | `lint` | Lint Python code with autoflake, black, isort, and flake8. | common, lint |
 | `build-image` | Build the container image for this project using the Dockerfile template. | build, containers |
+| `build-deps-image` | Build only the container dependency collector image using `CONTAINER_DEPS_CONTENT` or `CONTAINER_DEPS_FILE`. | build, containers |
 | `run-container` | Run the Docker image as a container for this project. By default, when `tag` is `None`, this runs the most recently built tag for the project's image. | containers |
 | `push-image` | Push the Docker image for this project to the container registry. | containers, packaging, release |
 | `publish-package` | Publish the package to the PyPI server. | common, packaging |

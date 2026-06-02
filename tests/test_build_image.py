@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -1133,3 +1134,41 @@ class TestBuildImageWithDeps:
             if c[0][0][0] == "docker" and c[0][0][1] == "build"
         ]
         assert len(docker_calls) == 1
+
+
+def test_build_image_uses_build_deps_image_task(
+    monkeypatch,
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+):
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("CONTAINER_DEPS_CONTENT", "RUN true")
+
+    original_load_data_file = mock_load_data_file.side_effect
+
+    def load_data_file_side_effect(
+        filename, type_identifier="generic", fatal_on_missing=True
+    ):
+        if filename == "Dockerfile.j2":
+            return (
+                "/fake/path/Dockerfile.j2",
+                "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n",
+            )
+        return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+    mock_load_data_file.side_effect = load_data_file_side_effect
+
+    with patch("common_python_tasks.tasks.build_deps_image_task", return_value="deps-image") as mock_task:
+        build_image(single_arch=True, build_args=["FOO=bar"])
+
+    mock_task.assert_called_once_with(
+        no_cache=False,
+        plain=False,
+        single_arch=True,
+        build_args=["FOO=bar"],
+    )

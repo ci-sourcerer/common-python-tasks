@@ -1346,6 +1346,40 @@ def test_build_with_containers_calls_task_build_image():
     )
 
 
+def test_build_deps_image_task_builds_dependency_image():
+    from common_python_tasks.tasks import build_deps_image_task as task_build_deps_image
+
+    with (
+        patch("common_python_tasks.docker.build_deps_image") as mock_build_deps_image,
+        patch(
+            "common_python_tasks.env.parse_container_deps_source",
+            return_value=(None, "RUN apt-get install -y curl"),
+        ),
+        patch(
+            "common_python_tasks.env.inject_auto_build_args_from_env",
+            side_effect=lambda args: args,
+        ),
+        patch("common_python_tasks.env.get_cache_id_suffix", return_value=""),
+    ):
+        task_build_deps_image(
+            no_cache=True,
+            plain=True,
+            single_arch=True,
+            build_args=["FOO=bar"],
+        )
+
+    mock_build_deps_image.assert_called_once_with(
+        deps_content="RUN apt-get install -y curl",
+        deps_dockerfile_path=None,
+        context_path=Path("."),
+        no_cache=True,
+        plain=True,
+        single_arch=True,
+        extra_build_args={"FOO": "bar"},
+        cache_id_suffix="",
+    )
+
+
 def test_build_forwards_container_build_options():
     from common_python_tasks.tasks import build
 
