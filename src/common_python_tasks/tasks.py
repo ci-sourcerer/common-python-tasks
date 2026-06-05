@@ -355,12 +355,13 @@ def flake8_check() -> None:
 
 
 @tasks.script(tags=["test", "common"])
-def test(quiet: bool = False) -> None:
+def test(*paths: str, quiet: bool = False) -> None:
     """Run the test suite with coverage (if `pytest-cov` is installed).
 
 
     Args:
         quiet: If `True`, run tests in a quieter mode.
+        *paths: Optional test file paths or directories to pass through to pytest.
     """
     from .utils import (
         get_config_path,
@@ -397,14 +398,18 @@ def test(quiet: bool = False) -> None:
     else:
         coverage_args = []
 
+    pytest_command = [
+        "pytest",
+        None if quiet else "-vv",
+        "-c" if pytest_config_path else None,
+        str(pytest_config_path) if pytest_config_path else None,
+        *coverage_args,
+        *paths,
+    ]
+    pytest_command = [arg for arg in pytest_command if arg is not None]
+
     exit_code = run_command(
-        [
-            "pytest",
-            None if quiet else "-vv",
-            "-c" if pytest_config_path else None,
-            str(pytest_config_path) if pytest_config_path else None,
-            *coverage_args,
-        ],
+        pytest_command,
         acceptable_returncodes={0, 5},
     ).returncode
 
