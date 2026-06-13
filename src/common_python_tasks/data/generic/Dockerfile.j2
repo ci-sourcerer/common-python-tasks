@@ -13,18 +13,18 @@ FROM python:${PYTHON_VERSION} AS builder
 ARG POETRY_VERSION
 ARG POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION
 ARG POETRY_PLUGIN_EXPORT_VERSION
-ARG POETRY_DYNAMIC_VERSIONING_COMMANDS
-ARG TOMLKIT_VERSION
+ARG PACKAGE_VERSION
 
-{% if POETRY_DYNAMIC_VERSIONING_COMMANDS is defined %}
-ENV POETRY_DYNAMIC_VERSIONING_COMMANDS=${POETRY_DYNAMIC_VERSIONING_COMMANDS}
-{% endif %}
+# Bypass VCS-based version detection: use the host-computed version directly.
+# This avoids requiring a .git directory in the build context and prevents
+# false dirty-version detection from a partial working tree.
+ENV POETRY_DYNAMIC_VERSIONING_BYPASS=${PACKAGE_VERSION}
+
 # Install Poetry and required Poetry plugins for build
 RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} pip install --root-user-action=ignore \
     "poetry==$POETRY_VERSION" \
     "poetry-dynamic-versioning[plugin]==$POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION" \
-    "poetry-plugin-export==$POETRY_PLUGIN_EXPORT_VERSION" \
-    "tomlkit==$TOMLKIT_VERSION"
+    "poetry-plugin-export==$POETRY_PLUGIN_EXPORT_VERSION"
 
 # Build package
 WORKDIR /tmp/build
