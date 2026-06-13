@@ -130,6 +130,41 @@ def test_test_forwards_paths_to_pytest_command():
     )
 
 
+def test_test_accepts_paths_keyword_list():
+    from common_python_tasks.tasks import test
+
+    with (
+        patch("common_python_tasks.utils.get_config_path", return_value=None),
+        patch("common_python_tasks.utils.is_package_installed", return_value=False),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        test(paths=["tests/test_example.py", "tests/test_other.py"])
+
+    mock_run_command.assert_called_once_with(
+        [
+            "pytest",
+            "-vv",
+            "tests/test_example.py",
+            "tests/test_other.py",
+        ],
+        acceptable_returncodes={0, 5},
+    )
+
+
+def test_test_task_paths_arg_is_optional_in_poe_config():
+    from common_python_tasks.tasks import tasks as task_collection
+
+    paths_arg = next(
+        arg
+        for arg in task_collection()["tasks"]["test"]["args"]
+        if arg["name"] == "paths"
+    )
+
+    assert paths_arg["positional"] is True
+    assert paths_arg["multiple"] is True
+    assert paths_arg["required"] is False
+
+
 def test_confirm_loops_until_valid_response():
     from common_python_tasks.tasks import _confirm
 
