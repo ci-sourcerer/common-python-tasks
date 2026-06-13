@@ -427,8 +427,7 @@ def clean(dist_only: bool = False) -> None:
 
     Args:
         dist_only: If `True`, only clean the `dist` directory (and related build
-            artifacts), leaving other temporary files like `__pycache__` and
-            `.pytest_cache` intact.
+            artifacts)
     """
     from .utils import remove_path
 
