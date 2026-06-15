@@ -1,3 +1,42 @@
+## [0.4.0] - 2026-06-15
+
+### 🚀 Features
+
+- Add support for git-less testing
+- Add `get_black_target_version` to avoid compatibility warning
+- Add `build-deps-image` task
+- Enhance Docker image handling for any container registry
+- Update registry username handling/container registry URL logic
+- Allow passing specific test file paths to `test`
+- Make var positional task args optional
+
+### 🐛 Bug Fixes
+
+- Fix broken `build_deps_image_task`
+- Update `build_image` references to fix broken release stuff
+- [**breaking**] `REGISTRY_USERNAME` -> `CONTAINER_REGISTRY_USERNAME`
+- Add 'enable' value to `TRUTHY_VALUES`
+
+### 💼 Other
+
+- Wording
+- Remove useless dupe dep
+- Remove unnecessary fields from project examples
+
+### 🚜 Refactor
+
+- *(env)* [**breaking**] Unify shell-style parsing for colon-delimited env vars
+- Compute version outside `build-image` task
+
+### 📚 Documentation
+
+- README formatting
+- Update README
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.4.0
+
 ## [0.3.1] - 2026-05-26
 
 ### 🐛 Bug Fixes
