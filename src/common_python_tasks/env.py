@@ -14,6 +14,7 @@ TRUTHY_VALUES = {
     "yes",
     "on",
     "enabled",
+    "enable",
     "y",
     "t",
 }
