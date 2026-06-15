@@ -37,10 +37,8 @@ There's no real reason to run the automated script; I just like automating every
 
     ```toml
     [project]
-    name = "my-awesome-project"
-    version = "0.3.1"
     dependencies = [
-        "common-python-tasks==0.3.1",  # Always pin to a specific version
+        "common-python-tasks==0.3.1"  # Always pin to a specific version
     ]
 
     [tool.poe]
@@ -268,8 +266,6 @@ Available tasks: common defaults such as `format`, `lint`, `test`, and `build`.
 
 ```toml
 [project]
-name = "containerized-app"
-version = "0.3.1"
 dependencies = ["common-python-tasks==0.3.1"]
 
 [tool.poe]
@@ -286,9 +282,7 @@ Available tasks: All tasks including `build-image` and `push-image`.
 
 ```toml
 [project]
-name = "custom-test-setup"
 dependencies = ["common-python-tasks==0.3.1"]
-dynamic = ["version"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"

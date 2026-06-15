@@ -13,12 +13,6 @@ from common_python_tasks.env import (
     [
         ("WORKDIR_PATH", "/app", {}, {"WORKDIR_PATH": "/app"}),
         (
-            "POETRY_DYNAMIC_VERSIONING_COMMANDS",
-            "",
-            {},
-            {"POETRY_DYNAMIC_VERSIONING_COMMANDS": ""},
-        ),
-        (
             "WORKDIR_PATH",
             "/app",
             {"WORKDIR_PATH": "/custom"},

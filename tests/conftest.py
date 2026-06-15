@@ -76,7 +76,6 @@ def mock_load_data_file():
         version_mock.side_effect = lambda name: {
             "poetry-dynamic-versioning[plugin]": "0.17.0",
             "poetry-plugin-export": "1.5.0",
-            "tomlkit": "0.12.1",
         }.get(name)
 
         def side_effect(filename, type_identifier="generic", fatal_on_missing=True):
@@ -113,11 +112,14 @@ def mock_load_data_file():
 
 @pytest.fixture
 def mock_get_image_tag():
-    """Mock _get_image_tag to return a fixed tag."""
-    mock = MagicMock()
-    with patch("common_python_tasks.git.get_image_tag", new=mock):
-        mock.return_value = "1.0.0"
-        yield mock
+    """Mock get_image_tag and get_version to return fixed values."""
+    image_tag_mock = MagicMock(return_value="1.0.0")
+    version_mock = MagicMock(return_value="1.0.0")
+    with (
+        patch("common_python_tasks.git.get_image_tag", new=image_tag_mock),
+        patch("common_python_tasks.git.get_version", new=version_mock),
+    ):
+        yield image_tag_mock
 
 
 @pytest.fixture

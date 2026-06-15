@@ -1,4 +1,5 @@
 import contextvars
+import inspect
 import logging
 import os
 from functools import partial, wraps
@@ -55,11 +56,44 @@ _task_call_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
 _original_script = tasks.script
 
 
+def _make_var_positional_task_args_optional(
+    func: callable, resolved_task_name: str
+) -> None:
+    var_positional_arg_names = {
+        param.name
+        for param in inspect.signature(func).parameters.values()
+        if param.kind == inspect.Parameter.VAR_POSITIONAL
+    }
+    if not var_positional_arg_names:
+        return
+
+    for task_config in tasks._tasks.get(resolved_task_name, []):
+        for arg_config in task_config.options.get("args", []):
+            if arg_config.get("name") in var_positional_arg_names:
+                arg_config["required"] = False
+
+
 def _wrap_task_function(func: callable, task_name: str | None) -> callable:
     resolved_task_name = task_name or func.__name__.replace("_", "-").lower()
+    var_positional_arg_names = [
+        param.name
+        for param in inspect.signature(func).parameters.values()
+        if param.kind == inspect.Parameter.VAR_POSITIONAL
+    ]
 
     @wraps(func)
     def wrapped(*args, **kwargs):
+        for arg_name in var_positional_arg_names:
+            if arg_name not in kwargs:
+                continue
+            values = kwargs.pop(arg_name)
+            if values is None:
+                continue
+            if isinstance(values, list | tuple):
+                args = (*args, *values)
+            else:
+                args = (*args, values)
+
         current_depth = _task_call_depth.get()
         if current_depth > 0:
             LOGGER.log(
@@ -99,15 +133,18 @@ def _script(
             tags=tags,
         )
 
-    wrapped = _wrap_task_function(func, task_name)
-    return _original_script(
+    resolved_task_name = task_name or func.__name__.replace("_", "-").lower()
+    wrapped = _wrap_task_function(func, resolved_task_name)
+    decorated = _original_script(
         wrapped,
-        task_name=task_name,
+        task_name=resolved_task_name,
         help=help,
         task_args=task_args,
         options=options,
         tags=tags,
     )
+    _make_var_positional_task_args_optional(wrapped, resolved_task_name)
+    return decorated
 
 
 tasks.script = _script
@@ -427,8 +464,7 @@ def clean(dist_only: bool = False) -> None:
 
     Args:
         dist_only: If `True`, only clean the `dist` directory (and related build
-            artifacts), leaving other temporary files like `__pycache__` and
-            `.pytest_cache` intact.
+            artifacts)
     """
     from .utils import remove_path
 

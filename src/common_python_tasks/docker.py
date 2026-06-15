@@ -405,6 +405,7 @@ def build_image(
     try:
         archs = _resolve_archs(single_arch)
         files_to_ignore = [Path(".dockerignore")] if temp_dockerignore_created else []
+        package_version = git.get_version(ignore=files_to_ignore)
         version_string = git.get_image_tag(ignore=files_to_ignore)
 
         dockerfile_source = (
@@ -462,7 +463,7 @@ def build_image(
                 "POETRY_PLUGIN_EXPORT_VERSION": project.get_installed_requirement_version(
                     "poetry-plugin-export"
                 ),
-                "TOMLKIT_VERSION": project.get_installed_requirement_version("tomlkit"),
+                "PACKAGE_VERSION": package_version,
                 "PACKAGE_NAME": utils.get_package_name(use_underscores=True),
                 "AUTHORS": ",".join(
                     [f"{name} <{email}>" for name, email in project.get_authors()]
