@@ -25,7 +25,7 @@ This will complete the following steps.
 
 1. Add the latest version of `common-python-tasks` to your `pyproject.toml` dependencies
 2. Configure Poe the Poet to expose the default common task set
-3. Install the package using Poetry
+3. Install dependencies for your project
 
 **Always review scripts before running them!** Even though I believe I write good software, it's best practice to verify any script you download from the Internet.
 
@@ -48,6 +48,8 @@ There's no real reason to run the automated script; I just like automating every
 2. Install the package
 
     ```shell
+    uv sync
+    # or, for Poetry workflows
     poetry install
     ```
 
@@ -160,9 +162,24 @@ The `fastapi` stack includes a service for your FastAPI application. It uses the
 
 Your project must meet the following requirements.
 
-- Use Poetry for dependency management
-- Have a `pyproject.toml` file at the root
-- Have a package name (automatically inferred from `project.name` in `pyproject.toml` or set via `PACKAGE_NAME` environment variable)
+- Uses Poetry or uv for dependency management
+- Uses Poe the Poet for task management
+- Has `poetry-dynamic-versioning` or `uv-dynamic-versioning` as a dependency
+- Has a `pyproject.toml` file at the root
+- Has a package name (automatically inferred from `project.name` in `pyproject.toml` or set via `PACKAGE_NAME` environment variable)
+
+### Package manager backend selection
+
+Packaging-related tasks (`build-package`, `publish-package`, release tagging/version resolution, and related container build metadata) support both Poetry and uv.
+
+Backend selection uses this precedence.
+
+1. `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
+2. `COMMON_PYTHON_TASKS_BUILD_TOOL`
+3. `PACKAGE_MANAGER`
+4. Auto-discovery (`auto`) based on installed tools and project metadata
+
+Supported values are `poetry`, `uv`, and `auto`.
 
 ### Configuration precedence
 
@@ -191,7 +208,9 @@ The following environment variables configure the paths to configuration files.
 The following environment variables configure package and container behavior.
 
 - `PACKAGE_NAME`: Overrides the package name; the default comes from `pyproject.toml`
-- `POETRY_VERSION`: Overrides the Poetry version for container builds
+- `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`: Selects package manager backend (`poetry`, `uv`, or `auto`)
+- `COMMON_PYTHON_TASKS_BUILD_TOOL`: Alias for `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
+- `PACKAGE_MANAGER`: Alias for `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
 - `CONTAINER_REGISTRY_USERNAME`: Specifies the container registry username for image tagging; the default is the current local user
 - `CONTAINER_REGISTRY_URL`: Specifies the registry URL (default: `docker.io/{username}`)
 - `CONTAINER_BUILD_ARGS`: Provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
@@ -331,7 +350,7 @@ COMMON_PYTHON_TASKS_LOG_LEVEL=DEBUG poe test
 Make sure your `pyproject.toml` contains the following.
 
 - A correct package name in `[project]`
-- A package location defined with this configuration: `[tool.poetry] packages = [{ include = "your_package", from = "src" }]`
+- Package discovery settings required by your chosen build backend (for Poetry projects, this is commonly `[tool.poetry] packages = [{ include = "your_package", from = "src" }]`)
 
 ### Stack fails to start or services won't connect
 
@@ -365,9 +384,9 @@ If `SECRET_KEY` or `DB_PASS` aren't auto-generated:
 
 The standard Python Dockerfile incorporates several intentional design choices.
 
-- Multi-stage build: The build stage installs Poetry and builds a wheel while the runtime stage installs only the wheel to keep the final image slim and reproducible
-- Pip and Poetry cache mounts: Speed up iterative builds without bloating the final image
-- Explicit inputs through build args: `PYTHON_VERSION`, `POETRY_VERSION`, `PACKAGE_NAME`, `AUTHORS`, `GIT_COMMIT`, and `CUSTOM_ENTRYPOINT` make image metadata and behavior predictable and auditable
+- Multi-stage build: The build stage installs the selected package manager backend (Poetry or uv) and builds a wheel while the runtime stage installs only the wheel to keep the final image slim and reproducible
+- Pip and package-manager cache mounts: Speed up iterative builds without bloating the final image
+- Explicit inputs through build args: `PYTHON_VERSION`, `PACKAGE_MANAGER`, `PACKAGE_MANAGER_VERSION`, `PACKAGE_NAME`, `AUTHORS`, `GIT_COMMIT`, and `CUSTOM_ENTRYPOINT` make image metadata and behavior predictable and auditable
 - Optional debug stage: Exports and installs the `debug` dependency group only when present, without failing otherwise, and is not part of the default final image
 - Stable package path: Creates symlinks to the installed package so entrypoints and consumers have a consistent `/pkg` and `/_$PACKAGE_NAME` path regardless of wheel layout. This ensures that the package can be imported and executed from a known location and supports the less common case of reading files directly from the package path
 - Safe entrypoint selection: The default entrypoint resolves the console script matching the package name, while `CUSTOM_ENTRYPOINT` allows an override at build time and keeps runtime behavior predictable
@@ -377,6 +396,6 @@ The standard Python Dockerfile incorporates several intentional design choices.
 
 - This project dogfoods itself; it uses `common-python-tasks` for its own development. **That said, you must set the environment variable `PYTHONPATH=src` when running tasks locally to ensure you are using the local version of the package instead of the installed version**
 - `RELEASE_UPDATE_CHANGELOG` is enabled by default for releases and prepends a tagged section into `CHANGELOG.md` before the release tag is created. Set it to a falsy value if you prefer to manage changelog commits yourself.
-- `RELEASE_PRE_SCRIPT` and `RELEASE_POST_SCRIPT` hooks may not be necessary for most users, as this package promotes the use of `poetry-dynamic-versioning` and `git-cliff` to automate versioning and changelog generation based on git history. One advanced use case for the `RELEASE_PRE_SCRIPT` hook is to edit another file before release, such as a README that references the current stable version number. This allows you to keep the README up to date with the latest version without hardcoding it.
+- `RELEASE_PRE_SCRIPT` and `RELEASE_POST_SCRIPT` hooks may not be necessary for most users, as this package promotes dynamic versioning and `git-cliff` to automate versioning and changelog generation based on git history. One advanced use case for the `RELEASE_PRE_SCRIPT` hook is to edit another file before release, such as a README that references the current stable version number. This allows you to keep the README up to date with the latest version without hardcoding it.
 - Contributions welcome! Open an issue/discussion to discuss changes before submitting a PR. I do not claim to have all the answers, and you can help determine the future of low-code solutions for Python. I am very interested in your feedback as I don't want to work in a vacuum
 - Alpha status: Expect breaking changes between minor versions until 1.0.0

@@ -411,3 +411,13 @@ def test_render_template_text_injects_extension_content():
 
     assert "RUN echo ext1" in rendered
     assert rendered.index("RUN echo ext1") < rendered.index("FROM runtime AS debug")
+
+
+def test_confirm_loops_until_valid_response():
+    from common_python_tasks.utils import confirm
+
+    with patch("builtins.input", side_effect=["maybe", "Y"]):
+        assert confirm("Proceed?") is True
+
+    with patch("builtins.input", side_effect=["", "no"]):
+        assert confirm("Proceed?") is False

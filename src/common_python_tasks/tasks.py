@@ -5,6 +5,7 @@ import os
 from functools import partial, wraps
 from pathlib import Path
 
+from common_python_tasks.utils import confirm
 from poethepoet_tasks import TaskCollection
 
 
@@ -116,7 +117,6 @@ def _wrap_task_function(func: callable, task_name: str | None) -> callable:
 
 def _script(
     func=None,
-    *,
     task_name: str | None = None,
     help: str | None = None,
     task_args: bool = True,
@@ -158,28 +158,13 @@ def _should_update_release_changelog() -> bool:
     return env_truthy("RELEASE_UPDATE_CHANGELOG")
 
 
-def _confirm(message: str) -> bool:
-    yes_values = {"y", "yes"}
-    no_values = {"n", "no"}
-    while True:
-        try:
-            response = input(f"{message} [y/N]: ").strip().lower()
-        except (EOFError, OSError):
-            return False
-
-        if response in yes_values:
-            return True
-        if response in no_values:
-            return False
-
-
 def _confirm_release_with_uncommitted_changes(dirty_files: list[Path]) -> bool:
     preview = ", ".join(str(path) for path in dirty_files[:5])
     if len(dirty_files) > 5:
         preview = f"{preview}, ... and {len(dirty_files) - 5} more"
 
     LOGGER.warning("Repository has uncommitted changes: %s", preview)
-    return _confirm("Proceed with release anyway?")
+    return confirm("Proceed with release anyway?")
 
 
 def _resolve_allow_dirty_release(dirty_files: list[Path]) -> bool:
@@ -560,6 +545,7 @@ def build_image(
         resolve_extension_content,
     )
     from .project import (
+        get_package_manager,
         has_debug_dependency_group,
         resolve_container_entrypoint_command,
     )
@@ -695,6 +681,7 @@ def build_image(
     dockerfile_text = render_template_text(
         load_data_file("Dockerfile.j2")[1],
         {
+            "PACKAGE_MANAGER": get_package_manager(),
             "EXTENSION_CONTENT": combined_content,
             "DEPS_IMAGE": deps_image_tag,
             "CONTAINER_DEPS_MOVE_SCRIPT": container_deps_move_script,
@@ -783,7 +770,6 @@ def build_deps_image_task(
 @tasks.script(tags=["containers"])
 def run_container(
     tag: str | None = None,
-    *,
     entrypoint: str | None = None,
     command: str | None = None,
     root: bool = False,
@@ -976,11 +962,12 @@ def publish_package(build_first: bool = True) -> None:
     Args:
         build_first: If `True`, build the package before publishing.
     """
+    from .project import get_package_manager_publish_command
     from .utils import run_command
 
     if build_first:
         build_package(clean_dist=True)
-    run_command(["poetry", "publish"])
+    run_command(get_package_manager_publish_command())
 
 
 @tasks.script(
@@ -988,7 +975,6 @@ def publish_package(build_first: bool = True) -> None:
 )
 def publish_github_release(
     tag_name: str | None = None,
-    *,
     release_name: str | None = None,
     body: str | None = None,
     prerelease: bool = False,
@@ -1001,12 +987,12 @@ def publish_github_release(
         get_github_release_asset_paths,
     )
     from .github import publish_github_release as publish_github_release_helper
-    from .project import get_release_tag_from_poetry_version
+    from .project import get_release_tag_from_project_version
     from .utils import fatal
 
     resolved_tag_name = tag_name or os.getenv("GITHUB_RELEASE_TAG")
     if resolved_tag_name is None:
-        resolved_tag_name = get_release_tag_from_poetry_version()
+        resolved_tag_name = get_release_tag_from_project_version()
     if not resolved_tag_name:
         fatal("Unable to determine the release tag for GitHub Release publication")
 
@@ -1029,11 +1015,10 @@ def publish_github_release(
 @tasks.script(task_name="build-package", tags=["packaging", "build", "common"])
 def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
     """Build the package (wheel and sdist)."""
+    from .project import get_package_manager_build_command
     from .utils import run_command
 
-    command = ["poetry", "build"]
-    if wheel_only:
-        command += ["--format", "wheel"]
+    command = get_package_manager_build_command(wheel_only=wheel_only)
     if clean_dist:
         dist_path = Path("dist")
         if dist_path.exists() and any(dist_path.iterdir()):
@@ -1044,7 +1029,6 @@ def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
 @tasks.script(tags=["packaging", "common"])
 def bump_version(
     component: str = "auto",
-    *,
     stage: str | None = None,
     dry_run: bool = False,
     allow_dirty: bool = False,
@@ -1106,10 +1090,9 @@ def changelog() -> None:
 
 def _run_release_flow(
     component: str = "auto",
-    *,
     stage: str | None = None,
     dry_run: bool = False,
-    include_containers: bool,
+    include_containers: bool = False,
     debug: bool = False,
     no_cache: bool = False,
     plain: bool = False,
@@ -1224,7 +1207,6 @@ def _run_release_flow(
 @tasks.script(task_name="release", tags=["packaging", "release", "containers"])
 def release(
     component: str = "auto",
-    *,
     stage: str | None = None,
     dry_run: bool = False,
     debug: bool = False,
@@ -1278,7 +1260,6 @@ def release(
 @tasks.script(task_name="release", tags=["packaging", "release", "common"])
 def release_without_containers(
     component: str = "auto",
-    *,
     stage: str | None = None,
     dry_run: bool = False,
     assets: list[str] | None = None,
@@ -1431,6 +1412,7 @@ def fastapi_stack_up(
         load_container_env_tokens,
     )
     from .project import (
+        get_package_manager,
         has_debug_dependency_group,
         resolve_container_entrypoint_command,
     )
@@ -1453,6 +1435,7 @@ def fastapi_stack_up(
     dockerfile_text = render_template_text(
         load_data_file("Dockerfile.j2")[1],
         {
+            "PACKAGE_MANAGER": get_package_manager(),
             "EXTENSION_CONTENT": "",
             "HAS_DEBUG_DEPS": has_debug_deps,
             "APT_PACKAGES": "",

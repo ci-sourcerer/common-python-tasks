@@ -591,6 +591,69 @@ def test_build_image_no_cache_passes_no_cache_pull_and_plain(
     assert not any(a.startswith("CACHE_ID_SUFFIX=") for a in base_build_cmd)
 
 
+def test_build_image_renders_uv_dynamic_versioning_bypass_for_uv_builder(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+):
+    from common_python_tasks import project
+    from common_python_tasks.tasks import build_image
+
+    build_calls: list[list[str]] = []
+    captured_dockerfile: dict[str, str] = {}
+    original = mock_run_command.side_effect
+    original_load_data_file = mock_load_data_file.side_effect
+
+    def load_data_file_with_template(
+        filename, type_identifier="generic", fatal_on_missing=True
+    ):
+        if filename == "Dockerfile.j2":
+            template_path = (
+                Path(__file__).resolve().parents[1]
+                / "src/common_python_tasks/data/generic/Dockerfile.j2"
+            )
+            return (
+                str(template_path),
+                template_path.read_text(encoding="utf-8"),
+            )
+        return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+    mock_load_data_file.side_effect = load_data_file_with_template
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+            dockerfile_path = command[command.index("-f") + 1]
+            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
+                encoding="utf-8"
+            )
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    with (
+        patch(
+            "common_python_tasks.project.get_package_manager",
+            return_value=project.PackageManager.UV,
+        ),
+        patch(
+            "common_python_tasks.project.get_package_manager_version",
+            return_value="0.8.0",
+        ),
+    ):
+        build_image()
+
+    assert len(build_calls) == 1
+    assert (
+        "ENV UV_DYNAMIC_VERSIONING_BYPASS=${PACKAGE_VERSION}"
+        in captured_dockerfile["content"]
+    )
+    assert any("UV_VERSION=0.8.0" in str(a) for a in build_calls[0])
+
+
 def test_build_image_accepts_build_args_param_for_real_docker_arg(
     temp_project_dir,
     mock_run_command,

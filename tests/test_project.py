@@ -3,10 +3,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from common_python_tasks.project import (
+    PackageManager,
     extract_poe_script_tags,
     get_authors,
     get_black_target_version,
     get_installed_requirement_version,
+    get_package_manager,
+    get_package_manager_build_command,
+    get_package_manager_publish_command,
+    get_project_version,
+    get_release_tag_from_project_version,
     is_task_tag_included,
 )
 
@@ -18,7 +24,11 @@ def test_get_installed_requirement_version_strips_extras_and_normalizes_name():
         raise metadata.PackageNotFoundError
 
     get_installed_requirement_version.cache_clear()
-    with patch("importlib.metadata.version", side_effect=version_side_effect):
+    get_package_manager.cache_clear()
+    with (
+        patch("importlib.metadata.version", side_effect=version_side_effect),
+        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
+    ):
         assert (
             get_installed_requirement_version("poetry-dynamic-versioning[plugin]")
             == "0.17.0"
@@ -36,6 +46,7 @@ def test_get_installed_requirement_version_uses_poetry_show_when_not_available_i
 """
 
     get_installed_requirement_version.cache_clear()
+    get_package_manager.cache_clear()
 
     def run_command_side_effect(
         cmd, capture_output=True, acceptable_returncodes=None, env=None
@@ -52,6 +63,7 @@ def test_get_installed_requirement_version_uses_poetry_show_when_not_available_i
             "common_python_tasks.project.get_local_poetry_plugin_version",
             return_value=None,
         ),
+        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
         patch(
             "common_python_tasks.utils.run_command",
             side_effect=run_command_side_effect,
@@ -74,6 +86,7 @@ def test_get_installed_requirement_version_uses_poetry_self_show_when_poetry_sho
 """
 
     get_installed_requirement_version.cache_clear()
+    get_package_manager.cache_clear()
 
     def run_command_side_effect(
         cmd, capture_output=True, acceptable_returncodes=None, env=None
@@ -92,6 +105,7 @@ def test_get_installed_requirement_version_uses_poetry_self_show_when_poetry_sho
             "common_python_tasks.project.get_local_poetry_plugin_version",
             return_value=None,
         ),
+        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
         patch(
             "common_python_tasks.utils.run_command",
             side_effect=run_command_side_effect,
@@ -108,12 +122,14 @@ def test_get_installed_requirement_version_uses_poetry_run_python_when_metadata_
         raise metadata.PackageNotFoundError
 
     get_installed_requirement_version.cache_clear()
+    get_package_manager.cache_clear()
     with (
         patch("importlib.metadata.version", side_effect=version_side_effect),
         patch(
             "common_python_tasks.project.get_local_poetry_plugin_version",
             return_value=None,
         ),
+        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
         patch(
             "common_python_tasks.utils.run_command",
             return_value=MagicMock(stdout="1.9.0\n", returncode=0),
@@ -138,7 +154,11 @@ def test_get_installed_requirement_version_uses_local_poetry_plugins_directory(
         raise metadata.PackageNotFoundError
 
     get_installed_requirement_version.cache_clear()
-    with patch("importlib.metadata.version", side_effect=version_side_effect):
+    get_package_manager.cache_clear()
+    with (
+        patch("importlib.metadata.version", side_effect=version_side_effect),
+        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
+    ):
         assert get_installed_requirement_version("poetry-plugin-export") == "1.10.0"
 
 
@@ -147,7 +167,11 @@ def test_get_installed_requirement_version_returns_none_when_not_installed():
         raise metadata.PackageNotFoundError
 
     get_installed_requirement_version.cache_clear()
-    with patch("importlib.metadata.version", side_effect=version_side_effect):
+    get_package_manager.cache_clear()
+    with (
+        patch("importlib.metadata.version", side_effect=version_side_effect),
+        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
+    ):
         assert get_installed_requirement_version("no-such-package") is None
 
 
@@ -315,13 +339,103 @@ def test_get_project_version_from_poetry_fails_on_empty_output():
                 get_project_version_from_poetry()
 
 
-def test_get_release_tag_from_poetry_version():
-    from common_python_tasks.project import get_release_tag_from_poetry_version
-
+def test_get_release_tag_from_project_version():
     with patch(
-        "common_python_tasks.project.get_project_version_from_poetry",
+        "common_python_tasks.project.get_project_version",
         return_value="2.1.0",
     ):
-        result = get_release_tag_from_poetry_version()
+        result = get_release_tag_from_project_version()
 
         assert result == "v2.1.0"
+
+
+def test_get_package_manager_uses_uv_override(monkeypatch):
+    get_package_manager.cache_clear()
+    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "uv")
+
+    with patch("shutil.which", return_value="/usr/local/bin/uv"):
+        assert get_package_manager() == "uv"
+
+
+def test_get_package_manager_auto_prefers_uv_when_poetry_missing(monkeypatch):
+    get_package_manager.cache_clear()
+    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "auto")
+
+    def which_side_effect(name):
+        if name == "uv":
+            return "/usr/local/bin/uv"
+        return None
+
+    with patch("shutil.which", side_effect=which_side_effect):
+        assert get_package_manager() == "uv"
+
+
+def test_get_package_manager_auto_prefers_uv_when_project_declares_uv(
+    monkeypatch,
+):
+    get_package_manager.cache_clear()
+    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "auto")
+
+    with (
+        patch("shutil.which", return_value="/usr/local/bin/tool"),
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={"tool": {"uv": {}}, "build-system": {}},
+        ),
+    ):
+        assert get_package_manager() == PackageManager.UV
+
+
+def test_get_package_manager_auto_prefers_poetry_when_project_declares_poetry(
+    monkeypatch,
+):
+    get_package_manager.cache_clear()
+    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "auto")
+
+    with (
+        patch("shutil.which", return_value="/usr/local/bin/tool"),
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={"tool": {"poetry": {}}, "build-system": {}},
+        ),
+    ):
+        assert get_package_manager() == "poetry"
+
+
+def test_get_package_manager_build_command_uses_uv_when_selected():
+    with patch("common_python_tasks.project.get_package_manager", return_value="uv"):
+        assert get_package_manager_build_command() == ["uv", "build"]
+        assert get_package_manager_build_command(wheel_only=True) == [
+            "uv",
+            "build",
+            "--wheel",
+        ]
+
+
+def test_get_package_manager_publish_command_uses_selected_backend():
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.POETRY,
+    ):
+        assert get_package_manager_publish_command() == ["poetry", "publish"]
+
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.UV,
+    ):
+        assert get_package_manager_publish_command() == ["uv", "publish"]
+
+
+def test_get_project_version_prefers_vcs_for_uv_when_pyproject_is_placeholder():
+    with (
+        patch("common_python_tasks.project.get_package_manager", return_value="uv"),
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={"project": {"version": "0.0.0"}},
+        ),
+        patch(
+            "common_python_tasks.project.get_project_version_from_vcs",
+            return_value="1.4.2",
+        ),
+    ):
+        assert get_project_version() == "1.4.2"

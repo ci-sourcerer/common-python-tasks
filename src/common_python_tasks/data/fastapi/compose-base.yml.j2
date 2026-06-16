@@ -9,7 +9,8 @@ x-common-environment: &common-environment
 x-common-build-args: &common-build-args
   PACKAGE_NAME: ${PACKAGE_NAME}
   PYTHON_VERSION: ${PYTHON_VERSION}
-  POETRY_VERSION: ${POETRY_VERSION}
+  PACKAGE_MANAGER: ${PACKAGE_MANAGER}
+  PACKAGE_MANAGER_VERSION: ${PACKAGE_MANAGER_VERSION}
 
 services:
   api:

@@ -11,7 +11,7 @@ def test_infer_bump_component_from_git_cliff_returns_expected_bump():
             return_value=MagicMock(stdout="v2.0.0\n", returncode=0),
         ),
         patch(
-            "common_python_tasks.project.get_project_version_from_poetry",
+            "common_python_tasks.project.get_project_version",
             return_value="1.3.2",
         ),
     ):
@@ -26,7 +26,7 @@ def test_infer_bump_component_from_git_cliff_returns_expected_bump():
 class TestComputeNextReleaseVersion:
     def _call(self, component, stage=None, current_version="1.2.3"):
         with patch(
-            "common_python_tasks.project.get_project_version_from_poetry",
+            "common_python_tasks.project.get_project_version",
             return_value=current_version,
         ):
             from common_python_tasks.git import (
@@ -90,7 +90,7 @@ class TestComputeNextReleaseVersion:
 
         with (
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="1.2.3",
             ),
             patch(

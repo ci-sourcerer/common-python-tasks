@@ -47,24 +47,25 @@ PYTHONPATH = "src"
 RELEASE_UPDATE_CHANGELOG = "1"
 RELEASE_PRE_SCRIPT = "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py"
 
-[tool.poetry.requires-plugins]
-poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
-poetry-plugin-export = { version = ">=1.9.0,<2.0.0" }
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
 
-[tool.poetry]
-packages = [{ include = "common_python_tasks", from = "src" }]
-include = ["src/common_python_tasks/data/*"]
-# This is set by poetry-dynamic-versioning
-version = "0.0.0"
+[tool.hatch.build.targets.wheel]
+packages = ["src/common_python_tasks"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/common_python_tasks", "scripts", "README.md", "LICENSE"]
 
 [dependency-groups]
 debug = ["debugpy (>=1.8.16,<2.0.0)"]
 
 [build-system]
-requires = ["poetry-core>=2.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling>=1.27.0", "uv-dynamic-versioning>=0.14.0"]
+build-backend = "hatchling.build"
 
-[tool.poetry-dynamic-versioning]
-enable = true
+[tool.uv-dynamic-versioning]
 style = "pep440"
 dirty = true
+
+[tool.uv]
+package = true
