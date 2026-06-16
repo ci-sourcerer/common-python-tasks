@@ -165,16 +165,6 @@ def test_test_task_paths_arg_is_optional_in_poe_config():
     assert paths_arg["required"] is False
 
 
-def test_confirm_loops_until_valid_response():
-    from common_python_tasks.tasks import _confirm
-
-    with patch("builtins.input", side_effect=["maybe", "Y"]):
-        assert _confirm("Proceed?") is True
-
-    with patch("builtins.input", side_effect=["", "no"]):
-        assert _confirm("Proceed?") is False
-
-
 def test_lint_all_fails_when_no_tools_installed(mock_find_spec):
     from common_python_tasks.tasks import lint_all
     from common_python_tasks.utils import is_package_installed
@@ -297,7 +287,7 @@ class TestBumpVersion:
         with patch("common_python_tasks.git.get_dirty_files") as mock_dirty:
             with patch("common_python_tasks.git.ensure_on_default_branch"):
                 with patch(
-                    "common_python_tasks.project.get_project_version_from_poetry",
+                    "common_python_tasks.project.get_project_version",
                     return_value="0.0.0",
                 ):
                     with patch("common_python_tasks.utils.run_command") as mock_run:
@@ -326,7 +316,7 @@ class TestBumpVersion:
         with patch("common_python_tasks.git.get_dirty_files") as mock_dirty:
             with patch("common_python_tasks.git.ensure_on_default_branch"):
                 with patch(
-                    "common_python_tasks.project.get_project_version_from_poetry",
+                    "common_python_tasks.project.get_project_version",
                     return_value="1.2.3",
                 ):
                     with patch("common_python_tasks.utils.run_command") as mock_run:
@@ -417,7 +407,7 @@ class TestBumpVersion:
                 return_value=ReleaseComponent.MAJOR,
             ),
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="0.2.5",
             ),
             patch(
@@ -442,7 +432,7 @@ class TestBumpVersion:
                 side_effect=SystemExit(1),
             ),
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="0.2.5",
             ),
             patch(
@@ -562,7 +552,7 @@ class TestBumpVersion:
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
             ),
             patch(
@@ -649,7 +639,7 @@ class TestBumpVersion:
             patch("common_python_tasks.utils.prepend_changelog"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="0.0.1",
             ),
             patch(
@@ -711,7 +701,7 @@ class TestBumpVersion:
             patch("common_python_tasks.utils.prepend_changelog"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="0.0.1",
             ),
             patch(
@@ -756,7 +746,7 @@ class TestBumpVersion:
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.utils.LOGGER"),
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="0.0.1",
             ),
             patch(
@@ -800,7 +790,7 @@ class TestBumpVersion:
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
             ),
             patch(
@@ -900,7 +890,7 @@ class TestBumpVersion:
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
             ),
             patch(
@@ -972,7 +962,7 @@ class TestBumpVersion:
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
             ),
             patch(
@@ -1020,7 +1010,7 @@ class TestBumpVersion:
             patch("common_python_tasks.tasks.build_package") as mock_build_package,
             patch("common_python_tasks.tasks.publish_package") as mock_publish,
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
             ),
             patch(
@@ -1070,7 +1060,7 @@ class TestBumpVersion:
             patch("common_python_tasks.tasks.build_package"),
             patch("common_python_tasks.tasks.publish_package"),
             patch(
-                "common_python_tasks.project.get_project_version_from_poetry",
+                "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
             ),
             patch(
@@ -1528,6 +1518,68 @@ def test_build_without_containers_skips_task_build_image():
 
     mock_build_package.assert_called_once_with()
     mock_build_image.assert_not_called()
+
+
+def test_build_package_uses_selected_backend_command():
+    from common_python_tasks.tasks import build_package
+
+    with (
+        patch(
+            "common_python_tasks.project.get_package_manager_build_command",
+            return_value=["uv", "build", "--wheel"],
+        ) as mock_build_command,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        build_package(wheel_only=True)
+
+    mock_build_command.assert_called_once_with(wheel_only=True)
+    mock_run_command.assert_called_once_with(["uv", "build", "--wheel"])
+
+
+def test_publish_package_uses_selected_backend_command():
+    from common_python_tasks.tasks import publish_package
+
+    with (
+        patch("common_python_tasks.tasks.build_package") as mock_build_package,
+        patch(
+            "common_python_tasks.project.get_package_manager_publish_command",
+            return_value=["uv", "publish"],
+        ) as mock_publish_command,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        publish_package(build_first=True)
+
+    mock_build_package.assert_called_once_with(clean_dist=True)
+    mock_publish_command.assert_called_once_with()
+    mock_run_command.assert_called_once_with(["uv", "publish"])
+
+
+def test_publish_github_release_uses_project_release_tag_when_not_provided():
+    from common_python_tasks.tasks import publish_github_release
+
+    with (
+        patch(
+            "common_python_tasks.project.get_release_tag_from_project_version",
+            return_value="v3.2.1",
+        ),
+        patch(
+            "common_python_tasks.github.get_github_release_asset_paths", return_value=[]
+        ),
+        patch(
+            "common_python_tasks.github.publish_github_release",
+            return_value={"id": 1, "tag_name": "v3.2.1"},
+        ) as mock_publish,
+    ):
+        publish_github_release()
+
+    mock_publish.assert_called_once_with(
+        "v3.2.1",
+        release_name="v3.2.1",
+        body=None,
+        prerelease=False,
+        draft=False,
+        assets=[],
+    )
 
 
 def test_fastapi_stack_up_passes_container_build_options(

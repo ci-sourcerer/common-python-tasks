@@ -585,3 +585,27 @@ def changelog() -> str | None:
         result,
         count=1,
     ).strip()
+
+
+def confirm(message: str) -> bool:
+    """Prompt the user for a yes/no confirmation.
+
+    Args:
+        message: The confirmation message to display.
+
+    Returns:
+        `True` if the user confirms with 'y' or 'yes', `False` for 'n', 'no', or empty
+        input. The prompt will repeat until a valid response is received.
+    """
+    yes_values = {"y", "yes"}
+    no_values = {"n", "no"}
+    while True:
+        try:
+            response = input(f"{message} [y/N]: ").strip().lower()
+        except (EOFError, OSError):
+            return False
+
+        if response in yes_values:
+            return True
+        if response in no_values:
+            return False

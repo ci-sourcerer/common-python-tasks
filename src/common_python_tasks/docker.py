@@ -93,7 +93,6 @@ def _safe_unlink(path: Path | str | None) -> None:
 
 
 def _build_docker_build_command(
-    *,
     context_path: Path,
     dockerfile_path: Path,
     build_args: dict[str, str],
@@ -331,12 +330,12 @@ def build_deps_image(
 
     full_tag = f"{deps_image_name}:{deps_tag}"
     build_cmd = _build_docker_build_command(
-        context_path=context_path,
-        dockerfile_path=dockerfile_path,
-        build_args=build_args,
-        archs=archs,
-        no_cache=no_cache,
-        plain=plain,
+        context_path,
+        dockerfile_path,
+        build_args,
+        archs,
+        no_cache,
+        plain,
         tags=[full_tag],
     )
 
@@ -451,24 +450,37 @@ def build_image(
             commit_tag = version_tag
 
         python_version = platform.python_version()
-        poetry_version = project.get_poetry_version()
+        package_manager = project.get_package_manager()
+        package_manager_version = project.get_package_manager_version(package_manager)
 
-        build_args = _merge_build_args(
-            {
-                "PYTHON_VERSION": python_version,
-                "POETRY_VERSION": poetry_version,
+        manager_build_args: dict[str, str | None]
+        if package_manager == project.PackageManager.POETRY:
+            manager_build_args = {
+                "POETRY_VERSION": package_manager_version,
                 "POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION": project.get_installed_requirement_version(
                     "poetry-dynamic-versioning[plugin]"
                 ),
                 "POETRY_PLUGIN_EXPORT_VERSION": project.get_installed_requirement_version(
                     "poetry-plugin-export"
                 ),
+            }
+        else:
+            manager_build_args = {
+                "UV_VERSION": package_manager_version,
+            }
+
+        build_args = _merge_build_args(
+            {
+                "PYTHON_VERSION": python_version,
+                "PACKAGE_MANAGER": package_manager,
+                "PACKAGE_MANAGER_VERSION": package_manager_version,
                 "PACKAGE_VERSION": package_version,
                 "PACKAGE_NAME": utils.get_package_name(use_underscores=True),
                 "AUTHORS": ",".join(
                     [f"{name} <{email}>" for name, email in project.get_authors()]
                 ),
                 "GIT_COMMIT": commit_tag,
+                **manager_build_args,
             },
             extra_build_args,
         )
@@ -503,12 +515,12 @@ def build_image(
                 all_tags.append(resolved_tag)
 
         build_cmd = _build_docker_build_command(
-            context_path=context_path,
-            dockerfile_path=dockerfile_path,
-            build_args=build_args,
-            archs=archs,
-            no_cache=no_cache,
-            plain=plain,
+            context_path,
+            dockerfile_path,
+            build_args,
+            archs,
+            no_cache,
+            plain,
             target=None if omit_target else target,
             tags=all_tags,
         )

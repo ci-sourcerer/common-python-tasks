@@ -96,7 +96,7 @@ def compute_next_release_version(
     Returns:
         A `NextReleaseVersion` with the serialized new version and normalized component.
     """
-    current_version_text = project.get_project_version_from_poetry()
+    current_version_text = project.get_project_version()
     release_component = (
         infer_bump_component_from_git_cliff() if component is None else component
     )
@@ -181,14 +181,11 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     except Exception:
         utils.fatal(f"Unable to parse bumped version from git-cliff: {version_text!r}")
 
-    current_version = project.get_project_version_from_poetry()
+    current_version = project.get_project_version()
     try:
         current = Version.parse(current_version)
     except Exception:
-        utils.fatal(
-            "Unable to parse current version from Poetry output: "
-            f"{current_version!r}"
-        )
+        utils.fatal("Unable to parse current project version: " f"{current_version!r}")
 
     def _parse_semver(version_value: str | Any) -> tuple[int, int, int]:
         if not isinstance(version_value, str):

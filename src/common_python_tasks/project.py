@@ -1,7 +1,10 @@
 import ast
 import logging
+import os
 import re
+import shutil
 import tomllib
+from enum import StrEnum, auto
 from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
@@ -13,6 +16,170 @@ from packaging.version import Version
 from . import utils
 
 LOGGER = logging.getLogger(__name__)
+
+PACKAGE_MANAGER_ENV_VAR = "COMMON_PYTHON_TASKS_PACKAGE_MANAGER"
+
+
+class PackageManager(StrEnum):
+    """Supported package-manager backends for build and publish workflows."""
+
+    POETRY = auto()
+    UV = auto()
+    AUTO = auto()
+
+
+def _parse_tool_version_output(output: str, tool_name: str) -> str:
+    cleaned_output = output.strip()
+    if not cleaned_output:
+        utils.fatal(f"Unable to determine {tool_name} version from empty output")
+
+    match = re.search(r"(\d+\.\d+\.\d+(?:[-+._a-zA-Z0-9]*)?)", cleaned_output)
+    if match is not None:
+        return match.group(1)
+
+    tokens = cleaned_output.replace("(", " ").replace(")", " ").split()
+    if tokens:
+        return tokens[-1]
+
+    utils.fatal(f"Unable to parse {tool_name} version output: {output!r}")
+
+
+def _find_package_manager_override() -> tuple[str, str] | None:
+    value = os.getenv(PACKAGE_MANAGER_ENV_VAR)
+    if value is not None and value.strip():
+        return PACKAGE_MANAGER_ENV_VAR, value.strip().lower()
+    return None
+
+
+def _ensure_package_manager_available(package_manager: PackageManager) -> None:
+    if shutil.which(package_manager) is None:
+        utils.fatal(
+            f"Requested package manager '{package_manager}' is not installed or not in PATH"
+        )
+
+
+def _detect_declared_package_manager(
+    pyproject_data: dict[str, Any],
+) -> PackageManager | None:
+    build_backend = (
+        pyproject_data.get("build-system", {}).get("build-backend", "") or ""
+    )
+    if isinstance(build_backend, str) and "poetry" in build_backend.lower():
+        return PackageManager.POETRY
+
+    if pyproject_data.get("tool", {}).get("poetry") is not None:
+        return PackageManager.POETRY
+
+    if pyproject_data.get("tool", {}).get("uv") is not None:
+        return PackageManager.UV
+
+    return None
+
+
+def _resolve_package_manager_auto() -> tuple[PackageManager, str]:
+    has_poetry = shutil.which("poetry") is not None
+    has_uv = shutil.which("uv") is not None
+
+    if has_uv and not has_poetry:
+        return PackageManager.UV, "uv found and poetry missing"
+
+    if has_poetry and not has_uv:
+        return PackageManager.POETRY, "poetry found and uv missing"
+
+    if not has_poetry and not has_uv:
+        utils.fatal(
+            "No supported package manager found in PATH. Install poetry or uv, "
+            "or set one via COMMON_PYTHON_TASKS_PACKAGE_MANAGER."
+        )
+
+    pyproject_data = read_pyproject_toml()
+    declared_manager = _detect_declared_package_manager(pyproject_data)
+    if declared_manager is not None:
+        return declared_manager, "project metadata"
+
+    return PackageManager.POETRY, "default fallback"
+
+
+@lru_cache
+def get_package_manager() -> PackageManager:
+    """Resolve the package manager backend used for build and publish commands.
+
+    Resolution order:
+    1. Environment override via `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`.
+    2. Auto-discovery from installed executables and project metadata.
+
+    Supported values are `poetry`, `uv`, and `auto`.
+
+    Returns:
+        The selected package manager backend.
+    """
+    override = _find_package_manager_override()
+    if override is None:
+        package_manager, reason = _resolve_package_manager_auto()
+        LOGGER.info(
+            "Using package manager backend: %s (%s)",
+            package_manager,
+            reason,
+        )
+        return package_manager
+
+    env_var, raw_value = override
+    if raw_value not in PackageManager:
+        utils.fatal(
+            f"Invalid {env_var} value {raw_value!r}. " "Use one of: poetry, uv, auto."
+        )
+
+    if raw_value == PackageManager.AUTO:
+        package_manager, reason = _resolve_package_manager_auto()
+        LOGGER.info(
+            "Using package manager backend: %s (%s via %s=%s)",
+            package_manager,
+            reason,
+            env_var,
+            raw_value,
+        )
+        return package_manager
+
+    package_manager = PackageManager(raw_value)
+    _ensure_package_manager_available(package_manager)
+    LOGGER.info(
+        "Using package manager backend: %s (from %s)",
+        package_manager,
+        env_var,
+    )
+    return package_manager
+
+
+def get_package_manager_build_command(wheel_only: bool = False) -> list[str]:
+    """Return the build command for the selected package manager.
+
+    Args:
+        wheel_only: Whether to build only a wheel artifact.
+
+    Returns:
+        Command tokens for the package build command.
+    """
+    package_manager = PackageManager(get_package_manager())
+    if package_manager == PackageManager.UV:
+        command = ["uv", "build"]
+        if wheel_only:
+            command.append("--wheel")
+        return command
+
+    command = ["poetry", "build"]
+    if wheel_only:
+        command += ["--format", "wheel"]
+    return command
+
+
+def get_package_manager_publish_command() -> list[str]:
+    """Return the publish command for the selected package manager.
+
+    Returns:
+        Command tokens for the package publish command.
+    """
+    package_manager = PackageManager(get_package_manager())
+    return [package_manager.value, "publish"]
 
 
 @lru_cache
@@ -77,11 +244,31 @@ def get_poetry_version() -> str:
     Returns:
         The Poetry version parsed from the output of `poetry --version`.
     """
-    return (
-        utils.run_command(["poetry", "--version"], capture_output=True)
-        .stdout.strip()
-        .split()[-1]
-    )[0:-1]
+    return _parse_tool_version_output(
+        utils.run_command(["poetry", "--version"], capture_output=True).stdout,
+        tool_name="poetry",
+    )
+
+
+def get_package_manager_version(package_manager: PackageManager | None = None) -> str:
+    """Return the version string for the selected package manager.
+
+    Args:
+        package_manager: Optional explicit package manager backend.
+
+    Returns:
+        Parsed package-manager version.
+    """
+    selected_manager = PackageManager(package_manager or get_package_manager())
+    if selected_manager == PackageManager.POETRY:
+        return get_poetry_version()
+
+    return _parse_tool_version_output(
+        utils.run_command(
+            [selected_manager.value, "--version"], capture_output=True
+        ).stdout,
+        tool_name=selected_manager.value,
+    )
 
 
 @lru_cache
@@ -94,8 +281,8 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
 
     It normalizes extras like `package[extra]` and tries common name variants
     with hyphens and underscores. If the package is not available to
-    importlib.metadata, it falls back to `poetry show` and then
-    `poetry self show`.
+    importlib.metadata, it falls back to package-manager runtime and package
+    listing commands.
 
     Args:
         requirement_name: The requirement name to lookup.
@@ -103,8 +290,6 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
     Returns:
         The installed version string, or `None` if the package cannot be resolved.
     """
-    package_name = requirement_name.split("[", 1)[0]
-
     package_name = requirement_name.split("[", 1)[0]
     candidates = {
         package_name,
@@ -118,10 +303,12 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
         except metadata.PackageNotFoundError:
             pass
 
-    def _query_poetry_runtime_version(candidate: str) -> str | None:
+    package_manager = PackageManager(get_package_manager())
+
+    def _query_runtime_version(candidate: str) -> str | None:
         result = utils.run_command(
             [
-                "poetry",
+                package_manager,
                 "run",
                 "python",
                 "-c",
@@ -139,35 +326,39 @@ def get_installed_requirement_version(requirement_name: str) -> str | None:
                 return version
         return None
 
-    version = get_local_poetry_plugin_version(package_name)
-    if version:
-        return version
-
-    for candidate in candidates:
-        version = _query_poetry_runtime_version(candidate)
+    if package_manager == PackageManager.POETRY:
+        version = get_local_poetry_plugin_version(package_name)
         if version:
             return version
 
-    def _parse_poetry_show_version(output: str) -> str | None:
+    for candidate in candidates:
+        version = _query_runtime_version(candidate)
+        if version:
+            return version
+
+    def _parse_package_show_version(output: str) -> str | None:
         for line in output.splitlines():
             if ":" not in line:
                 continue
             key, value = line.split(":", 1)
-            if key.strip() == "version":
+            if key.strip().lower() == "version":
                 return value.strip()
         return None
 
-    for cmd in (
-        ["poetry", "show", package_name],
-        ["poetry", "self", "show", package_name],
-    ):
+    show_commands = (
+        (["poetry", "show", package_name], ["poetry", "self", "show", package_name])
+        if package_manager == PackageManager.POETRY
+        else (["uv", "pip", "show", package_name],)
+    )
+
+    for cmd in show_commands:
         result = utils.run_command(
-            cmd,
+            list(cmd),
             capture_output=True,
             acceptable_returncodes={0, 1},
         )
         if result.returncode == 0:
-            version = _parse_poetry_show_version(result.stdout)
+            version = _parse_package_show_version(result.stdout)
             if version:
                 return version
     return None
@@ -244,7 +435,7 @@ def resolve_container_entrypoint_command(custom_entrypoint: str | None = None) -
 
 
 def _extract_tags_from_script_argument(
-    script_value: str, *, script_key: str, argument_key: str
+    script_value: str, script_key: str, argument_key: str
 ) -> set[str] | None:
     pattern = re.compile(rf"{re.escape(argument_key)}\s*=\s*(\[[^\]]*\])")
     match = pattern.search(script_value)
@@ -358,10 +549,80 @@ def get_project_version_from_poetry() -> str:
     return parts[1].strip()
 
 
+def _get_project_version_from_pyproject() -> str | None:
+    """Return `project.version` from pyproject metadata when present.
+
+    Returns:
+        The configured `project.version`, or `None` if missing.
+    """
+    version = read_pyproject_toml().get("project", {}).get("version")
+    if isinstance(version, str) and version.strip():
+        return version.strip()
+    return None
+
+
+def get_project_version_from_vcs() -> str | None:
+    """Return a PEP 440 version derived from VCS tags.
+
+    Returns:
+        A version string when git metadata is available; otherwise `None`.
+    """
+    try:
+        from dunamai import Style, Version
+
+        return Version.from_git().serialize(style=Style.Pep440, dirty=False)
+    except Exception:
+        return None
+
+
+def get_project_version() -> str:
+    """Return the current project version for release and tagging workflows.
+
+    For Poetry projects, this uses `poetry version` to preserve
+    poetry-dynamic-versioning behavior. For uv workflows, it prefers
+    `project.version` and falls back to VCS-derived versioning.
+
+    Returns:
+        The resolved current project version.
+    """
+    package_manager = PackageManager(get_package_manager())
+    if package_manager == PackageManager.POETRY:
+        return get_project_version_from_poetry()
+
+    pyproject_version = _get_project_version_from_pyproject()
+    if pyproject_version and pyproject_version not in {"0.0.0", "0.0.0.dev0"}:
+        return pyproject_version
+
+    vcs_version = get_project_version_from_vcs()
+    if vcs_version is not None:
+        return vcs_version
+
+    if pyproject_version:
+        LOGGER.warning(
+            "Using placeholder project.version=%s because VCS version could not be resolved",
+            pyproject_version,
+        )
+        return pyproject_version
+
+    utils.fatal("Unable to determine project version from pyproject metadata or VCS")
+
+
+def get_release_tag_from_project_version() -> str:
+    """Return release tag string in `v<version>` form.
+
+    Returns:
+        Release tag prefixed with `v`.
+    """
+    return f"v{get_project_version()}"
+
+
 def get_release_tag_from_poetry_version() -> str:
-    """Return release tag string in `v<version>` form from Poetry metadata.
+    """Return release tag string in `v<version>` form.
+
+    This function is retained for backward compatibility and now uses the
+    selected package-manager backend.
 
     Returns:
         The release tag string prefixed with `v`.
     """
-    return f"v{get_project_version_from_poetry()}"
+    return get_release_tag_from_project_version()

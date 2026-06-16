@@ -26,6 +26,7 @@ def _set_test_environment_variables():
         "RELEASE_POST_SCRIPT",
         "RELEASE_SCRIPT_PHASE=post python scripts/release_script.py",
     )
+    os.environ.setdefault("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "poetry")
 
 
 @pytest.fixture
@@ -50,6 +51,8 @@ def mock_run_command():
                 result.stdout = "abc1234"
             elif "poetry" in command and "--version" in command:
                 result.stdout = "Poetry (version 1.8.0)"
+            elif command[:2] == ["uv", "--version"]:
+                result.stdout = "uv 0.8.0"
             elif "docker" in command:
                 result.stdout = ""
             else:
