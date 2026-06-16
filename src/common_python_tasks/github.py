@@ -40,7 +40,7 @@ def should_publish_github_release() -> bool:
     """Return whether GitHub Releases publication is enabled.
 
     Returns:
-        True if GitHub Release publishing is enabled, False if it is skipped.
+        `True` if GitHub Release publishing is enabled, `False` if it is skipped.
     """
     return not env_truthy("SKIP_GITHUB_RELEASE")
 
