@@ -1,3 +1,4 @@
+from functools import lru_cache
 import json
 import logging
 import mimetypes
@@ -43,7 +44,7 @@ def should_publish_github_release() -> bool:
     """
     return not env_truthy("SKIP_GITHUB_RELEASE")
 
-
+@lru_cache(maxsize=1)
 def get_github_repository() -> str | None:
     """Return the GitHub repository slug for the current project if available.
 
@@ -81,6 +82,7 @@ def get_github_repository() -> str | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def get_github_token() -> str | None:
     """Return the GitHub token used for API requests. Check the following in order:
     1. `GITHUB_TOKEN` environment variable
@@ -125,6 +127,7 @@ def get_github_token() -> str | None:
     return token
 
 
+@lru_cache(maxsize=1)
 def get_github_api_base_url() -> str:
     """Return the GitHub API base URL.
 
@@ -143,7 +146,7 @@ def get_github_api_base_url() -> str:
         return "https://api.github.com"
     return f"{server_url}/api/v3"
 
-
+@lru_cache(maxsize=1)
 def get_github_upload_api_base_url(api_base_url: str | None = None) -> str:
     """Return the GitHub upload API base URL.
 
