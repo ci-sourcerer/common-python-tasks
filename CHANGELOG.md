@@ -1,3 +1,13 @@
+## [0.4.1] - 2026-06-16
+
+### 🚀 Features
+
+- `uv` support
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.4.1
+
 ## [0.4.0] - 2026-06-15
 
 ### 🚀 Features
