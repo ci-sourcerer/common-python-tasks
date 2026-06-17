@@ -884,7 +884,7 @@ def run_container(
                 f"No local images found for {package_name}. Build the image first or specify a tag."
             )
 
-    LOGGER.info("Running container %s", selected_image)
+    LOGGER.debug("Running container %s", selected_image)
     run_args = ["docker", "run", "--rm", "-i", "-t"]
     if privileged:
         run_args.append("--privileged")
