@@ -74,7 +74,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `lint` | Lint Python code with autoflake, black, isort, and flake8. | common, lint |
 | `build-image` | Build the container image for this project using the Dockerfile template. | build, containers |
 | `build-deps-image` | Build only the container dependency collector image for this project. | build, containers |
-| `run-container` | Run the Docker image as a container for this project.  By default (when `tag` is `None`) this will run the most-recently-built tag for the project's image. | containers |
+| `run-container` | Run the Docker image as a container for this project. By default (when `tag` is `None`) this will run the most-recently-built tag for the project's image. | containers |
 | `push-image` | Push the Docker image for this project to the container registry. | containers, packaging, release |
 | `publish-package` | Publish the package to the PyPI server. | common, packaging |
 | `publish-github-release` | Publish or update a GitHub Release for the current repository. | common, packaging, release |
@@ -219,7 +219,7 @@ The following environment variables configure package and container behavior.
 - `CONTAINER_ENV`: Provides colon delimited `KEY=VALUE` declarations to inject into the builder stage of the rendered Dockerfile
 - `.containerenv`: Can also supply the same declarations from a file in the project root. It is loaded first, then `container_envfile`, then `CONTAINER_ENV`, and finally `container_env`.
 - `CONTAINER_PRUNE_KEEP`: Controls image pruning after builds (`-1` keeps all, `0` keeps the latest only, `N` keeps the latest plus `N` previous)
-- `CUSTOM_ENTRYPOINT`: Specifies a custom entrypoint script name for containers
+- `CUSTOM_ENTRYPOINT`: Specifies a custom entrypoint script name for containers. The value must match a key in `[project].scripts`; unknown values fail the build
 - `CONTAINER_DEPS_CONTENT`: Supplies inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`
 - `CONTAINER_DEPS_FILE`: Points to one or more explicit Dockerfiles to build the dependency image. It may be a colon delimited list of file paths and is used only when `CONTAINER_DEPS_CONTENT` is unset
 - `CONTAINER_DEPS_MAPPINGS`: Maps copied dependency names from `/tmp/deps` into destination paths as space separated `name:/target/path` entries. This is used only when `CONTAINER_DEPS_MOVE_SCRIPT` or `CONTAINER_DEPS_MOVE_SCRIPT_PATH` is not set
@@ -389,7 +389,7 @@ The standard Python Dockerfile incorporates several intentional design choices.
 - Explicit inputs through build args: `PYTHON_VERSION`, `PACKAGE_MANAGER`, `PACKAGE_MANAGER_VERSION`, `PACKAGE_NAME`, `AUTHORS`, `GIT_COMMIT`, and `CUSTOM_ENTRYPOINT` make image metadata and behavior predictable and auditable
 - Optional debug stage: Exports and installs the `debug` dependency group only when present, without failing otherwise, and is not part of the default final image
 - Stable package path: Creates symlinks to the installed package so entrypoints and consumers have a consistent `/pkg` and `/_$PACKAGE_NAME` path regardless of wheel layout. This ensures that the package can be imported and executed from a known location and supports the less common case of reading files directly from the package path
-- Safe entrypoint selection: The default entrypoint resolves the console script matching the package name, while `CUSTOM_ENTRYPOINT` allows an override at build time and keeps runtime behavior predictable
+- Safe entrypoint selection: The default entrypoint resolves the console script matching the package name and falls back to `python` when no matching script exists. `CUSTOM_ENTRYPOINT` allows an override at build time, and the override is validated strictly against `[project].scripts`
 - Minimal final image: Uses the slim Python base by default, cleans wheel artifacts and caches, and sets `runtime` as the explicit final target so the debug stage remains optional
 
 ## Notes

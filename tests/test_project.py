@@ -287,9 +287,53 @@ def test_get_authors_reads_pyproject():
 def test_resolve_container_entrypoint_command_uses_custom_when_provided():
     from common_python_tasks.project import resolve_container_entrypoint_command
 
-    result = resolve_container_entrypoint_command(custom_entrypoint="  my-script  ")
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        mock_toml.return_value = {"project": {"scripts": {"my-script": "pkg.cli:main"}}}
+
+        result = resolve_container_entrypoint_command(entrypoint_script="  my-script  ")
 
     assert result == "my-script"
+
+
+def test_resolve_container_entrypoint_command_custom_unknown_script_fails():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    with (
+        patch("common_python_tasks.project.read_pyproject_toml") as mock_toml,
+        patch(
+            "common_python_tasks.utils.fatal", side_effect=SystemExit(1)
+        ) as mock_fatal,
+    ):
+        mock_toml.return_value = {
+            "project": {
+                "scripts": {"my-api": "pkg.api:main", "my-worker": "pkg.worker:main"}
+            }
+        }
+
+        with pytest.raises(SystemExit):
+            resolve_container_entrypoint_command(entrypoint_script="unknown-script")
+
+    assert mock_fatal.call_count == 1
+    assert "Available scripts: my-api, my-worker" in mock_fatal.call_args.args[0]
+
+
+def test_resolve_container_entrypoint_command_custom_unknown_script_fails_without_scripts():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    with (
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={"project": {}},
+        ),
+        patch(
+            "common_python_tasks.utils.fatal", side_effect=SystemExit(1)
+        ) as mock_fatal,
+    ):
+        with pytest.raises(SystemExit):
+            resolve_container_entrypoint_command(entrypoint_script="unknown-script")
+
+    assert mock_fatal.call_count == 1
+    assert "No [project].scripts entries were found" in mock_fatal.call_args.args[0]
 
 
 def test_resolve_container_entrypoint_command_uses_package_script_when_available():
@@ -316,6 +360,26 @@ def test_resolve_container_entrypoint_command_defaults_to_python():
             result = resolve_container_entrypoint_command()
 
             assert result == "python"
+
+
+def test_resolve_container_entrypoint_command_prefers_package_script_with_multiple_scripts():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
+        with patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"):
+            mock_toml.return_value = {
+                "project": {
+                    "scripts": {
+                        "my-worker": "pkg.worker:main",
+                        "my_pkg": "pkg.api:main",
+                        "my-admin": "pkg.admin:main",
+                    }
+                }
+            }
+
+            result = resolve_container_entrypoint_command()
+
+            assert result == "my_pkg"
 
 
 def test_get_project_version_from_poetry_parses_output():
