@@ -221,7 +221,7 @@ def parse_container_build_args(
     env_build_args: str | None,
 ) -> dict[str, str] | None:
     """Parse container build args from CLI or environment input."""
-    if cli_build_args is not None:
+    if cli_build_args and any(token.strip() for token in cli_build_args):
         build_arg_tokens = [
             token.strip() for token in cli_build_args if token and token.strip()
         ]
