@@ -20,7 +20,7 @@ To install a specific release, set the environment variable `COMMON_PYTHON_TASKS
 curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add_common_python_tasks.py \
   | jq -r '.content' \
   | base64 -d \
-  | COMMON_PYTHON_TASKS_VERSION=0.5.0 python3
+  | COMMON_PYTHON_TASKS_VERSION=0.5.1 python3
 ```
 
 This will complete the following steps.
@@ -40,7 +40,7 @@ There's no real reason to run the automated script; I just like automating every
     ```toml
     [project]
     dependencies = [
-        "common-python-tasks==0.5.0"  # Always pin to a specific version
+        "common-python-tasks==0.5.1"  # Always pin to a specific version
     ]
 
     [tool.poe]
@@ -274,8 +274,8 @@ By default, `tasks()` exposes the common task set. You can still include or excl
 ```toml
 [project]
 name = "simple-cli-tool"
-version = "0.5.0"
-dependencies = ["common-python-tasks==0.5.0"]
+version = "0.5.1"
+dependencies = ["common-python-tasks==0.5.1"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"
@@ -287,7 +287,7 @@ Available tasks: common defaults such as `format`, `lint`, `test`, and `build`.
 
 ```toml
 [project]
-dependencies = ["common-python-tasks==0.5.0"]
+dependencies = ["common-python-tasks==0.5.1"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
@@ -303,7 +303,7 @@ Available tasks: All tasks including `build-image` and `push-image`.
 
 ```toml
 [project]
-dependencies = ["common-python-tasks==0.5.0"]
+dependencies = ["common-python-tasks==0.5.1"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"
