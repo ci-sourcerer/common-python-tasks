@@ -1,3 +1,13 @@
+## [0.5.1] - 2026-07-07
+
+### 🐛 Bug Fixes
+
+- GH Releases empty asset list
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.5.1
+
 ## [0.5.0] - 2026-07-07
 
 ### 🚀 Features
