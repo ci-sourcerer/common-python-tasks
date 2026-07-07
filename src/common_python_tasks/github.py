@@ -475,7 +475,8 @@ def get_github_release_asset_paths(
         asset_sources: Optional list of paths or glob patterns. When a string is
             provided (including via `GITHUB_RELEASE_ASSETS`), values are
             interpreted as colon-separated paths or glob patterns.
-            If not provided, the default value is `dist/*`.
+            If not provided, the default value is `dist/*`. An empty list
+            explicitly disables asset selection.
 
     Returns:
         A sorted list of existing asset paths.
@@ -513,7 +514,7 @@ def get_github_release_asset_paths(
         elif path.exists():
             LOGGER.warning("Ignoring non-file GitHub release asset path: %s", path)
 
-    if not asset_paths and explicit_assets:
+    if not asset_paths and explicit_assets and source_items:
         utils.fatal(
             "No GitHub Release assets were found for the configured asset paths: "
             + ":".join(source_items)

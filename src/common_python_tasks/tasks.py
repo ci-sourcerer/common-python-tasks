@@ -1000,7 +1000,8 @@ def publish_github_release(
         release_name or os.getenv("GITHUB_RELEASE_NAME") or resolved_tag_name
     )
     resolved_body = body or os.getenv("GITHUB_RELEASE_BODY")
-    asset_paths = get_github_release_asset_paths(assets)
+    # Poe supplies `[]` when an optional repeated CLI argument is omitted.
+    asset_paths = get_github_release_asset_paths(assets or None)
 
     return publish_github_release_helper(
         resolved_tag_name,

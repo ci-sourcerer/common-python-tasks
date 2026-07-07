@@ -1591,7 +1591,7 @@ def test_publish_github_release_uses_project_release_tag_when_not_provided():
         ),
         patch(
             "common_python_tasks.github.get_github_release_asset_paths", return_value=[]
-        ),
+        ) as mock_get_assets,
         patch(
             "common_python_tasks.github.publish_github_release",
             return_value={"id": 1, "tag_name": "v3.2.1"},
@@ -1607,6 +1607,7 @@ def test_publish_github_release_uses_project_release_tag_when_not_provided():
         draft=False,
         assets=[],
     )
+    mock_get_assets.assert_called_once_with(None)
 
 
 def test_fastapi_stack_up_passes_container_build_options(

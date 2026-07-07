@@ -171,3 +171,19 @@ def test_get_github_release_asset_paths_supports_quoted_colon_delimited_env(
     result = get_github_release_asset_paths()
 
     assert result == [Path("dist one.txt"), Path("other.txt")]
+
+
+def test_get_github_release_asset_paths_returns_no_assets_for_empty_asset_list(
+    monkeypatch,
+    tmp_path,
+):
+    asset = tmp_path / "dist" / "package.whl"
+    asset.parent.mkdir()
+    asset.write_text("wheel", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("GITHUB_RELEASE_ASSETS", raising=False)
+
+    result = get_github_release_asset_paths([])
+
+    assert result == []
