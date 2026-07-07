@@ -413,22 +413,57 @@ def has_debug_dependency_group() -> bool:
     return bool(debug_group)
 
 
-def resolve_container_entrypoint_command(custom_entrypoint: str | None = None) -> str:
+def _get_project_scripts() -> dict[str, str]:
+    scripts = read_pyproject_toml().get("project", {}).get("scripts")
+    if not isinstance(scripts, dict):
+        return {}
+
+    normalized_scripts = {
+        str(script_name).strip(): str(script_target)
+        for script_name, script_target in scripts.items()
+        if str(script_name).strip()
+    }
+    return normalized_scripts
+
+
+def _get_available_container_entrypoint_scripts() -> tuple[str, ...]:
+    return tuple(sorted(_get_project_scripts().keys()))
+
+
+def resolve_container_entrypoint_command(entrypoint_script: str | None = None) -> str:
     """Resolve the command used in the generated container entrypoint script.
 
     Args:
-        custom_entrypoint: Optional explicit command override.
+        entrypoint_script: Optional explicit entrypoint script override.
 
     Returns:
         A command name to place in `/pkg/entrypoint.sh`.
     """
 
-    if custom_entrypoint is not None and custom_entrypoint.strip():
-        return custom_entrypoint.strip()
+    available_scripts = _get_available_container_entrypoint_scripts()
+    scripts_set = set(available_scripts)
+
+    if entrypoint_script is not None and entrypoint_script.strip():
+        selected_entrypoint = entrypoint_script.strip()
+        if selected_entrypoint in scripts_set:
+            return selected_entrypoint
+
+        if available_scripts:
+            utils.fatal(
+                "Invalid CUSTOM_ENTRYPOINT value "
+                f"{selected_entrypoint!r}. "
+                "It must match a key in [project].scripts. "
+                f"Available scripts: {', '.join(available_scripts)}"
+            )
+
+        utils.fatal(
+            "Invalid CUSTOM_ENTRYPOINT value "
+            f"{selected_entrypoint!r}. "
+            "No [project].scripts entries were found in pyproject.toml."
+        )
 
     script_name = utils.get_package_name(use_underscores=True)
-    scripts = read_pyproject_toml().get("project", {}).get("scripts")
-    if isinstance(scripts, dict) and script_name in scripts:
+    if script_name in scripts_set:
         return script_name
 
     return "python"

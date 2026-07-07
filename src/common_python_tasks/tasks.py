@@ -582,7 +582,7 @@ def build_image(
 
     apt_packages = (parsed_build_args or {}).get("APT_PACKAGES", "").strip()
     entrypoint_command = resolve_container_entrypoint_command(
-        (parsed_build_args or {}).get("CUSTOM_ENTRYPOINT")
+        entrypoint_script=(parsed_build_args or {}).get("CUSTOM_ENTRYPOINT")
     )
     container_env_vars = load_container_env_tokens(
         container_env,
@@ -884,7 +884,7 @@ def run_container(
                 f"No local images found for {package_name}. Build the image first or specify a tag."
             )
 
-    LOGGER.info("Running container %s", selected_image)
+    LOGGER.debug("Running container %s", selected_image)
     run_args = ["docker", "run", "--rm", "-i", "-t"]
     if privileged:
         run_args.append("--privileged")
@@ -1410,6 +1410,7 @@ def fastapi_stack_up(
     from .env import (
         get_cache_id_suffix,
         load_container_env_tokens,
+        parse_container_build_args,
     )
     from .project import (
         get_package_manager,
@@ -1429,6 +1430,13 @@ def fastapi_stack_up(
         )
 
     container_env_vars = load_container_env_tokens(container_env, container_envfile)
+    parsed_build_args = parse_container_build_args(
+        build_args,
+        os.getenv("CONTAINER_BUILD_ARGS"),
+    )
+    entrypoint_command = resolve_container_entrypoint_command(
+        entrypoint_script=(parsed_build_args or {}).get("CUSTOM_ENTRYPOINT")
+    )
 
     cache_id_suffix = get_cache_id_suffix(no_cache)
 
@@ -1439,7 +1447,7 @@ def fastapi_stack_up(
             "EXTENSION_CONTENT": "",
             "HAS_DEBUG_DEPS": has_debug_deps,
             "APT_PACKAGES": "",
-            "ENTRYPOINT_COMMAND": resolve_container_entrypoint_command(),
+            "ENTRYPOINT_COMMAND": entrypoint_command,
             "CONTAINER_ENV_VARS": container_env_vars,
             "CACHE_ID_SUFFIX": cache_id_suffix,
         },
