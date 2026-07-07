@@ -1,10 +1,12 @@
 import subprocess
 from pathlib import Path
+from unittest.mock import Mock
 
 from common_python_tasks.github import (
     GitHubClient,
     get_github_api_base_url,
     get_github_release_asset_paths,
+    get_github_repository,
     get_github_token,
 )
 
@@ -15,6 +17,14 @@ def test_get_github_token_uses_environment_variable(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "env-token")
 
     assert get_github_token() == "env-token"
+
+
+def test_get_github_token_uses_updated_environment_variable(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "first-token")
+    assert get_github_token() == "first-token"
+
+    monkeypatch.setenv("GITHUB_TOKEN", "second-token")
+    assert get_github_token() == "second-token"
 
 
 def test_get_github_token_falls_back_to_gh_cli(monkeypatch):
@@ -31,6 +41,24 @@ def test_get_github_token_falls_back_to_gh_cli(monkeypatch):
     )
 
     assert get_github_token() == "cli-token"
+
+
+def test_get_github_token_caches_gh_cli_lookup(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    run_command = Mock(
+        return_value=subprocess.CompletedProcess(
+            args=["gh", "auth", "token"],
+            returncode=0,
+            stdout="cli-token\n",
+            stderr="",
+        )
+    )
+    monkeypatch.setattr("common_python_tasks.github.utils.run_command", run_command)
+
+    assert get_github_token() == "cli-token"
+    assert get_github_token() == "cli-token"
+    run_command.assert_called_once()
 
 
 def test_get_github_token_warns_when_gh_cli_is_missing(monkeypatch, caplog):
@@ -70,6 +98,32 @@ def test_get_github_api_base_url_uses_environment_variable(monkeypatch):
     monkeypatch.delenv("GITHUB_SERVER_URL", raising=False)
 
     assert get_github_api_base_url() == "https://example.com/api"
+
+
+def test_get_github_api_base_url_uses_updated_environment_variable(monkeypatch):
+    monkeypatch.setenv("GITHUB_API_URL", "https://first.example.com/api")
+    assert get_github_api_base_url() == "https://first.example.com/api"
+
+    monkeypatch.setenv("GITHUB_API_URL", "https://second.example.com/api")
+    assert get_github_api_base_url() == "https://second.example.com/api"
+
+
+def test_get_github_repository_caches_remote_lookup(monkeypatch, tmp_path):
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    run_command = Mock(
+        return_value=subprocess.CompletedProcess(
+            args=["git", "remote", "get-url", "origin"],
+            returncode=0,
+            stdout="https://github.com/owner/repo.git\n",
+            stderr="",
+        )
+    )
+    monkeypatch.setattr("common_python_tasks.github.utils.run_command", run_command)
+
+    assert get_github_repository() == "owner/repo"
+    assert get_github_repository() == "owner/repo"
+    run_command.assert_called_once()
 
 
 def test_get_github_api_base_url_defaults_to_github_com(monkeypatch):
