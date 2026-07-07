@@ -20,7 +20,7 @@ To install a specific release, set the environment variable `COMMON_PYTHON_TASKS
 curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add_common_python_tasks.py \
   | jq -r '.content' \
   | base64 -d \
-  | COMMON_PYTHON_TASKS_VERSION=0.4.1 python3
+  | COMMON_PYTHON_TASKS_VERSION=0.5.0 python3
 ```
 
 This will complete the following steps.
@@ -40,7 +40,7 @@ There's no real reason to run the automated script; I just like automating every
     ```toml
     [project]
     dependencies = [
-        "common-python-tasks==0.4.1"  # Always pin to a specific version
+        "common-python-tasks==0.5.0"  # Always pin to a specific version
     ]
 
     [tool.poe]
@@ -76,7 +76,7 @@ Internal tasks are used by other tasks and are not meant to be run directly.
 | `lint` | Lint Python code with autoflake, black, isort, and flake8. | common, lint |
 | `build-image` | Build the container image for this project using the Dockerfile template. | build, containers |
 | `build-deps-image` | Build only the container dependency collector image for this project. | build, containers |
-| `run-container` | Run the Docker image as a container for this project. By default (when `tag` is `None`) this will run the most-recently-built tag for the project's image. | containers |
+| `run-container` | Run the Docker image as a container for this project.  By default (when `tag` is `None`) this will run the most-recently-built tag for the project's image. | containers |
 | `push-image` | Push the Docker image for this project to the container registry. | containers, packaging, release |
 | `publish-package` | Publish the package to the PyPI server. | common, packaging |
 | `publish-github-release` | Publish or update a GitHub Release for the current repository. | common, packaging, release |
@@ -274,8 +274,8 @@ By default, `tasks()` exposes the common task set. You can still include or excl
 ```toml
 [project]
 name = "simple-cli-tool"
-version = "0.4.1"
-dependencies = ["common-python-tasks==0.4.1"]
+version = "0.5.0"
+dependencies = ["common-python-tasks==0.5.0"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"
@@ -287,7 +287,7 @@ Available tasks: common defaults such as `format`, `lint`, `test`, and `build`.
 
 ```toml
 [project]
-dependencies = ["common-python-tasks==0.4.1"]
+dependencies = ["common-python-tasks==0.5.0"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'])"
@@ -303,7 +303,7 @@ Available tasks: All tasks including `build-image` and `push-image`.
 
 ```toml
 [project]
-dependencies = ["common-python-tasks==0.4.1"]
+dependencies = ["common-python-tasks==0.5.0"]
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"
