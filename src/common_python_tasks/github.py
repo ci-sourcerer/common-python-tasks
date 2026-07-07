@@ -1,9 +1,10 @@
-from functools import lru_cache
 import json
 import logging
 import mimetypes
 import os
 import re
+from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -44,7 +45,7 @@ def should_publish_github_release() -> bool:
     """
     return not env_truthy("SKIP_GITHUB_RELEASE")
 
-@lru_cache(maxsize=1)
+
 def get_github_repository() -> str | None:
     """Return the GitHub repository slug for the current project if available.
 
@@ -52,13 +53,25 @@ def get_github_repository() -> str | None:
         The GitHub repository slug in the form `owner/repo`, or `None` if it
         cannot be determined.
     """
-    repository = os.getenv("GITHUB_REPOSITORY", "").strip()
+    return _get_github_repository(
+        os.getenv("GITHUB_REPOSITORY", "").strip(),
+        Path.cwd(),
+        utils.run_command,
+    )
+
+
+@lru_cache(maxsize=32)
+def _get_github_repository(
+    repository: str,
+    _working_directory: Path,
+    run_command: Callable[..., Any],
+) -> str | None:
     if repository:
         if re.fullmatch(r"[^/]+/[^/]+", repository):
             return repository
         LOGGER.warning("Ignoring invalid GITHUB_REPOSITORY value: %s", repository)
 
-    result = utils.run_command(
+    result = run_command(
         ["git", "remote", "get-url", "origin"],
         capture_output=True,
         acceptable_returncodes={0, 128},
@@ -82,7 +95,6 @@ def get_github_repository() -> str | None:
     return None
 
 
-@lru_cache(maxsize=1)
 def get_github_token() -> str | None:
     """Return the GitHub token used for API requests. Check the following in order:
     1. `GITHUB_TOKEN` environment variable
@@ -96,8 +108,13 @@ def get_github_token() -> str | None:
     if token:
         return token
 
+    return _get_github_cli_token(utils.run_command)
+
+
+@lru_cache(maxsize=8)
+def _get_github_cli_token(run_command: Callable[..., Any]) -> str | None:
     try:
-        result = utils.run_command(
+        result = run_command(
             ["gh", "auth", "token"],
             capture_output=True,
             acceptable_returncodes={0, 1},
@@ -127,7 +144,6 @@ def get_github_token() -> str | None:
     return token
 
 
-@lru_cache(maxsize=1)
 def get_github_api_base_url() -> str:
     """Return the GitHub API base URL.
 
@@ -135,18 +151,23 @@ def get_github_api_base_url() -> str:
         The base URL for GitHub API requests, defaulting to GitHub.com API or
         GitHub Enterprise API if configured.
     """
-    api_url = os.getenv("GITHUB_API_URL", "").strip()
+    return _get_github_api_base_url(
+        os.getenv("GITHUB_API_URL", "").strip(),
+        os.getenv("GITHUB_SERVER_URL", "https://github.com").strip(),
+    )
+
+
+@lru_cache(maxsize=32)
+def _get_github_api_base_url(api_url: str, server_url: str) -> str:
     if api_url:
         return api_url.rstrip("/")
 
-    server_url = (
-        os.getenv("GITHUB_SERVER_URL", "https://github.com").strip().rstrip("/")
-    )
+    server_url = server_url.rstrip("/")
     if server_url.endswith("github.com"):
         return "https://api.github.com"
     return f"{server_url}/api/v3"
 
-@lru_cache(maxsize=1)
+
 def get_github_upload_api_base_url(api_base_url: str | None = None) -> str:
     """Return the GitHub upload API base URL.
 
@@ -159,7 +180,11 @@ def get_github_upload_api_base_url(api_base_url: str | None = None) -> str:
     Returns:
         The upload base URL for GitHub API requests.
     """
-    api_base = api_base_url or get_github_api_base_url()
+    return _get_github_upload_api_base_url(api_base_url or get_github_api_base_url())
+
+
+@lru_cache(maxsize=32)
+def _get_github_upload_api_base_url(api_base: str) -> str:
     if api_base == "https://api.github.com":
         return "https://uploads.github.com"
     return api_base
