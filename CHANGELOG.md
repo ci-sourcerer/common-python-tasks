@@ -1,3 +1,27 @@
+## [0.5.0] - 2026-07-07
+
+### 🚀 Features
+
+- Enhance container entrypoint resolution with custom script validation
+- *(containers)* Validate custom entrypoint scripts (#19)
+- Replace shell script installer with Python installer
+- Utilize LRU cache for GitHub stuff
+
+### 🐛 Bug Fixes
+
+- Update vscode settings
+- Make a log debug
+- Fix broken `APT_PACKAGES`
+- *(github)* Make cached configuration environment-aware
+
+### 💼 Other
+
+- Formatting
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.5.0
+
 ## [0.4.1] - 2026-06-16
 
 ### 🚀 Features
