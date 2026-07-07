@@ -18,6 +18,11 @@ from . import utils
 LOGGER = logging.getLogger(__name__)
 
 PACKAGE_MANAGER_ENV_VAR = "COMMON_PYTHON_TASKS_PACKAGE_MANAGER"
+PACKAGE_MANAGER_ENV_VARS = (
+    PACKAGE_MANAGER_ENV_VAR,
+    "COMMON_PYTHON_TASKS_BUILD_TOOL",
+    "PACKAGE_MANAGER",
+)
 
 
 class PackageManager(StrEnum):
@@ -45,9 +50,10 @@ def _parse_tool_version_output(output: str, tool_name: str) -> str:
 
 
 def _find_package_manager_override() -> tuple[str, str] | None:
-    value = os.getenv(PACKAGE_MANAGER_ENV_VAR)
-    if value is not None and value.strip():
-        return PACKAGE_MANAGER_ENV_VAR, value.strip().lower()
+    for env_var in PACKAGE_MANAGER_ENV_VARS:
+        value = os.getenv(env_var)
+        if value is not None and value.strip():
+            return env_var, value.strip().lower()
     return None
 
 
@@ -105,7 +111,8 @@ def get_package_manager() -> PackageManager:
     """Resolve the package manager backend used for build and publish commands.
 
     Resolution order:
-    1. Environment override via `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`.
+    1. Environment overrides via `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`,
+       `COMMON_PYTHON_TASKS_BUILD_TOOL`, or `PACKAGE_MANAGER`, in that order.
     2. Auto-discovery from installed executables and project metadata.
 
     Supported values are `poetry`, `uv`, and `auto`.
@@ -374,7 +381,13 @@ def read_pyproject_toml() -> dict[str, Any]:
     return tomllib.loads(Path("pyproject.toml").read_text())
 
 
-BLACK_TARGET_PYTHON_CANDIDATES = [Version(f"3.{minor}") for minor in range(7, 17)]
+BLACK_TARGET_PYTHON_MINORS = range(7, 17)
+
+
+def _specifier_supports_python_minor(specifier_set: SpecifierSet, minor: int) -> bool:
+    return any(
+        specifier_set.contains(Version(f"3.{minor}.{patch}")) for patch in range(1000)
+    )
 
 
 def get_black_target_version() -> str | None:
@@ -394,9 +407,9 @@ def get_black_target_version() -> str | None:
         LOGGER.warning("Unable to parse requires-python specifier: %s", requires_python)
         return None
 
-    for candidate in BLACK_TARGET_PYTHON_CANDIDATES:
-        if specifier_set.contains(candidate):
-            return f"py{candidate.major}{candidate.minor:02d}"
+    for minor in BLACK_TARGET_PYTHON_MINORS:
+        if _specifier_supports_python_minor(specifier_set, minor):
+            return f"py3{minor:02d}"
     return None
 
 

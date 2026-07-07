@@ -43,6 +43,33 @@ def test_split_colon_delimited_values_preserves_quoted_substrings():
     assert result == ["path", "my path/with:colon", "other"]
 
 
+def test_split_colon_delimited_values_preserves_escaped_colons():
+    result = split_colon_delimited_values(
+        r"URL=https\://example.com\:8443/path:MODE=prod"
+    )
+
+    assert result == ["URL=https://example.com:8443/path", "MODE=prod"]
+
+
+def test_parse_container_build_args_accepts_escaped_colons():
+    result = parse_container_build_args(
+        None,
+        r"INDEX_URL=https\://example.com\:8443/simple:MODE=prod",
+    )
+
+    assert result == {
+        "INDEX_URL": "https://example.com:8443/simple",
+        "MODE": "prod",
+    }
+
+
+def test_parse_container_build_args_rejects_unescaped_colons():
+    with pytest.raises(SystemExit):
+        parse_container_build_args(
+            None, "INDEX_URL=https://example.com/simple:MODE=prod"
+        )
+
+
 def test_parse_container_build_args_preserves_spaces_in_values():
     result = parse_container_build_args(None, 'APT_PACKAGES="jq curl":OTHER=two')
 
@@ -56,6 +83,22 @@ def test_parse_container_env_tokens_supports_whitespace_delimited_values():
     result = parse_container_env_tokens("A=one B='two with spaces'")
 
     assert result == ["A=one", "B=two with spaces"]
+
+
+def test_parse_container_env_tokens_accepts_escaped_colons():
+    result = parse_container_env_tokens(
+        r"DATABASE_URL=postgresql\://user\:pass@db\:5432/app:MODE=prod"
+    )
+
+    assert result == [
+        "DATABASE_URL=postgresql://user:pass@db:5432/app",
+        "MODE=prod",
+    ]
+
+
+def test_parse_container_env_tokens_rejects_unescaped_colons():
+    with pytest.raises(SystemExit):
+        parse_container_env_tokens("DATABASE_URL=postgresql://db:5432/app:MODE=prod")
 
 
 def test_load_container_env_tokens_accepts_list_container_envfile(tmp_path):

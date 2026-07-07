@@ -1088,6 +1088,26 @@ def changelog() -> None:
     print(_changelog())
 
 
+def _build_and_publish_release_package(release_tag: str) -> None:
+    from .utils import run_command
+
+    package_published = False
+    try:
+        build_package(clean_dist=True)
+        publish_package(build_first=False)
+        package_published = True
+    finally:
+        if not package_published:
+            LOGGER.warning(
+                "Package build or publication failed; deleting local release tag %s",
+                release_tag,
+            )
+            run_command(
+                ["git", "tag", "--delete", release_tag],
+                acceptable_returncodes={0, 1},
+            )
+
+
 def _run_release_flow(
     component: str = "auto",
     stage: str | None = None,
@@ -1167,8 +1187,7 @@ def _run_release_flow(
             run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)
         return
 
-    build_package(clean_dist=True)
-    publish_package(build_first=False)
+    _build_and_publish_release_package(hook_env["RELEASE_TAG"])
 
     if include_containers:
         build_image(

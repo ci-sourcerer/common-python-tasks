@@ -183,6 +183,15 @@ def test_get_black_target_version_from_requires_python():
         assert get_black_target_version() == "py311"
 
 
+@pytest.mark.parametrize("requires_python", [">=3.11.2,<4", "~=3.11.2"])
+def test_get_black_target_version_supports_patch_level_constraints(requires_python):
+    with patch(
+        "common_python_tasks.project.read_pyproject_toml",
+        return_value={"project": {"requires-python": requires_python}},
+    ):
+        assert get_black_target_version() == "py311"
+
+
 def test_get_black_target_version_returns_none_for_missing_requires_python():
     with patch(
         "common_python_tasks.project.read_pyproject_toml",
@@ -419,6 +428,29 @@ def test_get_package_manager_uses_uv_override(monkeypatch):
 
     with patch("shutil.which", return_value="/usr/local/bin/uv"):
         assert get_package_manager() == "uv"
+
+
+@pytest.mark.parametrize(
+    "env_var",
+    ["COMMON_PYTHON_TASKS_BUILD_TOOL", "PACKAGE_MANAGER"],
+)
+def test_get_package_manager_supports_aliases(monkeypatch, env_var):
+    get_package_manager.cache_clear()
+    monkeypatch.delenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", raising=False)
+    monkeypatch.setenv(env_var, "uv")
+
+    with patch("shutil.which", return_value="/usr/local/bin/uv"):
+        assert get_package_manager() == PackageManager.UV
+
+
+def test_get_package_manager_prefers_primary_override(monkeypatch):
+    get_package_manager.cache_clear()
+    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "uv")
+    monkeypatch.setenv("COMMON_PYTHON_TASKS_BUILD_TOOL", "poetry")
+    monkeypatch.setenv("PACKAGE_MANAGER", "poetry")
+
+    with patch("shutil.which", return_value="/usr/local/bin/tool"):
+        assert get_package_manager() == PackageManager.UV
 
 
 def test_get_package_manager_auto_prefers_uv_when_poetry_missing(monkeypatch):

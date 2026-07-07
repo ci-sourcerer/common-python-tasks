@@ -11,14 +11,16 @@ Instead of writing your own tasks for formatting, linting, testing, packaging, a
 You can add `common-python-tasks` to a new project by using the handy automated installation script.
 
 ```shell
-curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d | sh
+curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add_common_python_tasks.py | jq -r '.content' | base64 -d | python3
 ```
 
 To install a specific release, set the environment variable `COMMON_PYTHON_TASKS_VERSION`.
 
 ```shell
-COMMON_PYTHON_TASKS_VERSION=0.4.1 \
-  sh -c "$(curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add-common-python-tasks.sh | jq -r '.content' | base64 -d)"
+curl -sSL https://api.github.com/repos/ci-sourcerer/common-python-tasks/contents/scripts/add_common_python_tasks.py \
+  | jq -r '.content' \
+  | base64 -d \
+  | COMMON_PYTHON_TASKS_VERSION=0.4.1 python3
 ```
 
 This will complete the following steps.
@@ -185,7 +187,7 @@ Supported values are `poetry`, `uv`, and `auto`.
 
 Tasks that need configuration files (`pytest`, `coverage`, `flake8`, `isort`) follow this order of precedence.
 
-1. **`pyproject.toml` sections**: `[tool.pytest]`, `[tool.coverage]`, `[tool.isort]` take priority
+1. **`pyproject.toml` sections**: `[tool.pytest.ini_options]`, `[tool.coverage]`, `[tool.isort]` take priority
 2. **Environment variables**: Override config paths; see [Environment Variables](#environment-variables)
 3. **Local config files**: `pytest.ini`, `.coveragerc`, `.flake8`, `.isort.cfg` in the project root
 4. **Bundled defaults**: Sensible defaults included with this package, found in the [`src/common_python_tasks/data`](src/common_python_tasks/data) directory
@@ -213,19 +215,19 @@ The following environment variables configure package and container behavior.
 - `PACKAGE_MANAGER`: Alias for `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
 - `CONTAINER_REGISTRY_USERNAME`: Specifies the container registry username for image tagging; the default is the current local user
 - `CONTAINER_REGISTRY_URL`: Specifies the registry URL (default: `docker.io/{username}`)
-- `CONTAINER_BUILD_ARGS`: Provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format
-- `CONTAINER_EXTENSION_FILES`: Specifies colon delimited local extension Dockerfile paths to include in the rendered build
-- `CONTAINER_EXTENSIONS`: Specifies colon delimited extension bundle names or parameterized bundle values to include in the rendered build
-- `CONTAINER_ENV`: Provides colon delimited `KEY=VALUE` declarations to inject into the builder stage of the rendered Dockerfile
+- `CONTAINER_BUILD_ARGS`: Provides additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format. Escape literal colons in values as `\:` or quote the complete value
+- `CONTAINER_EXTENSION_FILES`: Specifies colon delimited local extension Dockerfile paths to include in the rendered build; escape literal colons as `\:` or quote the complete path
+- `CONTAINER_EXTENSIONS`: Specifies colon delimited extension bundle names or parameterized bundle values to include in the rendered build; escape literal colons as `\:` or quote the complete value
+- `CONTAINER_ENV`: Provides colon delimited `KEY=VALUE` declarations to inject into the builder stage of the rendered Dockerfile. Escape literal colons in values as `\:` or quote the complete value
 - `.containerenv`: Can also supply the same declarations from a file in the project root. It is loaded first, then `container_envfile`, then `CONTAINER_ENV`, and finally `container_env`.
 - `CONTAINER_PRUNE_KEEP`: Controls image pruning after builds (`-1` keeps all, `0` keeps the latest only, `N` keeps the latest plus `N` previous)
 - `CUSTOM_ENTRYPOINT`: Specifies a custom entrypoint script name for containers. The value must match a key in `[project].scripts`; unknown values fail the build
 - `CONTAINER_DEPS_CONTENT`: Supplies inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`
-- `CONTAINER_DEPS_FILE`: Points to one or more explicit Dockerfiles to build the dependency image. It may be a colon delimited list of file paths and is used only when `CONTAINER_DEPS_CONTENT` is unset
+- `CONTAINER_DEPS_FILE`: Points to one or more explicit Dockerfiles to build the dependency image. It may be a colon delimited list of file paths, with literal colons escaped as `\:`, and is used only when `CONTAINER_DEPS_CONTENT` is unset
 - `CONTAINER_DEPS_MAPPINGS`: Maps copied dependency names from `/tmp/deps` into destination paths as space separated `name:/target/path` entries. This is used only when `CONTAINER_DEPS_MOVE_SCRIPT` or `CONTAINER_DEPS_MOVE_SCRIPT_PATH` is not set
 - `CONTAINER_DEPS_MOVE_SCRIPT`: Supplies a raw executable script to run after `/tmp/deps` is copied into the image. The script is written to `/tmp/container-deps-move-script` and executed with its own shebang
 - `CONTAINER_DEPS_MOVE_SCRIPT_PATH`: Supplies a host path to a script file to run after `/tmp/deps` is copied into the image. This path takes precedence over `CONTAINER_DEPS_MOVE_SCRIPT` when both are set
-- `GITHUB_RELEASE_ASSETS`: Colon separated list of file paths or glob patterns to attach to the GitHub Release (default: `dist/*`)
+- `GITHUB_RELEASE_ASSETS`: Colon separated list of file paths or glob patterns to attach to the GitHub Release (default: `dist/*`); escape literal colons as `\:` or quote the complete path
 - `SKIP_GITHUB_RELEASE`: Truthy value to skip GitHub Release publication
 - `GITHUB_TOKEN` or `GH_TOKEN`: GitHub authentication token used to publish releases and upload assets
 - `GITHUB_REPOSITORY`: Optional override for the repository slug used when publishing a GitHub Release

@@ -218,6 +218,33 @@ def test_clean_dist_only_removes_only_dist(tmp_path, monkeypatch):
     assert (tmp_path / "foo.pyc").exists()
 
 
+@pytest.mark.parametrize("failing_task", ["build_package", "publish_package"])
+def test_build_and_publish_release_package_deletes_tag_on_failure(failing_task):
+    from common_python_tasks.tasks import _build_and_publish_release_package
+
+    with (
+        patch("common_python_tasks.tasks.build_package") as mock_build_package,
+        patch("common_python_tasks.tasks.publish_package") as mock_publish_package,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+        patch("common_python_tasks.tasks.LOGGER"),
+    ):
+        {
+            "build_package": mock_build_package,
+            "publish_package": mock_publish_package,
+        }[
+            failing_task
+        ].side_effect = SystemExit(2)
+
+        with pytest.raises(SystemExit) as exc_info:
+            _build_and_publish_release_package("v1.2.3")
+
+    assert exc_info.value.code == 2
+    mock_run_command.assert_called_once_with(
+        ["git", "tag", "--delete", "v1.2.3"],
+        acceptable_returncodes={0, 1},
+    )
+
+
 def test_public_tasks_defaults_to_common_profile():
     import common_python_tasks
 

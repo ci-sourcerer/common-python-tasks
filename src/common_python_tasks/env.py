@@ -186,11 +186,12 @@ def split_delimited_values(
     separators: str = ":",
     allow_whitespace: bool = False,
 ) -> list[str]:
-    """Split a delimited string while preserving quoted substrings.
+    """Split a delimited string while preserving quoted or escaped separators.
 
     Args:
         value: The string to split.
-        separators: Explicit separator characters to use.
+        separators: Explicit separator characters to use. Prefix a separator with
+            a backslash to include it literally in a token.
         allow_whitespace: Treat whitespace as additional separators.
 
     Returns:
@@ -207,7 +208,7 @@ def split_delimited_values(
 
 
 def split_colon_delimited_values(value: str) -> list[str]:
-    """Split a colon- or whitespace-delimited string while preserving quoted substrings."""
+    """Split colon-delimited values while preserving quoted or escaped colons."""
     return split_delimited_values(value, separators=":", allow_whitespace=True)
 
 
@@ -233,10 +234,15 @@ def parse_container_build_args(
     parsed_build_args: dict[str, str] = {}
     for token in build_arg_tokens:
         if "=" not in token:
-            LOGGER.warning("Ignoring invalid build-arg token: %s", token)
-            continue
+            utils.fatal(
+                f"Invalid build-arg token {token!r}; expected KEY=VALUE. "
+                "Escape literal colons in values as \\: or quote the value."
+            )
         key, value = token.split("=", 1)
-        parsed_build_args[key.strip()] = value.strip()
+        key = key.strip()
+        if not key:
+            utils.fatal(f"Invalid build-arg token {token!r}; the key must not be empty")
+        parsed_build_args[key] = value.strip()
 
     return parsed_build_args or None
 
@@ -254,13 +260,20 @@ def parse_container_env_tokens(value: str | list[str] | None) -> list[str]:
         return []
 
     if isinstance(value, list):
-        return [token.strip() for token in value if token and token.strip()]
-
-    if not value.strip():
+        tokens = [token.strip() for token in value if token and token.strip()]
+    elif not value.strip():
         return []
+    else:
+        tokens = split_colon_delimited_values(value)
 
-    tokens = split_colon_delimited_values(value)
-    return [token for token in tokens if token.strip()]
+    for token in tokens:
+        if "=" not in token or not token.split("=", 1)[0].strip():
+            utils.fatal(
+                f"Invalid container env token {token!r}; expected KEY=VALUE. "
+                "Escape literal colons in values as \\: or quote the value."
+            )
+
+    return tokens
 
 
 def _parse_container_envfile_paths(
