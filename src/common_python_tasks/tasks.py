@@ -956,18 +956,28 @@ def push_image(debug: bool = False) -> None:
 
 
 @tasks.script(task_name="publish-package", tags=["packaging", "common"])
-def publish_package(build_first: bool = True) -> None:
+def publish_package(
+    build_first: bool = True,
+    repository: str | None = None,
+    repository_url: str | None = None,
+) -> None:
     """Publish the package to the PyPI server.
 
     Args:
         build_first: If `True`, build the package before publishing.
+        repository: Optional configured repository name to publish to.
+        repository_url: Optional repository upload URL to publish to.
     """
     from .project import get_package_manager_publish_command
     from .utils import run_command
 
     if build_first:
         build_package(clean_dist=True)
-    run_command(get_package_manager_publish_command())
+    run_command(
+        get_package_manager_publish_command(
+            repository=repository, repository_url=repository_url
+        )
+    )
 
 
 @tasks.script(
@@ -1089,13 +1099,21 @@ def changelog() -> None:
     print(_changelog())
 
 
-def _build_and_publish_release_package(release_tag: str) -> None:
+def _build_and_publish_release_package(
+    release_tag: str,
+    repository: str | None = None,
+    repository_url: str | None = None,
+) -> None:
     from .utils import run_command
 
     package_published = False
     try:
         build_package(clean_dist=True)
-        publish_package(build_first=False)
+        publish_package(
+            build_first=False,
+            repository=repository,
+            repository_url=repository_url,
+        )
         package_published = True
     finally:
         if not package_published:
@@ -1122,6 +1140,8 @@ def _run_release_flow(
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
     assets: list[str] | None = None,
+    repository: str | None = None,
+    repository_url: str | None = None,
     pre_script: str | None = None,
     post_script: str | None = None,
 ) -> None:
@@ -1171,7 +1191,14 @@ def _run_release_flow(
     if dry_run:
         log_dry_run("Would push tags to origin")
         log_dry_run("Would build package with clean_dist=True")
-        log_dry_run("Would publish package with build_first=False")
+        if repository is None and repository_url is None:
+            log_dry_run("Would publish package with build_first=False")
+        else:
+            log_dry_run(
+                "Would publish package with build_first=False repository=%s repository_url=%s",
+                repository,
+                repository_url,
+            )
         if include_containers:
             log_dry_run(
                 "Would build container image with debug=%s no_cache=%s plain=%s single_arch=%s",
@@ -1188,7 +1215,9 @@ def _run_release_flow(
             run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)
         return
 
-    _build_and_publish_release_package(hook_env["RELEASE_TAG"])
+    _build_and_publish_release_package(
+        hook_env["RELEASE_TAG"], repository=repository, repository_url=repository_url
+    )
 
     if include_containers:
         build_image(
@@ -1237,6 +1266,8 @@ def release(
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
     assets: list[str] | None = None,
+    repository: str | None = None,
+    repository_url: str | None = None,
     pre_script: str | None = None,
     post_script: str | None = None,
 ) -> None:
@@ -1256,6 +1287,8 @@ def release(
             `KEY=VALUE` values.
         container_envfile: Repeated list of container environment files.
         assets: Optional repeated list of release asset patterns or paths.
+        repository: Optional configured repository name to publish to.
+        repository_url: Optional repository upload URL to publish to.
         pre_script: Optional shell command to run before the release steps.
         post_script: Optional shell command to run after the release completes.
     """
@@ -1272,6 +1305,8 @@ def release(
         container_env=container_env,
         container_envfile=container_envfile,
         assets=assets,
+        repository=repository,
+        repository_url=repository_url,
         pre_script=pre_script,
         post_script=post_script,
     )
@@ -1283,6 +1318,8 @@ def release_without_containers(
     stage: str | None = None,
     dry_run: bool = False,
     assets: list[str] | None = None,
+    repository: str | None = None,
+    repository_url: str | None = None,
     pre_script: str | None = None,
     post_script: str | None = None,
 ) -> None:
@@ -1293,6 +1330,8 @@ def release_without_containers(
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
         dry_run: If `True`, only perform a dry-run version bump.
         assets: Optional repeated list of release asset patterns or paths.
+        repository: Optional configured repository name to publish to.
+        repository_url: Optional repository upload URL to publish to.
         pre_script: Optional shell command to run before the release steps.
         post_script: Optional shell command to run after the release completes.
     """
@@ -1302,6 +1341,8 @@ def release_without_containers(
         dry_run=dry_run,
         include_containers=False,
         assets=assets,
+        repository=repository,
+        repository_url=repository_url,
         pre_script=pre_script,
         post_script=post_script,
     )

@@ -632,7 +632,11 @@ class TestBumpVersion:
                 ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
-            mock_publish.assert_called_once_with(build_first=False)
+            mock_publish.assert_called_once_with(
+                build_first=False,
+                repository=None,
+                repository_url=None,
+            )
             mock_low_level_build_image.assert_not_called()
             mock_task_build_image.assert_called_once_with(
                 debug=True,
@@ -959,7 +963,11 @@ class TestBumpVersion:
                 ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
-            mock_publish.assert_called_once_with(build_first=False)
+            mock_publish.assert_called_once_with(
+                build_first=False,
+                repository=None,
+                repository_url=None,
+            )
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
                 release_name="v1.2.3",
@@ -968,6 +976,45 @@ class TestBumpVersion:
                 draft=False,
                 assets=[],
             )
+
+    def test_release_without_containers_forwards_publish_repository_options(
+        self,
+    ):
+        from common_python_tasks.tasks import release_without_containers
+
+        with (
+            patch.dict(
+                os.environ, {"RELEASE_PRE_SCRIPT": "", "RELEASE_POST_SCRIPT": ""}
+            ),
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch("common_python_tasks.git.get_dirty_files", return_value=[]),
+            patch("common_python_tasks.tasks.clean"),
+            patch("common_python_tasks.tasks.bump_version"),
+            patch("common_python_tasks.utils.prepend_changelog"),
+            patch("common_python_tasks.utils.run_command"),
+            patch("common_python_tasks.tasks.build_package"),
+            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch(
+                "common_python_tasks.project.get_project_version",
+                return_value="1.2.2",
+            ),
+            patch(
+                "common_python_tasks.github.get_github_release_asset_paths",
+                return_value=[],
+            ),
+            patch("common_python_tasks.github.publish_github_release"),
+        ):
+            release_without_containers(
+                component="patch",
+                repository="internal",
+                repository_url="https://packages.example.com/legacy/",
+            )
+
+        mock_publish.assert_called_once_with(
+            build_first=False,
+            repository="internal",
+            repository_url="https://packages.example.com/legacy/",
+        )
 
     def test_release_without_containers_can_disable_changelog_updates(self):
         from common_python_tasks.tasks import release_without_containers
@@ -1011,7 +1058,11 @@ class TestBumpVersion:
                 ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
-            mock_publish.assert_called_once_with(build_first=False)
+            mock_publish.assert_called_once_with(
+                build_first=False,
+                repository=None,
+                repository_url=None,
+            )
 
     def test_release_without_containers_prompts_once_for_dirty_repo(self):
         from common_python_tasks.tasks import release_without_containers
@@ -1060,7 +1111,11 @@ class TestBumpVersion:
                 ]
             )
             mock_build_package.assert_called_once_with(clean_dist=True)
-            mock_publish.assert_called_once_with(build_first=False)
+            mock_publish.assert_called_once_with(
+                build_first=False,
+                repository=None,
+                repository_url=None,
+            )
 
     def test_release_without_containers_allows_dirty_repo_without_prompt_env(self):
         from common_python_tasks.tasks import release_without_containers
@@ -1577,8 +1632,34 @@ def test_publish_package_uses_selected_backend_command():
         publish_package(build_first=True)
 
     mock_build_package.assert_called_once_with(clean_dist=True)
-    mock_publish_command.assert_called_once_with()
+    mock_publish_command.assert_called_once_with(
+        repository=None,
+        repository_url=None,
+    )
     mock_run_command.assert_called_once_with(["uv", "publish"])
+
+
+def test_publish_package_forwards_repository_options():
+    from common_python_tasks.tasks import publish_package
+
+    with (
+        patch("common_python_tasks.tasks.build_package"),
+        patch(
+            "common_python_tasks.project.get_package_manager_publish_command",
+            return_value=["uv", "publish", "--index", "internal"],
+        ) as mock_publish_command,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        publish_package(
+            build_first=False,
+            repository="internal",
+            repository_url=None,
+        )
+
+    mock_publish_command.assert_called_once_with(
+        repository="internal", repository_url=None
+    )
+    mock_run_command.assert_called_once_with(["uv", "publish", "--index", "internal"])
 
 
 def test_publish_github_release_uses_project_release_tag_when_not_provided():

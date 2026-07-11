@@ -522,6 +522,56 @@ def test_get_package_manager_publish_command_uses_selected_backend():
         assert get_package_manager_publish_command() == ["uv", "publish"]
 
 
+def test_get_package_manager_publish_command_uses_repository_name():
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.POETRY,
+    ):
+        assert get_package_manager_publish_command(repository="internal") == [
+            "poetry",
+            "publish",
+            "-r",
+            "internal",
+        ]
+
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.UV,
+    ):
+        assert get_package_manager_publish_command(repository="internal") == [
+            "uv",
+            "publish",
+            "--index",
+            "internal",
+        ]
+
+
+def test_get_package_manager_publish_command_uses_repository_url_for_uv():
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.UV,
+    ):
+        assert get_package_manager_publish_command(
+            repository_url="https://packages.example.com/legacy/"
+        ) == [
+            "uv",
+            "publish",
+            "--publish-url",
+            "https://packages.example.com/legacy/",
+        ]
+
+
+def test_get_package_manager_publish_command_rejects_repository_url_for_poetry():
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.POETRY,
+    ):
+        with pytest.raises(SystemExit):
+            get_package_manager_publish_command(
+                repository_url="https://packages.example.com/legacy/"
+            )
+
+
 def test_get_project_version_prefers_vcs_for_uv_when_pyproject_is_placeholder():
     with (
         patch("common_python_tasks.project.get_package_manager", return_value="uv"),

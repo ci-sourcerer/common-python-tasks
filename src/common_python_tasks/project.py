@@ -179,14 +179,37 @@ def get_package_manager_build_command(wheel_only: bool = False) -> list[str]:
     return command
 
 
-def get_package_manager_publish_command() -> list[str]:
+def get_package_manager_publish_command(
+    repository: str | None = None,
+    repository_url: str | None = None,
+) -> list[str]:
     """Return the publish command for the selected package manager.
+
+    Args:
+        repository: Optional configured repository name to publish to.
+        repository_url: Optional repository upload URL to publish to.
 
     Returns:
         Command tokens for the package publish command.
     """
+    if repository is not None and repository_url is not None:
+        utils.fatal("Specify either `repository` or `repository_url`, not both.")
+
     package_manager = PackageManager(get_package_manager())
-    return [package_manager.value, "publish"]
+    command = [package_manager.value, "publish"]
+    if repository_url is not None:
+        if package_manager == PackageManager.POETRY:
+            utils.fatal(
+                "Poetry publish only supports configured repository names. "
+                "Pass `repository` instead of `repository_url`."
+            )
+        command += ["--publish-url", repository_url]
+    elif repository is not None:
+        if package_manager == PackageManager.UV:
+            command += ["--index", repository]
+        else:
+            command += ["-r", repository]
+    return command
 
 
 @lru_cache
