@@ -1,3 +1,14 @@
+## [0.6.0] - 2026-07-30
+
+### 🚀 Features
+
+- Add options to publish to different repositories
+- Add package manager update command
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.6.0
+
 ## [0.5.1] - 2026-07-07
 
 ### 🐛 Bug Fixes
