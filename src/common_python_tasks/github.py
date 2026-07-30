@@ -344,6 +344,52 @@ def github_api_request(
     return GitHubClient().api_request(method, path, payload=payload)
 
 
+def create_pull_request(
+    title: str,
+    head: str,
+    base: str,
+    body: str | None = None,
+    draft: bool = False,
+) -> dict[str, Any] | None:
+    """Create a GitHub pull request for the current repository.
+
+    Args:
+        title: Pull request title.
+        head: Source branch name.
+        base: Base branch name.
+        body: Optional pull request body.
+        draft: Whether to create the pull request as a draft.
+
+    Returns:
+        The GitHub API response for the created pull request, or `None` when
+        repository information is unavailable.
+    """
+    repository = get_github_repository()
+    token = get_github_token()
+
+    if repository is None:
+        LOGGER.debug(
+            "Skipping pull request creation because this is not a GitHub repository"
+        )
+        return None
+    if token is None:
+        utils.fatal(
+            "GITHUB_TOKEN or GH_TOKEN environment variable must be set to open a GitHub pull request"
+        )
+
+    return GitHubClient(repository=repository, token=token).api_request(
+        "POST",
+        "/pulls",
+        payload={
+            "title": title,
+            "head": head,
+            "base": base,
+            "body": body or "",
+            "draft": draft,
+        },
+    )
+
+
 def publish_github_release(
     tag_name: str,
     release_name: str | None = None,
@@ -497,7 +543,7 @@ def get_github_release_asset_paths(
         else:
             source_items = ["dist/*"]
 
-    asset_paths: list[Path] = []
+    asset_paths = []
     for part in source_items:
         if any(char in part for char in "*?[]"):
             asset_paths.extend(
@@ -589,7 +635,7 @@ def upload_github_release_assets(
     Returns:
         A list of decoded JSON responses for the uploaded assets.
     """
-    uploaded_assets: list[dict[str, Any]] = []
+    uploaded_assets = []
     for asset_path in asset_paths:
         LOGGER.info("Uploading GitHub Release asset: %s", asset_path)
         uploaded = upload_github_release_asset(release_id, asset_path)

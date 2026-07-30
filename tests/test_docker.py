@@ -286,7 +286,7 @@ def test_build_image_removes_non_empty_dist_directory_before_build(
     dist_dir.mkdir()
     (dist_dir / "artifact.whl").write_text("wheel")
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -493,7 +493,7 @@ class TestBuildExtensionImage:
     ):
         from common_python_tasks.docker import build_extension_image
 
-        captured_command: list[str] = []
+        captured_command = []
         original_side_effect = mock_run_command.side_effect
 
         def tracking(command, *args, **kwargs):

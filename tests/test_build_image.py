@@ -39,7 +39,7 @@ def test_build_with_multiple_extensions(
 
     mock_load_data_file.side_effect = load_data_file_with_extensions
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     captured_dockerfile: dict[str, str] = {}
     original = mock_run_command.side_effect
 
@@ -85,7 +85,7 @@ def test_prune_removes_base_images_when_enabled(
     monkeypatch.setenv("CONTAINER_EXTENSION_FILES", "Dockerfile.ext1")
     monkeypatch.setenv("CONTAINER_PRUNE_KEEP", "0")
 
-    calls: list[list[str]] = []
+    calls = []
 
     def tracking(command, *args, **kwargs):
         # Provide a fake `docker image ls` output (newest first)
@@ -189,8 +189,8 @@ def test_extension_template_support(
 
     mock_load_data_file.side_effect = load_data_file_with_apt
 
-    build_calls: list[list[str]] = []
-    captured_dockerfile: dict[str, str] = {}
+    build_calls = []
+    captured_dockerfile = {}
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -249,7 +249,7 @@ def test_build_arg_with_multiple_packages(
 
     mock_load_data_file.side_effect = load_data_file_with_apt
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     captured_dockerfile: dict[str, str] = {}
     original = mock_run_command.side_effect
 
@@ -309,7 +309,7 @@ def test_build_image_injects_container_env_from_containerenv_file(
 
     mock_load_data_file.side_effect = load_data_file_with_env
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     captured_dockerfile: dict[str, str] = {}
     original = mock_run_command.side_effect
 
@@ -368,7 +368,7 @@ def test_build_image_container_env_precedence_overrides_file_with_env_and_cli(
 
     mock_load_data_file.side_effect = load_data_file_with_env
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     captured_dockerfile: dict[str, str] = {}
     original = mock_run_command.side_effect
 
@@ -429,7 +429,7 @@ def test_build_image_reads_container_envfile_path_overrides_dotcontainerenv(
 
     mock_load_data_file.side_effect = load_data_file_with_env
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     captured_dockerfile: dict[str, str] = {}
     original = mock_run_command.side_effect
 
@@ -487,7 +487,7 @@ def test_build_image_reads_multiple_container_envfiles_in_order(
 
     mock_load_data_file.side_effect = load_data_file_with_env
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     captured_dockerfile: dict[str, str] = {}
     original = mock_run_command.side_effect
 
@@ -537,7 +537,7 @@ def test_build_image_passes_required_dependency_versions(
             "poetry-plugin-export": "1.5.0",
         }.get(name),
     ):
-        build_calls: list[list[str]] = []
+        build_calls = []
         original = mock_run_command.side_effect
 
         def tracking(command, *args, **kwargs):
@@ -570,7 +570,7 @@ def test_build_image_no_cache_passes_no_cache_pull_and_plain(
 ):
     from common_python_tasks.tasks import build_image
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -602,7 +602,7 @@ def test_build_image_renders_uv_dynamic_versioning_bypass_for_uv_builder(
     from common_python_tasks import project
     from common_python_tasks.tasks import build_image
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     captured_dockerfile: dict[str, str] = {}
     original = mock_run_command.side_effect
     original_load_data_file = mock_load_data_file.side_effect
@@ -668,7 +668,7 @@ def test_build_image_accepts_build_args_param_for_real_docker_arg(
 
     os.environ.pop("CONTAINER_BUILD_ARGS", None)
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -700,7 +700,7 @@ def test_build_image_includes_workdir_path_from_env(
     monkeypatch.setenv("WORKDIR_PATH", "/app")
     monkeypatch.delenv("CONTAINER_BUILD_ARGS", raising=False)
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -731,7 +731,7 @@ def test_build_image_explicit_workdir_path_build_arg_overrides_env(
     monkeypatch.setenv("WORKDIR_PATH", "/app")
     monkeypatch.delenv("CONTAINER_BUILD_ARGS", raising=False)
 
-    build_calls: list[list[str]] = []
+    build_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):

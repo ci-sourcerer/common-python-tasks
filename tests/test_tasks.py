@@ -218,6 +218,128 @@ def test_clean_dist_only_removes_only_dist(tmp_path, monkeypatch):
     assert (tmp_path / "foo.pyc").exists()
 
 
+def test_extract_changed_dependency_names_from_diff():
+    from common_python_tasks.tasks import _extract_changed_dependency_names_from_diff
+
+    assert _extract_changed_dependency_names_from_diff("""
+diff --git a/uv.lock b/uv.lock
+@@ -1,5 +1,5 @@
+ [[package]]
+ name = "pytest"
+-version = "9.0.3"
++version = "9.0.4"
+diff --git a/pyproject.toml b/pyproject.toml
+@@ -20,1 +20,1 @@ dependencies = [
+-    "requests (>=2.34.1,<3.0.0)",
++    "requests (>=2.34.2,<3.0.0)",
+""") == ["pytest", "requests"]
+
+
+def test_dependency_update_branch_name_uses_dependency_names():
+    from common_python_tasks.tasks import _dependency_update_branch_name
+
+    assert _dependency_update_branch_name(["Requests", "pytest-cov"]) == (
+        "deps/requests-pytest-cov"
+    )
+
+
+def test_update_dependencies_runs_update_only_when_no_changes():
+    from common_python_tasks.tasks import update_dependencies
+
+    def run_command_side_effect(command, capture_output=False, **kwargs):
+        if command[:3] == ["git", "status", "--porcelain"]:
+            return MagicMock(stdout="", returncode=0)
+        return MagicMock(stdout="", returncode=0)
+
+    with (
+        patch(
+            "common_python_tasks.project.get_package_manager_update_command",
+            return_value=["poetry", "update", "pytest"],
+        ),
+        patch(
+            "common_python_tasks.utils.run_command",
+            side_effect=run_command_side_effect,
+        ) as mock_run_command,
+    ):
+        update_dependencies("pytest")
+
+    mock_run_command.assert_has_calls(
+        [
+            call(["poetry", "update", "pytest"]),
+            call(
+                [
+                    "git",
+                    "status",
+                    "--porcelain",
+                    "--",
+                    "pyproject.toml",
+                    "poetry.lock",
+                    "uv.lock",
+                ],
+                capture_output=True,
+            ),
+        ]
+    )
+    assert mock_run_command.call_count == 2
+
+
+def test_update_dependencies_creates_branch_commit_push_and_pr(tmp_path, monkeypatch):
+    from common_python_tasks.tasks import update_dependencies
+
+    monkeypatch.chdir(tmp_path)
+    tmp_path.joinpath("pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    tmp_path.joinpath("uv.lock").write_text("", encoding="utf-8")
+
+    def run_command_side_effect(command, capture_output=False, **kwargs):
+        if command[:3] == ["git", "status", "--porcelain"]:
+            return MagicMock(stdout=" M uv.lock\n", returncode=0)
+        if command[:3] == ["git", "diff", "--unified=3"]:
+            return MagicMock(
+                stdout=' [[package]]\n name = "pytest"\n-version = "9.0.3"\n+version = "9.0.4"\n',
+                returncode=0,
+            )
+        if command == ["git", "branch", "--show-current"]:
+            return MagicMock(stdout="deps/pytest\n", returncode=0)
+        if command[:3] == ["git", "symbolic-ref", "--quiet"]:
+            return MagicMock(stdout="refs/remotes/origin/main\n", returncode=0)
+        return MagicMock(stdout="", returncode=0)
+
+    with (
+        patch("common_python_tasks.git.get_dirty_files", return_value=[]),
+        patch(
+            "common_python_tasks.project.get_package_manager_update_command",
+            return_value=["uv", "sync", "--upgrade", "--upgrade-package", "pytest"],
+        ),
+        patch("common_python_tasks.tasks.test") as mock_test,
+        patch(
+            "common_python_tasks.github.create_pull_request"
+        ) as mock_create_pull_request,
+        patch(
+            "common_python_tasks.utils.run_command",
+            side_effect=run_command_side_effect,
+        ) as mock_run_command,
+    ):
+        update_dependencies("pytest", branch=True, pr=True, draft=True, run_tests=True)
+
+    mock_test.assert_called_once_with()
+    mock_run_command.assert_has_calls(
+        [
+            call(["uv", "sync", "--upgrade", "--upgrade-package", "pytest"]),
+            call(["git", "checkout", "-b", "deps/pytest"]),
+            call(["git", "commit", "-m", "chore(deps): update pytest"]),
+            call(["git", "push", "-u", "origin", "deps/pytest"]),
+        ],
+        any_order=True,
+    )
+    mock_create_pull_request.assert_called_once_with(
+        title="chore(deps): update pytest",
+        head="deps/pytest",
+        base="main",
+        body="Automated dependency update.",
+        draft=True,
+    )
+
+
 @pytest.mark.parametrize("failing_task", ["build_package", "publish_package"])
 def test_build_and_publish_release_package_deletes_tag_on_failure(failing_task):
     from common_python_tasks.tasks import _build_and_publish_release_package
@@ -1698,7 +1820,7 @@ def test_fastapi_stack_up_passes_container_build_options(
 ):
     from common_python_tasks.tasks import fastapi_stack_up
 
-    build_image_calls: list[dict[str, object]] = []
+    build_image_calls = []
 
     def fake_build_image(*args, **kwargs):
         build_image_calls.append(kwargs)
@@ -1880,7 +2002,7 @@ def test_container_shell_selects_most_recent_tag(
     """When `tag` is None, `container_shell` should pick the most-recently-built tag (no build)."""
     from common_python_tasks.tasks import container_shell
 
-    run_calls: list[list[str]] = []
+    run_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -1920,7 +2042,7 @@ def test_run_container_passes_docker_runtime_options(
 
     monkeypatch.setattr(utils, "get_full_image_name", lambda: "docker.io/test-package")
 
-    run_calls: list[list[str]] = []
+    run_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -1971,7 +2093,7 @@ def test_container_shell_forwards_docker_run_runtime_flags(
 
     monkeypatch.setattr(utils, "get_full_image_name", lambda: "docker.io/test-package")
 
-    run_calls: list[list[str]] = []
+    run_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -2015,7 +2137,7 @@ def test_container_shell_wraps_fallback_shell_with_env_dump(
     """`container_shell` should compose a shell fallback command that survives `echo_env=True`."""
     from common_python_tasks.tasks import container_shell
 
-    run_calls: list[list[str | None]] = []
+    run_calls = []
     original = mock_run_command.side_effect
 
     def tracking(command, *args, **kwargs):
@@ -2068,7 +2190,7 @@ def test_push_image_uses_full_registry_reference(monkeypatch):
     """`push_image` should push fully-qualified tags derived from full image name."""
     from common_python_tasks.tasks import push_image
 
-    pushed_refs: list[str] = []
+    pushed_refs = []
 
     with (
         patch(
@@ -2101,8 +2223,8 @@ def test_run_container_falls_back_to_full_image_reference_when_short_missing(
     """`run_container` should inspect short then full references and run the available one."""
     from common_python_tasks.tasks import run_container
 
-    inspect_calls: list[str] = []
-    run_calls: list[list[str]] = []
+    inspect_calls = []
+    run_calls = []
 
     with (
         patch(

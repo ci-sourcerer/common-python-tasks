@@ -2,8 +2,10 @@ import contextvars
 import inspect
 import logging
 import os
+import re
 from functools import partial, wraps
 from pathlib import Path
+from typing import Callable
 
 from common_python_tasks.utils import confirm
 from poethepoet_tasks import TaskCollection
@@ -116,13 +118,17 @@ def _wrap_task_function(func: callable, task_name: str | None) -> callable:
 
 
 def _script(
-    func=None,
+    func: Callable | None = None,
     task_name: str | None = None,
     help: str | None = None,
     task_args: bool = True,
     options: dict | None = None,
-    tags: tuple[str, ...] = (),
+    tags: tuple[str, ...] | None = None,
 ):
+
+    if tags is None:
+        tags = ()
+
     if func is None:
         return partial(
             _script,
@@ -1021,6 +1027,205 @@ def publish_github_release(
         draft=draft or env_truthy("GITHUB_RELEASE_DRAFT"),
         assets=asset_paths,
     )
+
+
+def _get_default_branch() -> str:
+    from .utils import run_command
+
+    result = run_command(
+        ["git", "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        acceptable_returncodes={0, 1},
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip().rsplit("/", 1)[-1]
+    return "main"
+
+
+def _get_current_branch() -> str:
+    from .utils import fatal, run_command
+
+    result = run_command(["git", "branch", "--show-current"], capture_output=True)
+    if not result.stdout.strip():
+        fatal("Unable to determine current git branch.")
+    return result.stdout.strip()
+
+
+def _dependency_branch_token(name: str) -> str:
+    return re.sub(r"[^a-z0-9._-]+", "-", name.lower()).strip("-") or "updates"
+
+
+def _dependency_update_branch_name(dependency_names: list[str]) -> str:
+    if not dependency_names:
+        return "deps/update-dependencies"
+
+    branch_name = "deps/" + "-".join(
+        _dependency_branch_token(name) for name in dependency_names[:5]
+    )
+    if len(dependency_names) > 5:
+        branch_name = f"{branch_name}-and-more"
+    return branch_name[:80].rstrip("-")
+
+
+def _extract_changed_dependency_names_from_diff(diff_output: str) -> list[str]:
+    dependency_names: set[str] = set()
+    for line in diff_output.splitlines():
+        if not line or line.startswith(("+++", "---", "@@", "diff ", "index ")):
+            continue
+        if line[0] not in {" ", "+", "-"}:
+            continue
+
+        text = line[1:].strip()
+        lock_match = re.match(r'name\s*=\s*"([^"]+)"', text)
+        if lock_match is not None:
+            dependency_names.add(lock_match.group(1))
+            continue
+
+        dependency_match = re.match(r'"([A-Za-z0-9_.-]+)(?:\[|\s|[<>=!~;(),"]|$)', text)
+        if dependency_match is not None:
+            dependency_names.add(dependency_match.group(1))
+
+    return sorted(dependency_names)
+
+
+def _get_changed_dependency_names() -> list[str]:
+    from .utils import run_command
+
+    return _extract_changed_dependency_names_from_diff(
+        run_command(
+            [
+                "git",
+                "diff",
+                "--unified=3",
+                "--",
+                "pyproject.toml",
+                "poetry.lock",
+                "uv.lock",
+            ],
+            capture_output=True,
+        ).stdout
+    )
+
+
+def _get_dependency_update_changed_files() -> list[Path]:
+    from .utils import run_command
+
+    result = run_command(
+        [
+            "git",
+            "status",
+            "--porcelain",
+            "--",
+            "pyproject.toml",
+            "poetry.lock",
+            "uv.lock",
+        ],
+        capture_output=True,
+    )
+    return [Path(line[3:]) for line in result.stdout.splitlines() if line]
+
+
+def _ensure_clean_dependency_update_worktree() -> None:
+    from .git import get_dirty_files
+    from .utils import fatal
+
+    if get_dirty_files():
+        fatal(
+            "Repository has uncommitted changes. "
+            "Commit or stash them before creating a dependency update branch, commit, or pull request."
+        )
+
+
+def _dependency_update_title(dependency_names: list[str]) -> str:
+    if not dependency_names:
+        return "chore(deps): update dependencies"
+    if len(dependency_names) == 1:
+        return f"chore(deps): update {dependency_names[0]}"
+    return "chore(deps): update " + ", ".join(dependency_names[:5])
+
+
+@tasks.script(task_name="update-dependencies", tags=["packaging", "common"])
+def update_dependencies(
+    *dependencies: str,
+    branch: bool = False,
+    branch_name: str | None = None,
+    commit: bool = False,
+    pr: bool = False,
+    draft: bool = False,
+    run_tests: bool = False,
+) -> None:
+    """Update project dependencies with Poetry or uv.
+
+    Args:
+        *dependencies: Optional dependency names to update. When omitted, update
+            all dependencies.
+        branch: If `True`, create a dependency update branch after updating.
+        branch_name: Optional branch name to use instead of generating one.
+        commit: If `True`, commit the dependency update files.
+        pr: If `True`, create and push a branch, commit the changes, and open
+            a GitHub pull request.
+        draft: If `True`, create the pull request as a draft.
+        run_tests: If `True`, run the test task before committing.
+    """
+    from .github import create_pull_request
+    from .project import get_package_manager_update_command
+    from .utils import run_command
+
+    should_create_branch = branch or branch_name is not None or pr
+    if should_create_branch or commit:
+        _ensure_clean_dependency_update_worktree()
+
+    run_command(get_package_manager_update_command(dependencies))
+    if not _get_dependency_update_changed_files():
+        LOGGER.info(
+            "Dependency update completed with no lockfile or pyproject changes."
+        )
+        return
+
+    if run_tests:
+        test()
+
+    changed_dependency_names = _get_changed_dependency_names() or sorted(dependencies)
+    if should_create_branch:
+        run_command(
+            [
+                "git",
+                "checkout",
+                "-b",
+                branch_name or _dependency_update_branch_name(changed_dependency_names),
+            ]
+        )
+
+    if commit or pr:
+        run_command(
+            [
+                "git",
+                "add",
+                *[
+                    path
+                    for path in (
+                        Path("pyproject.toml"),
+                        Path("poetry.lock"),
+                        Path("uv.lock"),
+                    )
+                    if path.exists()
+                ],
+            ]
+        )
+        run_command(
+            ["git", "commit", "-m", _dependency_update_title(changed_dependency_names)]
+        )
+
+    if pr:
+        current_branch = _get_current_branch()
+        run_command(["git", "push", "-u", "origin", current_branch])
+        create_pull_request(
+            title=_dependency_update_title(changed_dependency_names),
+            head=current_branch,
+            base=_get_default_branch(),
+            body="Automated dependency update.",
+            draft=draft,
+        )
 
 
 @tasks.script(task_name="build-package", tags=["packaging", "build", "common"])

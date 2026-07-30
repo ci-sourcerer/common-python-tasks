@@ -414,8 +414,8 @@ def load_compose_files(
         )
     ]
 
-    temp_config_files: list[Path] = []
-    addon_template_vars: dict[str, dict[str, str]] = {}
+    temp_config_files = []
+    addon_template_vars = {}
 
     if "db" in compose_addons and compose_type == "fastapi":
         alembic_path, alembic_cleanup = ensure_alembic_config(compose_type)

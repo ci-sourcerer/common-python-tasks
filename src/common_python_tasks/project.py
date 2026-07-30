@@ -8,7 +8,7 @@ from enum import StrEnum, auto
 from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -177,6 +177,29 @@ def get_package_manager_build_command(wheel_only: bool = False) -> list[str]:
     if wheel_only:
         command += ["--format", "wheel"]
     return command
+
+
+def get_package_manager_update_command(dependencies: Sequence[str] | None = None) -> list[str]:
+    """Return the dependency update command for the selected package manager.
+
+    Args:
+        dependencies: Optional dependency names to update. When omitted, all
+            dependencies are updated.
+
+    Returns:
+        Command tokens for the dependency update command.
+    """
+    if dependencies is None:
+        dependencies = []
+
+    package_manager = PackageManager(get_package_manager())
+    if package_manager == PackageManager.UV:
+        command = ["uv", "sync", "--upgrade"]
+        for dependency in dependencies:
+            command.extend(["--upgrade-package", dependency])
+        return command
+
+    return ["poetry", "update", *dependencies]
 
 
 def get_package_manager_publish_command(

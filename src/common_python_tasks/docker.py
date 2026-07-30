@@ -190,7 +190,7 @@ def prune_images_keep(
         if line not in lines
     ]
 
-    tags_in_order: list[str] = []
+    tags_in_order = []
     seen_tags: set[str] = set()
     for entry in lines:
         try:
@@ -509,7 +509,7 @@ def build_image(
             for t in tags_to_use
         ]
 
-        all_tags: list[str] = []
+        all_tags = []
         for resolved_tag in [*short_tags, *full_tags]:
             if resolved_tag not in all_tags:
                 all_tags.append(resolved_tag)

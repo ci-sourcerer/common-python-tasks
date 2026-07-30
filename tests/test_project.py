@@ -11,6 +11,7 @@ from common_python_tasks.project import (
     get_package_manager,
     get_package_manager_build_command,
     get_package_manager_publish_command,
+    get_package_manager_update_command,
     get_project_version,
     get_release_tag_from_project_version,
     is_task_tag_included,
@@ -505,6 +506,35 @@ def test_get_package_manager_build_command_uses_uv_when_selected():
             "uv",
             "build",
             "--wheel",
+        ]
+
+
+def test_get_package_manager_update_command_uses_selected_backend():
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.POETRY,
+    ):
+        assert get_package_manager_update_command() == ["poetry", "update"]
+        assert get_package_manager_update_command(["pytest", "requests"]) == [
+            "poetry",
+            "update",
+            "pytest",
+            "requests",
+        ]
+
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.UV,
+    ):
+        assert get_package_manager_update_command() == ["uv", "sync", "--upgrade"]
+        assert get_package_manager_update_command(["pytest", "requests"]) == [
+            "uv",
+            "sync",
+            "--upgrade",
+            "--upgrade-package",
+            "pytest",
+            "--upgrade-package",
+            "requests",
         ]
 
 
