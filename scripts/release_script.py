@@ -49,6 +49,12 @@ def log_dry_run(message: str, *args: object) -> None:
 
 
 TASKS_TABLE_PATTERN = r"(?ms)<!-- tasks-table -->.*?<!-- end-tasks-table -->"
+TASK_CATEGORY_ORDER = (
+    "Daily development",
+    "Packaging and releases",
+    "Container images",
+    "Development stacks",
+)
 
 
 class ReleasePhase(StrEnum):
@@ -92,21 +98,54 @@ def _resolve_release_phase(phase: ReleasePhase | None = None) -> ReleasePhase:
     return ReleasePhase.PRE
 
 
+def _get_task_category(task_name: str) -> str:
+    tags = get_task_tags(task_name) or []
+    if "web" in tags or "database" in tags:
+        return "Development stacks"
+    if task_name == "release":
+        return "Packaging and releases"
+    if "containers" in tags:
+        return "Container images"
+    if "packaging" in tags or "release" in tags:
+        return "Packaging and releases"
+    return "Daily development"
+
+
+def _get_task_description(task_name: str) -> str:
+    return " ".join(
+        line.strip()
+        for line in (_get_task_docstring(task_name) or "").splitlines()
+        if line.strip()
+    )
+
+
 def build_tasks_table() -> str:
     """Build the markdown task table for README insertion."""
-    lines = [
-        "<!-- tasks-table -->",
-        "| Task | Description | Tags |",
-        "| - | - | - |",
-    ]
-
+    tasks_by_category = {category: [] for category in TASK_CATEGORY_ORDER}
     for task_name in get_available_tasks(internal=False):
-        doc = _get_task_docstring(task_name) or ""
-        description = " ".join(doc.splitlines()).strip()
-        tags = get_task_tags(task_name) or []
-        lines.append(f"| `{task_name}` | {description} | {', '.join(tags)} |")
+        tasks_by_category[_get_task_category(task_name)].append(task_name)
 
-    lines.append("<!-- end-tasks-table -->")
+    lines = ["<!-- tasks-table -->"]
+    for category in TASK_CATEGORY_ORDER:
+        if not tasks_by_category[category]:
+            continue
+
+        lines.extend(
+            [
+                "",
+                f"### {category}",
+                "",
+                "| Task | Description | Tags |",
+                "| --- | --- | --- |",
+            ]
+        )
+        lines.extend(
+            f"| `{task_name}` | {_get_task_description(task_name)} | "
+            f"{', '.join(get_task_tags(task_name) or [])} |"
+            for task_name in tasks_by_category[category]
+        )
+
+    lines.extend(["", "<!-- end-tasks-table -->"])
     return "\n".join(lines)
 
 

@@ -5,6 +5,7 @@ from unittest.mock import call, patch
 import pytest
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "release_script.py"
+README_PATH = SCRIPT_PATH.parents[1] / "README.md"
 
 
 def _load_release_script_module():
@@ -58,6 +59,7 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
 
     updated_text = readme_path.read_text(encoding="utf-8")
     assert "Version: 1.2.3" in updated_text
+    assert "### Daily development" in updated_text
     assert "| `format` | Format code | common, format |" in updated_text
     mock_run.assert_has_calls(
         [
@@ -78,6 +80,52 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
                 check=True,
             ),
         ]
+    )
+
+
+def test_build_tasks_table_groups_tasks_by_category():
+    release_script = _load_release_script_module()
+    task_tags = {
+        "format": ["common", "format"],
+        "release": ["packaging", "release", "containers"],
+        "build-image": ["build", "containers"],
+        "stack-up": ["containers", "fastapi", "web"],
+    }
+
+    with (
+        patch.object(
+            release_script,
+            "get_available_tasks",
+            return_value=list(task_tags),
+        ),
+        patch.object(
+            release_script,
+            "_get_task_docstring",
+            side_effect=lambda task_name: f"Run {task_name}",
+        ),
+        patch.object(release_script, "get_task_tags", side_effect=task_tags.get),
+    ):
+        table = release_script.build_tasks_table()
+
+    assert table.index("### Daily development") < table.index(
+        "### Packaging and releases"
+    )
+    assert table.index("### Packaging and releases") < table.index(
+        "### Container images"
+    )
+    assert table.index("### Container images") < table.index("### Development stacks")
+    assert table.index("| `release` |") < table.index("### Container images")
+
+
+def test_readme_task_table_matches_generated_table():
+    release_script = _load_release_script_module()
+    readme_text = README_PATH.read_text(encoding="utf-8")
+    table_start = readme_text.index("<!-- tasks-table -->")
+    table_end = readme_text.index("<!-- end-tasks-table -->", table_start)
+
+    assert (
+        readme_text[table_start : table_end + len("<!-- end-tasks-table -->")]
+        == release_script.build_tasks_table()
     )
 
 
