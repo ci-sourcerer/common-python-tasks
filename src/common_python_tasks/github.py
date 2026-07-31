@@ -434,7 +434,7 @@ def publish_github_release(
     release_name = release_name or tag_name
     release_body = body if body is not None else _changelog()
     if release_body is not None and _is_unreleased_placeholder(release_body):
-        LOGGER.info(
+        LOGGER.debug(
             "git-cliff returned an unreleased placeholder; using latest tagged release notes instead"
         )
         release_body = _latest_tagged_changelog()

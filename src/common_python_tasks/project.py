@@ -123,7 +123,7 @@ def get_package_manager() -> PackageManager:
     override = _find_package_manager_override()
     if override is None:
         package_manager, reason = _resolve_package_manager_auto()
-        LOGGER.info(
+        LOGGER.debug(
             "Using package manager backend: %s (%s)",
             package_manager,
             reason,
@@ -138,7 +138,7 @@ def get_package_manager() -> PackageManager:
 
     if raw_value == PackageManager.AUTO:
         package_manager, reason = _resolve_package_manager_auto()
-        LOGGER.info(
+        LOGGER.debug(
             "Using package manager backend: %s (%s via %s=%s)",
             package_manager,
             reason,
@@ -149,7 +149,7 @@ def get_package_manager() -> PackageManager:
 
     package_manager = PackageManager(raw_value)
     _ensure_package_manager_available(package_manager)
-    LOGGER.info(
+    LOGGER.debug(
         "Using package manager backend: %s (from %s)",
         package_manager,
         env_var,
