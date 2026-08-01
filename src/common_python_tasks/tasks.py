@@ -7,8 +7,9 @@ from functools import partial, wraps
 from pathlib import Path
 from typing import Callable
 
-from common_python_tasks.utils import confirm
 from poethepoet_tasks import TaskCollection
+
+from common_python_tasks.utils import confirm
 
 
 class _ColoredFormatter(logging.Formatter):
@@ -246,140 +247,24 @@ def _update_release_changelog(release_tag: str, dry_run: bool = False) -> None:
     )
 
 
-@tasks.script(task_name="_black", tags=["format", "internal", "common"])
-def black() -> None:
-    """Run black formatting."""
-    from .project import get_black_target_version
-    from .utils import require_package, run_command
+def _get_ruff_command(*args: str | Path) -> list[str | Path]:
+    from .project import get_ruff_target_version
+    from .utils import get_ruff_config_path
 
-    require_package("black")
-    target_version = get_black_target_version()
-    command = ["black", "--quiet"]
-    if target_version:
-        command.extend(["--target-version", target_version])
-    command.append(".")
-
-    run_command(command)
-
-
-@tasks.script(task_name="_isort", tags=["format", "internal", "common"])
-def isort() -> None:
-    """Run isort formatting."""
-    from .utils import get_config_path, require_package, run_command
-
-    require_package("isort")
-    isort_config_path = get_config_path(
-        "ISORT_CONFIG",
-        ".isort.cfg",
-        ".isort.cfg",
-        tool_name="isort",
-    )
-
-    run_command(
-        [
-            "isort",
-            "--quiet",
-            ".",
-            "--settings-path" if isort_config_path else None,
-            isort_config_path,
+    config_path, is_bundled = get_ruff_config_path()
+    target_version = get_ruff_target_version() if is_bundled else None
+    return [
+        arg
+        for arg in [
+            "ruff",
+            *args,
+            "--config" if config_path else None,
+            config_path,
+            "--target-version" if target_version else None,
+            target_version,
         ]
-    )
-
-
-@tasks.script(task_name="_autoflake", tags=["format", "internal", "common"])
-def autoflake() -> None:
-    """Run autoflake to remove unused imports."""
-    from .utils import require_package, run_command
-
-    require_package("autoflake")
-    run_command(
-        [
-            "autoflake",
-            "--quiet",
-            "--remove-all-unused-imports",
-            "--recursive",
-            "-i",
-            Path("."),
-        ]
-    )
-
-
-@tasks.script(task_name="_black_check", tags=["lint", "internal", "common"])
-def black_check() -> None:
-    """Run black in check mode."""
-    from .project import get_black_target_version
-    from .utils import require_package, run_command
-
-    require_package("black")
-    target_version = get_black_target_version()
-    command = ["black", "--quiet"]
-    if target_version:
-        command.extend(["--target-version", target_version])
-    command.extend(["--diff", Path("."), "--check"])
-
-    run_command(command)
-
-
-@tasks.script(task_name="_isort_check", tags=["lint", "common"])
-def isort_check() -> None:
-    """Run isort linting."""
-    from .utils import get_config_path, require_package, run_command
-
-    require_package("isort")
-    isort_config_path = get_config_path(
-        "ISORT_CONFIG",
-        ".isort.cfg",
-        ".isort.cfg",
-        tool_name="isort",
-    )
-
-    run_command(
-        [
-            "isort",
-            "--quiet",
-            ".",
-            "--check-only",
-            "--settings-path" if isort_config_path else None,
-            isort_config_path,
-        ]
-    )
-
-
-@tasks.script(task_name="_autoflake_check", tags=["lint", "internal", "common"])
-def autoflake_check() -> None:
-    """Run autoflake in check mode."""
-    from .utils import require_package, run_command
-
-    require_package("autoflake")
-    run_command(
-        [
-            "autoflake",
-            "--quiet",
-            "--remove-all-unused-imports",
-            "--recursive",
-            "-cd",
-            Path("."),
-        ]
-    )
-
-
-@tasks.script(task_name="_flake8_check", tags=["lint", "common"])
-def flake8_check() -> None:
-    """Run flake8 linting."""
-    from .utils import get_config_path, require_package, run_command
-
-    require_package("flake8")
-
-    flake8_config_path = get_config_path("FLAKE8_CONFIG", ".flake8", ".flake8")
-
-    run_command(
-        [
-            "flake8",
-            Path("."),
-            "--config" if flake8_config_path else None,
-            flake8_config_path,
-        ]
-    )
+        if arg is not None
+    ]
 
 
 @tasks.script(tags=["test", "common"])
@@ -388,7 +273,7 @@ def test(*paths: str, quiet: bool = False) -> None:
 
 
     Args:
-        quiet: If `True`, run tests in a quieter mode.
+        quiet: Run tests in a quieter mode.
         *paths: Optional test file paths or directories to pass through to pytest.
     """
     from .utils import (
@@ -454,8 +339,7 @@ def clean(dist_only: bool = False) -> None:
     """Clean up temporary files and directories.
 
     Args:
-        dist_only: If `True`, only clean the `dist` directory (and related build
-            artifacts)
+        dist_only: Only clean the `dist` directory (and related build artifacts)
     """
     from .utils import remove_path
 
@@ -477,33 +361,30 @@ def clean(dist_only: bool = False) -> None:
 
 @tasks.script(task_name="format", tags=["format", "common"])
 def format_all() -> None:
-    """Format Python code with autoflake, black, and isort."""
-    from .utils import run_available_tools
+    """Fix import issues and format Python code with Ruff."""
+    from .utils import require_package, run_command
 
-    run_available_tools(
-        [
-            (autoflake, "autoflake"),
-            (black, "black"),
-            (isort, "isort"),
-        ],
-        "No formatting tools are installed. Install one or more of: autoflake, black, isort",
+    require_package("ruff")
+    run_command(
+        _get_ruff_command(
+            "check",
+            "--fix-only",
+            "--select",
+            "F401,I",
+            Path("."),
+        )
     )
+    run_command(_get_ruff_command("format", Path(".")))
 
 
 @tasks.script(task_name="lint", tags=["lint", "common"])
 def lint_all() -> None:
-    """Lint Python code with autoflake, black, isort, and flake8."""
-    from .utils import run_available_tools
+    """Check Python lint and formatting with Ruff."""
+    from .utils import require_package, run_command
 
-    run_available_tools(
-        [
-            (autoflake_check, "autoflake"),
-            (black_check, "black"),
-            (isort_check, "isort"),
-            (flake8_check, "flake8"),
-        ],
-        "No linting tools are installed. Install one or more of: autoflake, black, isort, flake8",
-    )
+    require_package("ruff")
+    run_command(_get_ruff_command("check", Path(".")))
+    run_command(_get_ruff_command("format", "--check", Path(".")))
 
 
 @tasks.script(tags=["containers", "build"])
@@ -970,7 +851,7 @@ def publish_package(
     """Publish the package to the PyPI server.
 
     Args:
-        build_first: If `True`, build the package before publishing.
+        build_first: Build the package before publishing.
         repository: Optional configured repository name to publish to.
         repository_url: Optional repository upload URL to publish to.
     """
@@ -1159,13 +1040,13 @@ def update_dependencies(
     Args:
         *dependencies: Optional dependency names to update. When omitted, update
             all dependencies.
-        branch: If `True`, create a dependency update branch after updating.
+        branch: Create a dependency update branch after updating.
         branch_name: Optional branch name to use instead of generating one.
-        commit: If `True`, commit the dependency update files.
-        pr: If `True`, create and push a branch, commit the changes, and open
-            a GitHub pull request.
-        draft: If `True`, create the pull request as a draft.
-        run_tests: If `True`, run the test task before committing.
+        commit: Commit the dependency update files.
+        pr: Create and push a branch, commit the changes, and open a GitHub pull
+            request.
+        draft: Create the pull request as a draft.
+        run_tests: Run the test task before committing.
     """
     from .github import create_pull_request
     from .project import get_package_manager_update_command
@@ -1255,8 +1136,8 @@ def bump_version(
         component: The version component to bump: `major`, `minor`, `patch`, or
             `auto` to infer the bump from git history using git-cliff.
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
-        dry_run: If `True`, print what would happen without making changes.
-        allow_dirty: If `True`, allow version bumping with uncommitted changes.
+        dry_run: Print what would happen without making changes.
+        allow_dirty: Allow version bumping with uncommitted changes.
 
     Returns:
         The new version string that was/would be set.
@@ -1481,7 +1362,7 @@ def release(
     Args:
         component: The version component to bump: `major`, `minor`, or `patch`.
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
-        dry_run: If `True`, only perform a dry-run version bump.
+        dry_run: Only perform a dry-run version bump.
         debug: Build/push debug container image tags when releasing containers.
         no_cache: Do not use cache when building container images.
         plain: Do not pretty-print container build output.
@@ -1533,7 +1414,7 @@ def release_without_containers(
     Args:
         component: The version component to bump: `major`, `minor`, or `patch`.
         stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
-        dry_run: If `True`, only perform a dry-run version bump.
+        dry_run: Only perform a dry-run version bump.
         assets: Optional repeated list of release asset patterns or paths.
         repository: Optional configured repository name to publish to.
         repository_url: Optional repository upload URL to publish to.

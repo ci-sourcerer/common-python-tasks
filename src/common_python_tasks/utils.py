@@ -5,12 +5,13 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from functools import lru_cache
 from getpass import getuser
 from importlib.resources import files
 from pathlib import Path
 from shlex import quote
-from typing import Callable, Collection, Sequence
+from typing import Collection, Sequence
 
 from jinja2 import Template
 
@@ -72,25 +73,6 @@ def require_package(package_name: str) -> None:
 def log_dry_run(message: str, *args: object) -> None:
     """Log a dry-run informational message with a yellow prefix."""
     LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
-
-
-def run_available_tools(
-    tools: list[tuple[Callable[..., None], str]], none_available_message: str
-) -> None:
-    """Run a list of tools if they are available.
-
-    Args:
-        tools: A list of tuples containing a callable and the name of the required
-            package.
-        none_available_message: The message to log if none of the tools are available.
-    """
-    ran_any = False
-    for fn, package in tools:
-        if is_package_installed(package):
-            fn()
-            ran_any = True
-    if not ran_any:
-        fatal(none_available_message)
 
 
 def directory_has_contents(path: Path) -> bool:
@@ -487,6 +469,35 @@ def get_config_path(
     config_path = Path(bundled_config[0])
     LOGGER.debug("Using bundled config file: %s", config_path)
     return config_path
+
+
+def _has_discoverable_ruff_config() -> bool:
+    for directory in (Path.cwd(), *Path.cwd().parents):
+        if any(
+            (directory / filename).is_file() for filename in (".ruff.toml", "ruff.toml")
+        ):
+            return True
+
+        pyproject_path = directory / "pyproject.toml"
+        if pyproject_path.is_file() and "ruff" in tomllib.loads(
+            pyproject_path.read_text()
+        ).get("tool", {}):
+            return True
+    return False
+
+
+def get_ruff_config_path() -> tuple[Path | None, bool]:
+    """Resolve the Ruff configuration used by the common tasks.
+
+    Returns:
+        A tuple containing an explicit configuration path, if needed, and whether
+        that path refers to the bundled default configuration.
+    """
+    if os.getenv("RUFF_CONFIG"):
+        return Path(os.environ["RUFF_CONFIG"]), False
+    if _has_discoverable_ruff_config():
+        return None, False
+    return Path(load_data_file("ruff.toml")[0]), True
 
 
 def render_template_text(

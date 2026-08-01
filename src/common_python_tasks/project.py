@@ -10,7 +10,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Sequence
 
-from packaging.specifiers import SpecifierSet
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
 
 from . import utils
@@ -133,7 +133,7 @@ def get_package_manager() -> PackageManager:
     env_var, raw_value = override
     if raw_value not in PackageManager:
         utils.fatal(
-            f"Invalid {env_var} value {raw_value!r}. " "Use one of: poetry, uv, auto."
+            f"Invalid {env_var} value {raw_value!r}. Use one of: poetry, uv, auto."
         )
 
     if raw_value == PackageManager.AUTO:
@@ -179,7 +179,9 @@ def get_package_manager_build_command(wheel_only: bool = False) -> list[str]:
     return command
 
 
-def get_package_manager_update_command(dependencies: Sequence[str] | None = None) -> list[str]:
+def get_package_manager_update_command(
+    dependencies: Sequence[str] | None = None,
+) -> list[str]:
     """Return the dependency update command for the selected package manager.
 
     Args:
@@ -427,7 +429,7 @@ def read_pyproject_toml() -> dict[str, Any]:
     return tomllib.loads(Path("pyproject.toml").read_text())
 
 
-BLACK_TARGET_PYTHON_MINORS = range(7, 17)
+RUFF_TARGET_PYTHON_MINORS = range(7, 16)
 
 
 def _specifier_supports_python_minor(specifier_set: SpecifierSet, minor: int) -> bool:
@@ -436,11 +438,11 @@ def _specifier_supports_python_minor(specifier_set: SpecifierSet, minor: int) ->
     )
 
 
-def get_black_target_version() -> str | None:
-    """Return the Black target-version token based on `project.requires-python`.
+def get_ruff_target_version() -> str | None:
+    """Return the Ruff target-version token based on `project.requires-python`.
 
     Returns:
-        The lowest supported Python version in Black format, such as
+        The lowest supported Python version in Ruff format, such as
         `py311`, or `None` when the project metadata is missing or invalid.
     """
     requires_python = read_pyproject_toml().get("project", {}).get("requires-python")
@@ -449,13 +451,13 @@ def get_black_target_version() -> str | None:
 
     try:
         specifier_set = SpecifierSet(requires_python)
-    except Exception:
+    except InvalidSpecifier:
         LOGGER.warning("Unable to parse requires-python specifier: %s", requires_python)
         return None
 
-    for minor in BLACK_TARGET_PYTHON_MINORS:
+    for minor in RUFF_TARGET_PYTHON_MINORS:
         if _specifier_supports_python_minor(specifier_set, minor):
-            return f"py3{minor:02d}"
+            return f"py3{minor}"
     return None
 
 
@@ -638,7 +640,7 @@ def get_project_version_from_poetry() -> str:
     parts = poetry_version_output.rsplit(" ", 1)
     if len(parts) != 2 or not parts[1].strip():
         utils.fatal(
-            "Unexpected poetry version output format: " f"{poetry_version_output!r}"
+            f"Unexpected poetry version output format: {poetry_version_output!r}"
         )
     return parts[1].strip()
 

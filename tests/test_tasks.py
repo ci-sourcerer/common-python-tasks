@@ -23,35 +23,56 @@ def _release_run_command_side_effect(changelog_status: str = " M CHANGELOG.md\n"
     return side_effect
 
 
-def test_format_all_uses_run_available_tools(mock_find_spec):
+def test_format_all_fixes_imports_before_formatting():
     from common_python_tasks.tasks import format_all
-    from common_python_tasks.utils import is_package_installed
 
-    is_package_installed.cache_clear()
-    mock_find_spec.return_value = MagicMock()
-
-    with patch("common_python_tasks.utils.run_command") as mock_cmd:
+    with (
+        patch(
+            "common_python_tasks.utils.get_ruff_config_path",
+            return_value=(None, False),
+        ),
+        patch("common_python_tasks.utils.require_package") as mock_require_package,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
         format_all()
 
-        assert mock_cmd.call_count == 3
+    mock_require_package.assert_called_once_with("ruff")
+    assert mock_run_command.call_args_list == [
+        call(
+            [
+                "ruff",
+                "check",
+                "--fix-only",
+                "--select",
+                "F401,I",
+                Path("."),
+            ]
+        ),
+        call(["ruff", "format", Path(".")]),
+    ]
 
 
-def test_lint_all_uses_run_available_tools(mock_find_spec):
+def test_lint_all_checks_linting_and_formatting():
     from common_python_tasks.tasks import lint_all
-    from common_python_tasks.utils import is_package_installed
 
-    is_package_installed.cache_clear()
-    mock_find_spec.return_value = MagicMock()
+    with (
+        patch(
+            "common_python_tasks.utils.get_ruff_config_path",
+            return_value=(None, False),
+        ),
+        patch("common_python_tasks.utils.require_package") as mock_require_package,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        lint_all()
 
-    with patch("common_python_tasks.utils.run_command") as mock_cmd:
-        with patch("common_python_tasks.utils.get_config_path") as mock_config:
-            mock_config.return_value = ".flake8"
-            lint_all()
+    mock_require_package.assert_called_once_with("ruff")
+    assert mock_run_command.call_args_list == [
+        call(["ruff", "check", Path(".")]),
+        call(["ruff", "format", "--check", Path(".")]),
+    ]
 
-        assert mock_cmd.call_count == 4
 
-
-def test_format_all_fails_when_no_tools_installed(mock_find_spec):
+def test_format_all_fails_when_ruff_is_not_installed(mock_find_spec):
     from common_python_tasks.tasks import format_all
     from common_python_tasks.utils import is_package_installed
 
@@ -65,48 +86,30 @@ def test_format_all_fails_when_no_tools_installed(mock_find_spec):
         assert exc_info.value.code == 1
 
 
-def test_black_uses_target_version_from_project_metadata():
-    from common_python_tasks.tasks import black
+def test_ruff_command_uses_bundled_config_and_project_target_version():
+    from common_python_tasks.tasks import _get_ruff_command
 
     with (
         patch(
-            "common_python_tasks.project.get_black_target_version", return_value="py311"
+            "common_python_tasks.utils.get_ruff_config_path",
+            return_value=(Path("/bundled/ruff.toml"), True),
         ),
-        patch("common_python_tasks.utils.require_package") as mock_require_package,
-        patch("common_python_tasks.utils.run_command") as mock_run_command,
-    ):
-        black()
-
-    mock_require_package.assert_called_once_with("black")
-    mock_run_command.assert_called_once_with(
-        ["black", "--quiet", "--target-version", "py311", "."]
-    )
-
-
-def test_black_check_uses_target_version_from_project_metadata():
-    from common_python_tasks.tasks import black_check
-
-    with (
         patch(
-            "common_python_tasks.project.get_black_target_version", return_value="py311"
+            "common_python_tasks.project.get_ruff_target_version",
+            return_value="py311",
         ),
-        patch("common_python_tasks.utils.require_package") as mock_require_package,
-        patch("common_python_tasks.utils.run_command") as mock_run_command,
     ):
-        black_check()
+        command = _get_ruff_command("check", Path("."))
 
-    mock_require_package.assert_called_once_with("black")
-    mock_run_command.assert_called_once_with(
-        [
-            "black",
-            "--quiet",
-            "--target-version",
-            "py311",
-            "--diff",
-            Path("."),
-            "--check",
-        ]
-    )
+    assert command == [
+        "ruff",
+        "check",
+        Path("."),
+        "--config",
+        Path("/bundled/ruff.toml"),
+        "--target-version",
+        "py311",
+    ]
 
 
 def test_test_forwards_paths_to_pytest_command():
@@ -163,20 +166,6 @@ def test_test_task_paths_arg_is_optional_in_poe_config():
     assert paths_arg["positional"] is True
     assert paths_arg["multiple"] is True
     assert paths_arg["required"] is False
-
-
-def test_lint_all_fails_when_no_tools_installed(mock_find_spec):
-    from common_python_tasks.tasks import lint_all
-    from common_python_tasks.utils import is_package_installed
-
-    is_package_installed.cache_clear()
-    mock_find_spec.return_value = None
-
-    with patch("common_python_tasks.utils.LOGGER"):
-        with pytest.raises(SystemExit) as exc_info:
-            lint_all()
-
-        assert exc_info.value.code == 1
 
 
 def test_print_available_tasks_includes_docstrings(capsys):
@@ -353,9 +342,7 @@ def test_build_and_publish_release_package_deletes_tag_on_failure(failing_task):
         {
             "build_package": mock_build_package,
             "publish_package": mock_publish_package,
-        }[
-            failing_task
-        ].side_effect = SystemExit(2)
+        }[failing_task].side_effect = SystemExit(2)
 
         with pytest.raises(SystemExit) as exc_info:
             _build_and_publish_release_package("v1.2.3")
@@ -2009,7 +1996,7 @@ def test_container_shell_selects_most_recent_tag(
         if len(command) >= 3 and command[:3] == ["docker", "image", "ls"]:
             result = original(command, *args, **kwargs)
             result.stdout = (
-                "docker.io/test-package:abc123\n" "docker.io/test-package:1.0.0\n"
+                "docker.io/test-package:abc123\ndocker.io/test-package:1.0.0\n"
             )
             return result
         if "docker" in command and "run" in command:

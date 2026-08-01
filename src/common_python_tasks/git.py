@@ -185,7 +185,7 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     try:
         current = Version.parse(current_version)
     except Exception:
-        utils.fatal("Unable to parse current project version: " f"{current_version!r}")
+        utils.fatal(f"Unable to parse current project version: {current_version!r}")
 
     def _parse_semver(version_value: str | Any) -> tuple[int, int, int]:
         if not isinstance(version_value, str):

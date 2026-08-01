@@ -1,7 +1,7 @@
 {
     "recommendations": [
         "tamasfe.even-better-toml",
-        "ms-python.black-formatter"
+        "charliermarsh.ruff"
     ],
     "unwantedRecommendations": [
         "ms-python.autopep8",

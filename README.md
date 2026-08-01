@@ -67,8 +67,8 @@ The generated tables below list public tasks only. Tags identify which tasks are
 | --- | --- | --- |
 | `test` | Run the test suite with coverage (if `pytest-cov` is installed). | common, test |
 | `clean` | Clean up temporary files and directories. | clean, common |
-| `format` | Format Python code with autoflake, black, and isort. | common, format |
-| `lint` | Lint Python code with autoflake, black, isort, and flake8. | common, lint |
+| `format` | Fix import issues and format Python code with Ruff. | common, format |
+| `lint` | Check Python lint and formatting with Ruff. | common, lint |
 
 ### Packaging and releases
 
@@ -146,14 +146,16 @@ Supported values are `poetry`, `uv`, and `auto`.
 
 ### Configuration precedence
 
-For pytest, coverage, and isort, configuration resolves in the following order.
+For pytest and coverage, configuration resolves in the following order.
 
-1. Matching `pyproject.toml` sections such as `[tool.pytest.ini_options]`, `[tool.coverage]`, and `[tool.isort]`
+1. Matching `pyproject.toml` sections such as `[tool.pytest.ini_options]` and `[tool.coverage]`
 2. Environment variables that specify a configuration path
 3. Local configuration files in the project root
 4. Bundled defaults from [`src/common_python_tasks/data`](src/common_python_tasks/data)
 
-Flake8 resolves through `FLAKE8_CONFIG`, a local `.flake8` file, and then the bundled default. You can begin with no configuration files and add project-specific settings only when needed.
+Ruff uses `RUFF_CONFIG` when set. Otherwise it discovers `.ruff.toml`, `ruff.toml`, or a `[tool.ruff]` section in `pyproject.toml`. When no project configuration is available, the tasks use the bundled Ruff defaults. Ruff configuration follows Ruff's native file precedence, so `.ruff.toml` takes precedence over `ruff.toml`, which takes precedence over `pyproject.toml` in the same directory.
+
+The `format` task first applies safe fixes for unused imports and import sorting, then runs the Ruff formatter. The `lint` task checks both Ruff lint rules and formatting without changing files.
 
 ### Configuration examples
 
@@ -193,8 +195,7 @@ addopts = "-ra"
 
 - `PYTEST_CONFIG`: Path to the pytest configuration file
 - `COVERAGE_RCFILE`: Path to the coverage configuration file
-- `FLAKE8_CONFIG`: Path to the flake8 configuration file
-- `ISORT_CONFIG`: Path to the isort configuration file
+- `RUFF_CONFIG`: Path to a Ruff TOML configuration file
 
 #### Project and package settings
 

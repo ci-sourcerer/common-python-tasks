@@ -188,7 +188,7 @@ def main() -> None:
     if os.environ.get("RELEASE_SCRIPT_DRY_RUN") == "1":
         current_version = _get_latest_release_version()
         log_dry_run(
-            "Would modify: README.md " "(replace %r with %r)",
+            "Would modify: README.md (replace %r with %r)",
             current_version,
             release_version,
         )

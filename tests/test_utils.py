@@ -2,17 +2,19 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from common_python_tasks.utils import (
     compose_image_name,
     fatal,
     get_container_registry_url,
     get_package_name,
+    get_ruff_config_path,
     is_package_installed,
+    load_data_file,
     normalize_registry,
     parse_image_reference,
     prepend_changelog,
     require_package,
-    run_available_tools,
     run_command,
     run_git_cliff,
 )
@@ -23,8 +25,8 @@ def test_is_package_installed_when_installed(mock_find_spec):
 
     is_package_installed.cache_clear()
 
-    assert is_package_installed("black") is True
-    mock_find_spec.assert_called_with("black")
+    assert is_package_installed("ruff") is True
+    mock_find_spec.assert_called_with("ruff")
 
 
 def test_is_package_installed_when_not_installed(mock_find_spec):
@@ -32,8 +34,8 @@ def test_is_package_installed_when_not_installed(mock_find_spec):
 
     is_package_installed.cache_clear()
 
-    assert is_package_installed("black") is False
-    mock_find_spec.assert_called_with("black")
+    assert is_package_installed("ruff") is False
+    mock_find_spec.assert_called_with("ruff")
 
 
 def test_is_package_installed_handles_dashes(mock_find_spec):
@@ -50,8 +52,8 @@ def test_is_package_installed_caches_results(mock_find_spec):
 
     is_package_installed.cache_clear()
 
-    is_package_installed("black")
-    is_package_installed("black")
+    is_package_installed("ruff")
+    is_package_installed("ruff")
 
     assert mock_find_spec.call_count == 1
 
@@ -173,7 +175,7 @@ def test_require_package_succeeds_when_installed(mock_find_spec):
     mock_find_spec.return_value = MagicMock()
     is_package_installed.cache_clear()
 
-    require_package("black")
+    require_package("ruff")
 
 
 def test_require_package_fails_when_not_installed(mock_find_spec):
@@ -182,67 +184,66 @@ def test_require_package_fails_when_not_installed(mock_find_spec):
 
     with patch("common_python_tasks.utils.LOGGER"):
         with pytest.raises(SystemExit) as exc_info:
-            require_package("black")
+            require_package("ruff")
 
         assert exc_info.value.code == 1
 
 
-def test_run_available_tools_runs_installed_tools(mock_find_spec):
-    is_package_installed.cache_clear()
+def test_get_ruff_config_path_prefers_environment_override(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".ruff.toml").write_text("line-length = 100\n")
+    monkeypatch.setenv("RUFF_CONFIG", "config/custom-ruff.toml")
 
-    def find_spec_side_effect(name):
-        if name == "black":
-            return MagicMock()
-        return None
-
-    mock_find_spec.side_effect = find_spec_side_effect
-
-    black_fn = MagicMock()
-    isort_fn = MagicMock()
-
-    run_available_tools(
-        [(black_fn, "black"), (isort_fn, "isort")], "No tools available"
-    )
-
-    black_fn.assert_called_once()
-    isort_fn.assert_not_called()
+    assert get_ruff_config_path() == (Path("config/custom-ruff.toml"), False)
 
 
-def test_run_available_tools_fails_when_none_installed(mock_find_spec):
-    is_package_installed.cache_clear()
-    mock_find_spec.return_value = None
+@pytest.mark.parametrize("filename", [".ruff.toml", "ruff.toml"])
+def test_get_ruff_config_path_uses_native_toml_discovery(
+    filename, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / filename).write_text("line-length = 100\n")
 
-    black_fn = MagicMock()
-    isort_fn = MagicMock()
-
-    with patch("common_python_tasks.utils.LOGGER"):
-        with pytest.raises(SystemExit) as exc_info:
-            run_available_tools(
-                [(black_fn, "black"), (isort_fn, "isort")], "No tools available"
-            )
-
-        assert exc_info.value.code == 1
-
-    black_fn.assert_not_called()
-    isort_fn.assert_not_called()
+    assert get_ruff_config_path() == (None, False)
 
 
-def test_run_available_tools_runs_all_when_all_installed(mock_find_spec):
-    is_package_installed.cache_clear()
-    mock_find_spec.return_value = MagicMock()
+def test_get_ruff_config_path_discovers_pyproject_ruff_table(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[tool.ruff]\n")
 
-    black_fn = MagicMock()
-    isort_fn = MagicMock()
-    autoflake_fn = MagicMock()
+    assert get_ruff_config_path() == (None, False)
 
-    run_available_tools(
-        [(black_fn, "black"), (isort_fn, "isort"), (autoflake_fn, "autoflake")],
-        "No tools available",
-    )
 
-    black_fn.assert_called_once()
-    isort_fn.assert_called_once()
-    autoflake_fn.assert_called_once()
+def test_get_ruff_config_path_discovers_parent_configuration(tmp_path, monkeypatch):
+    (tmp_path / "ruff.toml").write_text("line-length = 100\n")
+    (tmp_path / "child").mkdir()
+    monkeypatch.chdir(tmp_path / "child")
+
+    assert get_ruff_config_path() == (None, False)
+
+
+def test_get_ruff_config_path_falls_back_to_bundled_config(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    with patch(
+        "common_python_tasks.utils.load_data_file",
+        return_value=(Path("/bundled/ruff.toml"), ""),
+    ):
+        assert get_ruff_config_path() == (Path("/bundled/ruff.toml"), True)
+
+
+def test_bundled_ruff_config_is_available():
+    _, contents = load_data_file("ruff.toml")
+
+    assert 'select = ["E4", "E7", "E9", "F", "I", "W"]' in contents
+
+
+def test_alembic_template_uses_ruff_post_write_hooks():
+    _, contents = load_data_file("alembic.ini.j2", type_identifier="fastapi")
+
+    assert "hooks = ruff_check,ruff_format" in contents
+    assert "ruff_check.options = check --fix-only --select F401,I" in contents
+    assert "ruff_format.options = format REVISION_SCRIPT_FILENAME" in contents
 
 
 def test_run_git_cliff_passes_args_and_capture_output_to_run_command():

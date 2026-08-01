@@ -33,7 +33,7 @@ def test_build_with_multiple_extensions(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n" "{{ EXTENSION_CONTENT|default('') }}\n",
+                "FROM python:3.11\n{{ EXTENSION_CONTENT|default('') }}\n",
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 

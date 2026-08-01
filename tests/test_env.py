@@ -1,4 +1,5 @@
 import pytest
+
 from common_python_tasks.env import (
     inject_auto_build_args_from_env,
     load_container_env_tokens,

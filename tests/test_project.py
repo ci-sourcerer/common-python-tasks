@@ -2,11 +2,11 @@ import importlib.metadata as metadata
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from common_python_tasks.project import (
     PackageManager,
     extract_poe_script_tags,
     get_authors,
-    get_black_target_version,
     get_installed_requirement_version,
     get_package_manager,
     get_package_manager_build_command,
@@ -14,6 +14,7 @@ from common_python_tasks.project import (
     get_package_manager_update_command,
     get_project_version,
     get_release_tag_from_project_version,
+    get_ruff_target_version,
     is_task_tag_included,
 )
 
@@ -176,37 +177,45 @@ def test_get_installed_requirement_version_returns_none_when_not_installed():
         assert get_installed_requirement_version("no-such-package") is None
 
 
-def test_get_black_target_version_from_requires_python():
+def test_get_ruff_target_version_from_requires_python():
     with patch(
         "common_python_tasks.project.read_pyproject_toml",
         return_value={"project": {"requires-python": ">=3.11,<4.0"}},
     ):
-        assert get_black_target_version() == "py311"
+        assert get_ruff_target_version() == "py311"
 
 
 @pytest.mark.parametrize("requires_python", [">=3.11.2,<4", "~=3.11.2"])
-def test_get_black_target_version_supports_patch_level_constraints(requires_python):
+def test_get_ruff_target_version_supports_patch_level_constraints(requires_python):
     with patch(
         "common_python_tasks.project.read_pyproject_toml",
         return_value={"project": {"requires-python": requires_python}},
     ):
-        assert get_black_target_version() == "py311"
+        assert get_ruff_target_version() == "py311"
 
 
-def test_get_black_target_version_returns_none_for_missing_requires_python():
+def test_get_ruff_target_version_supports_single_digit_python_minor():
+    with patch(
+        "common_python_tasks.project.read_pyproject_toml",
+        return_value={"project": {"requires-python": ">=3.7,<3.8"}},
+    ):
+        assert get_ruff_target_version() == "py37"
+
+
+def test_get_ruff_target_version_returns_none_for_missing_requires_python():
     with patch(
         "common_python_tasks.project.read_pyproject_toml",
         return_value={"project": {}},
     ):
-        assert get_black_target_version() is None
+        assert get_ruff_target_version() is None
 
 
-def test_get_black_target_version_returns_none_for_invalid_specifier():
+def test_get_ruff_target_version_returns_none_for_invalid_specifier():
     with patch(
         "common_python_tasks.project.read_pyproject_toml",
         return_value={"project": {"requires-python": "not-a-spec"}},
     ):
-        assert get_black_target_version() is None
+        assert get_ruff_target_version() is None
 
 
 def test_is_task_tag_included_with_include_tags():

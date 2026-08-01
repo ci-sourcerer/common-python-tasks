@@ -1,8 +1,13 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:venv",
     "python-envs.defaultPackageManager": "ms-python.python:pip",
-    "python.analysis.extraPaths": ["src"],
+    "python.analysis.extraPaths": [
+        "src"
+    ],
     "python.testing.pytestEnabled": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
     "files.exclude": {
         "**/.venv": true,
         "**/__pycache__": true,

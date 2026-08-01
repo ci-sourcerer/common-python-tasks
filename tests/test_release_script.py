@@ -23,7 +23,7 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
 ):
     readme_path = tmp_path / "README.md"
     readme_path.write_text(
-        "Version: 1.2.2\n" "<!-- tasks-table -->\nold\n<!-- end-tasks-table -->\n",
+        "Version: 1.2.2\n<!-- tasks-table -->\nold\n<!-- end-tasks-table -->\n",
         encoding="utf-8",
     )
 
@@ -165,7 +165,7 @@ def test_main_dry_run_is_controlled_by_release_script_dry_run_env_pre_phase(
 ):
     readme_path = tmp_path / "README.md"
     readme_text = (
-        "Version: 8.8.8\n" "<!-- tasks-table -->\nold\n<!-- end-tasks-table -->\n"
+        "Version: 8.8.8\n<!-- tasks-table -->\nold\n<!-- end-tasks-table -->\n"
     )
     readme_path.write_text(readme_text, encoding="utf-8")
 

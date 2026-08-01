@@ -72,7 +72,7 @@ def test_installer_updates_existing_poe_table_idempotently(tmp_path, monkeypatch
 
 def test_installer_uses_poetry_with_pinned_version(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text(
-        "[project]\n" 'name = "example"\n' 'version = "0.1.0"\n',
+        '[project]\nname = "example"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("COMMON_PYTHON_TASKS_VERSION", "1.2.3")
@@ -88,7 +88,7 @@ def test_installer_uses_poetry_with_pinned_version(tmp_path, monkeypatch):
 def test_installer_writes_include_script_for_tags_to_include(tmp_path, monkeypatch):
     pyproject_path = tmp_path / "pyproject.toml"
     pyproject_path.write_text(
-        "[project]\n" 'name = "example"\n' 'version = "0.1.0"\n',
+        '[project]\nname = "example"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("TAGS_TO_INCLUDE", "db redis")
@@ -106,7 +106,7 @@ def test_installer_writes_include_script_for_tags_to_include(tmp_path, monkeypat
 def test_installer_selects_package_manager_from_lock_file(tmp_path, monkeypatch):
     pyproject_path = tmp_path / "pyproject.toml"
     pyproject_path.write_text(
-        "[project]\n" 'name = "example"\n' 'version = "0.1.0"\n',
+        '[project]\nname = "example"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
     (tmp_path / "uv.lock").touch()

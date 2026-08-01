@@ -5,16 +5,15 @@ prepend_sys_path = .
 output_encoding = utf-8
 
 [post_write_hooks]
-hooks = black,isort
+hooks = ruff_check,ruff_format
 
-black.type = console_scripts
-black.entrypoint = black
+ruff_check.type = exec
+ruff_check.executable = ruff
+ruff_check.options = check --fix-only --select F401,I REVISION_SCRIPT_FILENAME
 
-autoflake.type = console_scripts
-autoflake.entrypoint = autoflake
-
-isort.type = console_scripts
-isort.entrypoint = isort
+ruff_format.type = exec
+ruff_format.executable = ruff
+ruff_format.options = format REVISION_SCRIPT_FILENAME
 
 # Logging configuration
 [loggers]
