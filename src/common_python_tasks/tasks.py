@@ -269,7 +269,7 @@ def _get_ruff_command(*args: str | Path) -> list[str | Path]:
 
 @tasks.script(tags=["test", "common"])
 def test(*paths: str, quiet: bool = False) -> None:
-    """Run the test suite with coverage (if `pytest-cov` is installed).
+    """Run the test suite with coverage (if pytest-cov is installed).
 
 
     Args:
@@ -339,7 +339,7 @@ def clean(dist_only: bool = False) -> None:
     """Clean up temporary files and directories.
 
     Args:
-        dist_only: Only clean the `dist` directory (and related build artifacts)
+        dist_only: Only clean the dist directory (and related build artifacts)
     """
     from .utils import remove_path
 
@@ -404,15 +404,15 @@ def build_image(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
-        build_args: Additional build arguments as repeated `KEY=VALUE` values.
-            Overrides `CONTAINER_BUILD_ARGS` if provided.
+        build_args: Additional build arguments as repeated KEY=VALUE values.
+            Overrides CONTAINER_BUILD_ARGS if provided.
         container_env: Builder-stage environment declarations as repeated
-            `KEY=VALUE` values.
+            KEY=VALUE values.
         container_envfile: Optional repeated list of files containing builder-stage
             environment declarations.
 
-    Precedence for container env declarations is: `.containerenv`, `container_envfile`, `CONTAINER_ENV`, then `container_env`.
-    All supported sources are stacked in that order.
+    Precedence for container env declarations is: .containerenv, container_envfile,
+    CONTAINER_ENV, then container_env. All supported sources are stacked in that order.
     """
     from .docker import build_image as _build_image
     from .docker import (
@@ -616,8 +616,8 @@ def build_deps_image_task(
         no_cache: Do not use cache when building the deps image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
-        build_args: Additional build arguments as repeated `KEY=VALUE` values.
-            Overrides `CONTAINER_BUILD_ARGS` if provided.
+        build_args: Additional build arguments as repeated KEY=VALUE values.
+            Overrides CONTAINER_BUILD_ARGS if provided.
     """
     from .docker import build_deps_image
     from .env import (
@@ -668,19 +668,18 @@ def run_container(
 ) -> None:
     """Run the Docker image as a container for this project.
 
-    By default (when `tag` is `None`) this will run the most-recently-built tag for
-    the project's image.
+    By default, this will run the most-recently-built tag for the project's image.
 
     Args:
-        tag: Image tag to run. If `None`, use the most-recently-built tag.
+        tag: Image tag to run. Default: Use the most-recently-built tag.
         entrypoint: Optional entrypoint override.
         command: Optional command to pass to the entrypoint.
         root: Whether to run as root (only relevant with a shell entrypoint).
         echo_env: Whether to prepend an env dump to the command.
-        env: Repeated `KEY=VALUE` or `KEY` values to pass with `-e`.
-        envfile: Repeated envfile paths to pass with `--env-file`.
-        privileged: Whether to run the container with `--privileged`.
-        volumes: Repeated volume mounts to pass with `-v`.
+        env: Repeated KEY=VALUE or KEY values to pass with -e.
+        envfile: Repeated envfile paths to pass with --env-file.
+        privileged: Whether to run the container with --privileged.
+        volumes: Repeated volume mounts to pass with -v.
     """
     from .utils import (
         compose_image_name,
@@ -897,7 +896,7 @@ def publish_github_release(
         release_name or os.getenv("GITHUB_RELEASE_NAME") or resolved_tag_name
     )
     resolved_body = body or os.getenv("GITHUB_RELEASE_BODY")
-    # Poe supplies `[]` when an optional repeated CLI argument is omitted.
+    # Poe supplies an empty list when an optional repeated CLI argument is omitted.
     asset_paths = get_github_release_asset_paths(assets or None)
 
     return publish_github_release_helper(
@@ -1133,9 +1132,9 @@ def bump_version(
     """Bump the project version.
 
     Args:
-        component: The version component to bump: `major`, `minor`, `patch`, or
-            `auto` to infer the bump from git history using git-cliff.
-        stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
+        component: The version component to bump: major, minor, patch, or auto to
+            infer the bump from git history using git-cliff.
+        stage: Optional pre-release stage to apply: alpha, beta, or rc.
         dry_run: Print what would happen without making changes.
         allow_dirty: Allow version bumping with uncommitted changes.
 
@@ -1360,17 +1359,17 @@ def release(
     """Run a full release flow for package and containers.
 
     Args:
-        component: The version component to bump: `major`, `minor`, or `patch`.
-        stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
+        component: The version component to bump: major, minor, or patch.
+        stage: Optional pre-release stage to apply: alpha, beta, or rc.
         dry_run: Only perform a dry-run version bump.
         debug: Build/push debug container image tags when releasing containers.
         no_cache: Do not use cache when building container images.
         plain: Do not pretty-print container build output.
         single_arch: Build container image for a single architecture.
         build_args: Additional build arguments for the Docker build as repeated
-            `KEY=VALUE` values.
+            KEY=VALUE values.
         container_env: Inline container environment variables as repeated
-            `KEY=VALUE` values.
+            KEY=VALUE values.
         container_envfile: Repeated list of container environment files.
         assets: Optional repeated list of release asset patterns or paths.
         repository: Optional configured repository name to publish to.
@@ -1412,8 +1411,8 @@ def release_without_containers(
     """Run a full release flow for package artifacts without container publishing.
 
     Args:
-        component: The version component to bump: `major`, `minor`, or `patch`.
-        stage: Optional pre-release stage to apply: `alpha`, `beta`, or `rc`.
+        component: The version component to bump: major, minor, or patch.
+        stage: Optional pre-release stage to apply: alpha, beta, or rc.
         dry_run: Only perform a dry-run version bump.
         assets: Optional repeated list of release asset patterns or paths.
         repository: Optional configured repository name to publish to.
@@ -1496,9 +1495,9 @@ def build_with_containers(
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
         build_args: Additional build arguments for the Docker build as repeated
-            `KEY=VALUE` values.
-        container_env: Inline container environment variables as repeated
-            `KEY=VALUE` values.
+            KEY=VALUE values.
+        container_env: Inline container environment variables as repeated KEY=VALUE
+            values.
         container_envfile: Repeated list of container environment files.
     """
 
@@ -1534,15 +1533,15 @@ def fastapi_stack_up(
     """Bring up the development stack for the application.
 
     Args:
-        debug: Enable debug mode (auto-loads all `*-debug.yml` compose files).
+        debug: Enable debug mode (auto-loads all *-debug.yml compose files).
         no_cache: Do not use cache when building the image.
         detach: Run the stack in detached mode.
         services: Optional repeated list of services to start. If not provided,
             all services will be started.
         build_args: Additional build arguments for the Docker build as repeated
-            `KEY=VALUE` values.
-        container_env: Inline container environment variables as repeated
-            `KEY=VALUE` values.
+            KEY=VALUE values.
+        container_env: Inline container environment variables as repeated KEY=VALUE
+            values.
         container_envfile: Repeated list of container environment files.
     """
     from .docker_compose import (
@@ -1622,8 +1621,8 @@ def fastapi_stack_up(
     )
     api_port = int(compose_env["API_PORT"])
 
-    # When watch mode is active, `docker compose` needs the Dockerfile present
-    # in the project directory so that watch-triggered rebuilds can find it.
+    # When watch mode is active, docker compose needs the Dockerfile present in the
+    # project directory so that watch-triggered rebuilds can find it.
     watch_mode = debug and not detach
     local_dockerfile = Path("Dockerfile")
     wrote_dockerfile = False
@@ -1644,7 +1643,8 @@ def fastapi_stack_up(
     try:
         LOGGER.info("Building and starting the application stack...")
         LOGGER.info(
-            "Starting application. Once the stack is up, check the API docs at http://localhost:%i/api/docs",
+            "Starting application. Once the stack is up, check the API docs at "
+            "http://localhost:%i/api/docs",
             api_port,
         )
         if detach:
@@ -1810,15 +1810,15 @@ def container_shell(
     """Run the debug image with an interactive shell.
 
     Args:
-        tag: Image tag to use. If `None`, use the most-recently-built tag.
-        shell: Preferred shell name or path. If `None`, use the first available from
-            `zsh`, `fish`, `ksh`, `bash`, and `sh`.
+        tag: Image tag to use. Default: Use the most-recently-built tag.
+        shell: Preferred shell name or path. Default: Use the first available from zsh,
+            fish, ksh, bash, and sh.
         root: Whether to run the shell as root.
         no_echo_env: Whether to suppress printing environment variables on startup for debugging.
-        env: Repeated `KEY=VALUE` or `KEY` values to pass with `-e`.
-        envfile: Repeated envfile paths to pass with `--env-file`.
-        privileged: Whether to run the container with `--privileged`.
-        volumes: Repeated volume mounts to pass with `-v`.
+        env: Repeated KEY=VALUE or KEY values to pass with -e.
+        envfile: Repeated envfile paths to pass with --env-file.
+        privileged: Whether to run the container with --privileged.
+        volumes: Repeated volume mounts to pass with -v.
     """
     from shlex import quote
 
