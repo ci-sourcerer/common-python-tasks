@@ -1,3 +1,25 @@
+## [0.7.0] - 2026-08-03
+
+### 🐛 Bug Fixes
+
+- Less verbosity
+
+### 💼 Other
+
+- Formatting
+
+### 🚜 Refactor
+
+- [**breaking**] Replace `black` and `isort` with `ruff` for formatting and linting
+
+### 📚 Documentation
+
+- Reorder some sections
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.7.0
+
 ## [0.6.0] - 2026-07-30
 
 ### 🚀 Features
