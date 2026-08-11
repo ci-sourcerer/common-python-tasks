@@ -400,7 +400,6 @@ def build_image(
         dockerignore_path.write_text(builtin_dockerignore_content, encoding="utf-8")
         temp_dockerignore_created = True
 
-    delete_temp_file = False
     try:
         archs = _resolve_archs(single_arch)
         files_to_ignore = [Path(".dockerignore")] if temp_dockerignore_created else []
@@ -525,10 +524,8 @@ def build_image(
             tags=all_tags,
         )
         utils.run_command(build_cmd)
-        delete_temp_file = True
     finally:
-        if temp_file_path is not None and delete_temp_file:
-            _safe_unlink(dockerfile_path)
+        _safe_unlink(temp_file_path)
         if temp_dockerignore_created:
             _safe_unlink(dockerignore_path)
     return version_tag, commit_tag

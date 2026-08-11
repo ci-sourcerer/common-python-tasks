@@ -118,10 +118,13 @@ class TestDockerignoreHandling:
         from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
+        temporary_dockerfile_path = None
 
         def failing_side_effect(command, *args, **kwargs):
+            nonlocal temporary_dockerfile_path
             result = MagicMock(spec=subprocess.CompletedProcess)
             if "docker" in command and "build" in command:
+                temporary_dockerfile_path = Path(command[command.index("-f") + 1])
                 result.returncode = 1
                 result.stdout = ""
                 result.stderr = "Build failed"
@@ -149,6 +152,8 @@ class TestDockerignoreHandling:
             )
 
         assert not dockerignore_path.exists()
+        assert temporary_dockerfile_path is not None
+        assert not temporary_dockerfile_path.exists()
 
     def test_dockerignore_content_from_builtin(
         self,
