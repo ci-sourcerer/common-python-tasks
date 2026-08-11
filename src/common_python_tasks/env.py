@@ -212,11 +212,6 @@ def split_colon_delimited_values(value: str) -> list[str]:
     return split_delimited_values(value, separators=":", allow_whitespace=True)
 
 
-def split_colon_or_whitespace_delimited_values(value: str) -> list[str]:
-    """Split a colon- or whitespace-delimited string while preserving quoted substrings."""
-    return split_colon_delimited_values(value)
-
-
 def parse_container_build_args(
     cli_build_args: list[str] | None,
     env_build_args: str | None,
