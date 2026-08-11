@@ -217,7 +217,11 @@ class GitHubClient:
 
     @property
     def is_available(self) -> bool:
-        """Whether the client has sufficient information to make authenticated API requests."""
+        """Return whether the client can make authenticated API requests.
+
+        Returns:
+            `True` when both a repository and token are available.
+        """
         return self.repository is not None and self.token is not None
 
     def _build_headers(self, content_type: str | None = None) -> dict[str, str]:
@@ -280,6 +284,17 @@ class GitHubClient:
         payload: dict[str, Any] | None = None,
         allow_404: bool = False,
     ) -> dict[str, Any] | None:
+        """Perform a GitHub API request with an optional JSON payload.
+
+        Args:
+            method: HTTP method name.
+            path: API path relative to the repository.
+            payload: Optional JSON-serializable request body.
+            allow_404: Whether to return `None` for a not-found response.
+
+        Returns:
+            The decoded JSON response, or `None` when no response is available.
+        """
         request_payload = (
             None if payload is None else json.dumps(payload).encode("utf-8")
         )

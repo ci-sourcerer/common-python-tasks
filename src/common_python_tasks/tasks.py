@@ -635,6 +635,9 @@ def build_deps_image_task(
         single_arch: Build images for a single architecture.
         build_args: Additional build arguments as repeated KEY=VALUE values.
             Overrides CONTAINER_BUILD_ARGS if provided.
+
+    Returns:
+        The full dependency image tag.
     """
     from .docker import build_deps_image
     from .env import (
@@ -894,7 +897,16 @@ def publish_github_release(
     draft: bool = False,
     assets: list[str] | None = None,
 ) -> None:
-    """Publish or update a GitHub Release for the current repository."""
+    """Publish or update a GitHub Release for the current repository.
+
+    Args:
+        tag_name: Optional release tag to publish.
+        release_name: Optional display name for the release.
+        body: Optional release notes body.
+        prerelease: Whether to mark the release as a pre-release.
+        draft: Whether to create the release as a draft.
+        assets: Optional release asset paths or glob patterns.
+    """
     from .env import env_truthy
     from .github import (
         get_github_release_asset_paths,
@@ -1106,7 +1118,12 @@ def update_dependencies(
 
 @tasks.script(task_name="build-package", tags=["packaging", "build", "common"])
 def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
-    """Build the package (wheel and sdist)."""
+    """Build the package (wheel and sdist).
+
+    Args:
+        wheel_only: Whether to build only the wheel artifact.
+        clean_dist: Whether to remove existing distribution artifacts first.
+    """
     from .project import get_package_manager_build_command
     from .utils import run_command
 
@@ -1511,7 +1528,7 @@ def build_with_containers(
 
 @tasks.script(task_name="build", tags=["packaging", "common"])
 def build_without_containers() -> None:
-    """Build the project."""
+    """Build the project without containers."""
 
     build(False)
 

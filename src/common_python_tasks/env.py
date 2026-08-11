@@ -208,7 +208,14 @@ def split_delimited_values(
 
 
 def split_colon_delimited_values(value: str) -> list[str]:
-    """Split colon-delimited values while preserving quoted or escaped colons."""
+    """Split colon-delimited values while preserving quoted or escaped colons.
+
+    Args:
+        value: The string to split.
+
+    Returns:
+        The parsed tokens.
+    """
     return split_delimited_values(value, separators=":", allow_whitespace=True)
 
 
@@ -216,7 +223,15 @@ def parse_container_build_args(
     cli_build_args: list[str] | None,
     env_build_args: str | None,
 ) -> dict[str, str] | None:
-    """Parse container build args from CLI or environment input."""
+    """Parse container build args from CLI or environment input.
+
+    Args:
+        cli_build_args: Repeated `KEY=VALUE` values passed on the command line.
+        env_build_args: Colon-delimited `KEY=VALUE` values from the environment.
+
+    Returns:
+        Parsed build arguments, or `None` when neither source has values.
+    """
     if cli_build_args and any(token.strip() for token in cli_build_args):
         build_arg_tokens = [
             token.strip() for token in cli_build_args if token and token.strip()
@@ -287,7 +302,15 @@ def load_container_env_tokens(
     container_env: str | list[str] | None = None,
     container_envfile: str | list[str] | None = None,
 ) -> list[str]:
-    """Load container env declarations from multiple sources in precedence order."""
+    """Load container env declarations from multiple sources in precedence order.
+
+    Args:
+        container_env: Inline container environment declarations.
+        container_envfile: Paths to files containing environment declarations.
+
+    Returns:
+        Environment tokens ordered from lowest to highest precedence.
+    """
     tokens: list[str] = []
 
     file_value = load_container_env_file()
@@ -339,6 +362,9 @@ def parse_container_deps() -> str | None:
     """Return the Dockerfile content for the deps image from environment.
 
     `CONTAINER_DEPS_CONTENT` overrides `CONTAINER_DEPS_FILE`.
+
+    Returns:
+        The resolved dependency Dockerfile content, or `None` when unset.
     """
     dockerfile_path, content = parse_container_deps_source()
     if content is not None:
@@ -395,7 +421,14 @@ def parse_container_deps_mappings() -> dict[str, str] | None:
 
 
 def render_container_deps_move_script(mappings: dict[str, str]) -> str:
-    """Render a Python script that moves deps from /tmp/deps into target paths."""
+    """Render a Python script that moves deps from `/tmp/deps` into target paths.
+
+    Args:
+        mappings: Dependency names mapped to their destination paths.
+
+    Returns:
+        Executable Python script text, or an empty string for no mappings.
+    """
     if not mappings:
         return ""
 
@@ -428,6 +461,9 @@ def get_container_deps_move_script() -> str | None:
     Supports either inline executable script content via
     `CONTAINER_DEPS_MOVE_SCRIPT` or a host-side script file path via
     `CONTAINER_DEPS_MOVE_SCRIPT_PATH`.
+
+    Returns:
+        The configured move script text, or `None` when none is configured.
     """
 
     script_path_value = os.getenv("CONTAINER_DEPS_MOVE_SCRIPT_PATH")

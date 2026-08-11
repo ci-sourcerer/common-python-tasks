@@ -218,7 +218,11 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
 
 
 def git_available() -> bool:
-    """Return `True` if Git is installed and the current directory is a repository."""
+    """Return whether Git is installed and the current directory is a repository.
+
+    Returns:
+        `True` when Git is available in the current repository.
+    """
 
     if shutil.which("git") is None:
         return False

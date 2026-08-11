@@ -11,6 +11,15 @@ __all__ = ["TaskCollection"]
 def tasks(
     include_tags: "Sequence[str] | None" = None, exclude_tags: "Sequence[str]" = tuple()
 ) -> dict:
+    """Return the task collection filtered by the requested tags.
+
+    Args:
+        include_tags: Tags that selected tasks must have. Defaults to `common`.
+        exclude_tags: Tags that selected tasks must not have.
+
+    Returns:
+        The filtered Poe task collection configuration.
+    """
     from .tasks import tasks as task_collection
 
     if include_tags is None and not exclude_tags:

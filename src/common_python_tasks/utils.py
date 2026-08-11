@@ -55,6 +55,9 @@ def fatal(message: str, exit_code: int = 1) -> None:
     Args:
         message: The error message to log.
         exit_code: The exit code to use when terminating the program.
+
+    Returns:
+        This function does not return because it terminates the process.
     """
     LOGGER.critical(message)
     sys.exit(exit_code)
@@ -71,7 +74,12 @@ def require_package(package_name: str) -> None:
 
 
 def log_dry_run(message: str, *args: object) -> None:
-    """Log a dry-run informational message with a yellow prefix."""
+    """Log a dry-run informational message with a yellow prefix.
+
+    Args:
+        message: The log message template.
+        *args: Values interpolated into the log message.
+    """
     LOGGER.info("\033[93m[DRY RUN]\033[0m " + message, *args)
 
 
@@ -243,7 +251,11 @@ def get_registry_username() -> str:
 
 
 def get_registry_namespace() -> str | None:
-    """Return the container registry namespace from the environment, if set."""
+    """Return the container registry namespace from the environment, if set.
+
+    Returns:
+        The configured namespace, or `None` when it is unset or blank.
+    """
     namespace = os.getenv("CONTAINER_REGISTRY_NAMESPACE")
     return namespace.strip() if namespace and namespace.strip() else None
 
@@ -441,6 +453,7 @@ def get_config_path(
         local_config_filename: Name of the local config file to look for.
         data_config_filename: Name of the bundled config file to use as fallback.
         tool_name: Optional tool name to check in `pyproject.toml` under `[tool.{tool_name}]`.
+        type_identifier: Bundled data directory that contains the fallback file.
 
     Returns:
         `Path` to config file, or `None` if config exists in `pyproject.toml`
@@ -504,7 +517,15 @@ def render_template_text(
     template_text: str,
     extra_template_vars: dict[str, str] | None = None,
 ) -> str:
-    """Render a Jinja2 template string with optional template variables."""
+    """Render a Jinja2 template string with optional template variables.
+
+    Args:
+        template_text: Jinja2 template text to render.
+        extra_template_vars: Optional values available to the template.
+
+    Returns:
+        The rendered template text.
+    """
     template_vars = {**extra_template_vars} if extra_template_vars else {}
     return Template(template_text).render(**template_vars)
 
@@ -583,7 +604,11 @@ def prepend_changelog(
 
 
 def changelog() -> str | None:
-    """Generate release notes from git-cliff for unreleased commits."""
+    """Generate release notes from git-cliff for unreleased commits.
+
+    Returns:
+        Generated release notes, or `None` when git-cliff produces no content.
+    """
     res = run_git_cliff(["--unreleased"], capture_output=True)
     if not res or not res.stdout:
         LOGGER.warning("git-cliff produced no release notes for unreleased commits")

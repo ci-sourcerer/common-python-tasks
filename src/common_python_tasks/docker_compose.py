@@ -224,7 +224,7 @@ def get_or_generate_secret(
 
 
 def ensure_secrets_generated() -> None:
-    """Ensure required secrets exist (generate once and persist to `.env`)."""
+    """Ensure required secrets exist and persist them to `.env`."""
     get_or_generate_secret("SECRET_KEY")
     get_or_generate_secret("DB_PASS")
 
@@ -521,6 +521,7 @@ def run_docker_compose_command(
         *args: Command arguments (None values are filtered out).
         compose_files: List of compose file paths.
         compose_env: Environment variables for the command.
+        tasks: Poe task collection that supplies configured env files.
     """
 
     utils.run_command(
