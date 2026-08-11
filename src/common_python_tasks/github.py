@@ -604,7 +604,7 @@ def upload_github_release_asset(
     """
 
     if not asset_path.is_file():
-        utils.fatal("GitHub Release asset not found: %s", asset_path)
+        utils.fatal(f"GitHub Release asset not found: {asset_path}")
 
     existing_assets = get_github_release_assets(release_id)
     for asset in existing_assets:

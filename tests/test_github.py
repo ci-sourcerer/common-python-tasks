@@ -2,12 +2,15 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from common_python_tasks.github import (
     GitHubClient,
     get_github_api_base_url,
     get_github_release_asset_paths,
     get_github_repository,
     get_github_token,
+    upload_github_release_asset,
 )
 
 
@@ -187,3 +190,12 @@ def test_get_github_release_asset_paths_returns_no_assets_for_empty_asset_list(
     result = get_github_release_asset_paths([])
 
     assert result == []
+
+
+def test_upload_github_release_asset_reports_missing_path(tmp_path, caplog):
+    missing_asset = tmp_path / "missing.whl"
+
+    with pytest.raises(SystemExit):
+        upload_github_release_asset(1, missing_asset)
+
+    assert f"GitHub Release asset not found: {missing_asset}" in caplog.text

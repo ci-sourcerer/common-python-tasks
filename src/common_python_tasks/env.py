@@ -377,8 +377,8 @@ def parse_container_deps_mappings() -> dict[str, str] | None:
     for token in tokens:
         if ":" not in token:
             utils.fatal(
-                "CONTAINER_DEPS_MAPPINGS must contain pairs like 'name:/target/path'; invalid token: %s",
-                token,
+                "CONTAINER_DEPS_MAPPINGS must contain pairs like "
+                f"'name:/target/path'; invalid token: {token}",
             )
         name, dest = token.split(":", 1)
         name = name.strip()

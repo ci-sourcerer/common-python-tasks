@@ -478,12 +478,14 @@ class TestParseContainerDepsMappings:
             "dep2": "/usr/local/bin/dep two",
         }
 
-    def test_invalid_token_raises(self, monkeypatch):
+    def test_invalid_token_raises(self, monkeypatch, caplog):
         from common_python_tasks.env import parse_container_deps_mappings
 
         monkeypatch.setenv("CONTAINER_DEPS_MAPPINGS", "invalid-token")
         with pytest.raises(SystemExit):
             parse_container_deps_mappings()
+
+        assert "invalid token: invalid-token" in caplog.text
 
     def test_duplicate_name_raises(self, monkeypatch):
         from common_python_tasks.env import parse_container_deps_mappings
