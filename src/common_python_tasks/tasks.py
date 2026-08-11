@@ -5,7 +5,7 @@ import os
 import re
 from functools import partial, wraps
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from poethepoet_tasks import TaskCollection
 
@@ -58,6 +58,14 @@ _task_call_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
 )
 
 _original_script = tasks.script
+
+
+class _ContainerBuild(NamedTuple):
+    """Artifacts created by a container build task."""
+
+    dockerfile_text: str
+    version_tag: str
+    commit_tag: str
 
 
 def _make_var_positional_task_args_optional(
@@ -396,7 +404,7 @@ def build_image(
     build_args: list[str] | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
-) -> None:
+) -> _ContainerBuild:
     """Build the container image for this project using the Dockerfile template.
 
     Args:
@@ -413,6 +421,9 @@ def build_image(
 
     Precedence for container env declarations is: .containerenv, container_envfile,
     CONTAINER_ENV, then container_env. All supported sources are stacked in that order.
+
+    Returns:
+        The generated Dockerfile text and image tags.
     """
     from .docker import build_image as _build_image
     from .docker import (
@@ -601,6 +612,12 @@ def build_image(
         prune_images_keep(
             get_full_image_name(), get_package_name(), keep, protect_tags=protect
         )
+
+    return _ContainerBuild(
+        dockerfile_text=dockerfile_text,
+        version_tag=version_tag,
+        commit_tag=commit_tag,
+    )
 
 
 @tasks.script(task_name="build-deps-image", tags=["containers", "build"])
@@ -1532,63 +1549,17 @@ def fastapi_stack_up(
         load_and_prepare_compose,
         run_docker_compose_command,
     )
-    from .env import (
-        get_cache_id_suffix,
-        load_container_env_tokens,
-        parse_container_build_args,
-    )
-    from .project import (
-        get_package_manager,
-        has_debug_dependency_group,
-        resolve_container_entrypoint_command,
-    )
-    from .utils import (
-        fatal,
-        load_data_file,
-        render_template_text,
-    )
 
-    has_debug_deps = has_debug_dependency_group()
-    if debug and not has_debug_deps:
-        fatal(
-            "Debug stack requested, but no non-empty [dependency-groups].debug was found in pyproject.toml"
-        )
-
-    container_env_vars = load_container_env_tokens(container_env, container_envfile)
-    parsed_build_args = parse_container_build_args(
-        build_args,
-        os.getenv("CONTAINER_BUILD_ARGS"),
-    )
-    entrypoint_command = resolve_container_entrypoint_command(
-        entrypoint_script=(parsed_build_args or {}).get("CUSTOM_ENTRYPOINT")
-    )
-
-    cache_id_suffix = get_cache_id_suffix(no_cache)
-
-    dockerfile_text = render_template_text(
-        load_data_file("Dockerfile.j2")[1],
-        {
-            "PACKAGE_MANAGER": get_package_manager(),
-            "EXTENSION_CONTENT": "",
-            "HAS_DEBUG_DEPS": has_debug_deps,
-            "APT_PACKAGES": "",
-            "ENTRYPOINT_COMMAND": entrypoint_command,
-            "CONTAINER_ENV_VARS": container_env_vars,
-            "CACHE_ID_SUFFIX": cache_id_suffix,
-        },
-    )
-
-    commit_tag = build_image(
-        None,
-        dockerfile_text,
-        Path("."),
+    container_build = build_image(
         debug=debug,
         no_cache=no_cache,
         single_arch=True,
         build_args=build_args,
         container_env=container_env,
         container_envfile=container_envfile,
-    )[1]
+    )
+    commit_tag = container_build.commit_tag
+    dockerfile_text = container_build.dockerfile_text
 
     ensure_secrets_generated()
 
@@ -1704,13 +1675,13 @@ def fastapi_stack_down() -> None:
 @tasks.script(task_name="reset-db", tags=["web", "containers", "database", "fastapi"])
 def fastapi_reset_db() -> None:
     """Reset the database by deleting the database volume."""
-    from .docker_compose import load_and_prepare_compose
+    from .docker_compose import get_compose_env
     from .utils import (
         get_package_name,
         run_command,
     )
 
-    compose_env = load_and_prepare_compose()[3]
+    compose_env = get_compose_env()
 
     volume_name = f"{get_package_name()}-db-data"
     run_command(
@@ -1726,27 +1697,33 @@ def fastapi_reset_db() -> None:
 def fastapi_run_db_migrations() -> None:
     """Run database migrations."""
     from .docker_compose import (
+        cleanup_temp_files,
         load_and_prepare_compose,
         run_docker_compose_command,
     )
 
     services = ["db", "migrator"]
     fastapi_stack_up(debug=False, detach=True, services=services)
-    compose_files, _, _, compose_env = load_and_prepare_compose()
-    run_docker_compose_command(
-        "logs",
-        "migrator",
-        compose_files=compose_files,
-        compose_env=compose_env,
-        tasks=tasks,
-    )
-    fastapi_stack_down()
+    try:
+        compose_files, temp_compose_files, _, compose_env = load_and_prepare_compose()
+        try:
+            run_docker_compose_command(
+                "logs",
+                "migrator",
+                compose_files=compose_files,
+                compose_env=compose_env,
+                tasks=tasks,
+            )
+        finally:
+            cleanup_temp_files(temp_compose_files)
+    finally:
+        fastapi_stack_down()
 
 
 @tasks.script(task_name="db-shell", tags=["web", "containers", "database", "fastapi"])
 def fastapi_db_shell() -> None:
     """Open a psql shell to the database container."""
-    from .docker_compose import load_and_prepare_compose
+    from .docker_compose import cleanup_temp_files, load_and_prepare_compose
     from .utils import (
         get_package_name,
         run_command,
@@ -1754,23 +1731,25 @@ def fastapi_db_shell() -> None:
 
     fastapi_stack_up(debug=False, no_cache=True, detach=True, services=["db"])
     try:
-        compose_files, _, _, compose_env = load_and_prepare_compose()
-
-        run_command(
-            [
-                "docker",
-                "compose",
-                *[item for f in compose_files for item in ("-f", str(f))],
-                "exec",
-                "-it",
-                "db",
-                "psql",
-                "-U",
-                os.getenv("DB_USER", get_package_name()),
-                os.getenv("DB_BASE", get_package_name()),
-            ],
-            env=compose_env,
-        )
+        compose_files, temp_compose_files, _, compose_env = load_and_prepare_compose()
+        try:
+            run_command(
+                [
+                    "docker",
+                    "compose",
+                    *[item for f in compose_files for item in ("-f", str(f))],
+                    "exec",
+                    "-it",
+                    "db",
+                    "psql",
+                    "-U",
+                    os.getenv("DB_USER", get_package_name()),
+                    os.getenv("DB_BASE", get_package_name()),
+                ],
+                env=compose_env,
+            )
+        finally:
+            cleanup_temp_files(temp_compose_files)
     finally:
         fastapi_stack_down()
 

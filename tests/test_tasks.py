@@ -1810,8 +1810,8 @@ def test_fastapi_stack_up_passes_container_build_options(
     build_image_calls = []
 
     def fake_build_image(*args, **kwargs):
-        build_image_calls.append(kwargs)
-        return ("version", "commit")
+        build_image_calls.append((args, kwargs))
+        return MagicMock(commit_tag="commit", dockerfile_text="FROM python")
 
     with (
         patch("common_python_tasks.docker.build_image") as mock_low_level_build_image,
@@ -1836,78 +1836,12 @@ def test_fastapi_stack_up_passes_container_build_options(
         )
 
     assert len(build_image_calls) == 1
-    assert build_image_calls[0]["build_args"] == ["FOO=bar"]
-    assert build_image_calls[0]["container_env"] == ["X=1"]
-    assert build_image_calls[0]["container_envfile"] == ["env1.env"]
+    args, kwargs = build_image_calls[0]
+    assert args == ()
+    assert kwargs["build_args"] == ["FOO=bar"]
+    assert kwargs["container_env"] == ["X=1"]
+    assert kwargs["container_envfile"] == ["env1.env"]
     assert mock_low_level_build_image.call_count == 0
-
-
-def test_fastapi_stack_up_uses_custom_entrypoint_from_build_args(
-    temp_project_dir,
-    mock_load_data_file,
-    mock_run_command,
-):
-    from common_python_tasks.tasks import fastapi_stack_up
-
-    with (
-        patch(
-            "common_python_tasks.tasks.build_image", return_value=("version", "commit")
-        ),
-        patch("common_python_tasks.env.load_container_env_tokens", return_value=[]),
-        patch(
-            "common_python_tasks.env.parse_container_build_args",
-            return_value={"CUSTOM_ENTRYPOINT": "my-worker"},
-        ) as mock_parse,
-        patch(
-            "common_python_tasks.project.resolve_container_entrypoint_command",
-            return_value="my-worker",
-        ) as mock_resolve,
-        patch("common_python_tasks.docker_compose.ensure_secrets_generated"),
-        patch(
-            "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([], [], [], {"API_PORT": "8080"}),
-        ),
-        patch("common_python_tasks.docker_compose.run_docker_compose_command"),
-    ):
-        fastapi_stack_up(detach=True, build_args=["CUSTOM_ENTRYPOINT=my-worker"])
-
-    assert mock_parse.call_count == 1
-    assert mock_parse.call_args.args[0] == ["CUSTOM_ENTRYPOINT=my-worker"]
-    mock_resolve.assert_called_once_with(entrypoint_script="my-worker")
-
-
-def test_fastapi_stack_up_uses_default_entrypoint_when_custom_entrypoint_missing(
-    temp_project_dir,
-    mock_load_data_file,
-    mock_run_command,
-):
-    from common_python_tasks.tasks import fastapi_stack_up
-
-    with (
-        patch(
-            "common_python_tasks.tasks.build_image", return_value=("version", "commit")
-        ),
-        patch("common_python_tasks.env.load_container_env_tokens", return_value=[]),
-        patch(
-            "common_python_tasks.env.parse_container_build_args",
-            return_value={"FOO": "bar"},
-        ) as mock_parse,
-        patch(
-            "common_python_tasks.project.resolve_container_entrypoint_command",
-            return_value="python",
-        ) as mock_resolve,
-        patch("common_python_tasks.docker_compose.ensure_secrets_generated"),
-        patch(
-            "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([], [], [], {"API_PORT": "8080"}),
-        ),
-        patch("common_python_tasks.docker_compose.run_docker_compose_command"),
-    ):
-        fastapi_stack_up(detach=True, build_args=["FOO=bar"])
-
-    assert mock_parse.call_count == 1
-    assert mock_parse.call_args.args[0] == ["FOO=bar"]
-    mock_resolve.assert_called_once_with(entrypoint_script=None)
 
 
 def test_fastapi_stack_up_detach_passes_tasks_to_compose_command(
@@ -1919,7 +1853,8 @@ def test_fastapi_stack_up_detach_passes_tasks_to_compose_command(
 
     with (
         patch(
-            "common_python_tasks.tasks.build_image", return_value=("version", "commit")
+            "common_python_tasks.tasks.build_image",
+            return_value=MagicMock(commit_tag="commit", dockerfile_text="FROM python"),
         ),
         patch(
             "common_python_tasks.env.load_container_env_tokens", return_value=["X=1"]
@@ -1978,6 +1913,24 @@ def test_fastapi_stack_down_passes_tasks_to_compose_command():
 
     assert mock_run.call_count == 1
     assert "tasks" in mock_run.call_args.kwargs
+
+
+def test_fastapi_stack_down_removes_generated_config(tmp_path):
+    from common_python_tasks.tasks import fastapi_stack_down
+
+    generated_config = tmp_path / ".fastapi.alembic.ini.common-python-tasks"
+    generated_config.write_text("generated", encoding="utf-8")
+
+    with (
+        patch(
+            "common_python_tasks.docker_compose.load_and_prepare_compose",
+            return_value=([], [], [generated_config], {"API_PORT": "8080"}),
+        ),
+        patch("common_python_tasks.docker_compose.run_docker_compose_command"),
+    ):
+        fastapi_stack_down()
+
+    assert not generated_config.exists()
 
 
 def test_container_shell_selects_most_recent_tag(

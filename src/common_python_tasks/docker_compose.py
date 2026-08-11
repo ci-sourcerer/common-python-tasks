@@ -35,6 +35,13 @@ def ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
         LOGGER.debug("Using existing alembic.ini")
         return alembic_ini_path, False
 
+    generated_alembic_ini_path = Path(
+        f".{compose_type}.alembic.ini.common-python-tasks"
+    )
+    if generated_alembic_ini_path.exists():
+        LOGGER.debug("Using generated alembic.ini at %s", generated_alembic_ini_path)
+        return generated_alembic_ini_path, True
+
     result = utils.load_data_file(
         "alembic.ini.j2", type_identifier=compose_type, fatal_on_missing=False
     )
@@ -45,9 +52,9 @@ def ensure_alembic_config(compose_type: str) -> tuple[Path | None, bool]:
     rendered = Template(template_content).render(
         package_name=utils.get_package_name(use_underscores=True),
     )
-    alembic_ini_path.write_text(rendered, encoding="utf-8")
-    LOGGER.debug("Rendered bundled alembic.ini.j2 to %s", alembic_ini_path)
-    return alembic_ini_path, True
+    generated_alembic_ini_path.write_text(rendered, encoding="utf-8")
+    LOGGER.debug("Rendered bundled alembic.ini.j2 to %s", generated_alembic_ini_path)
+    return generated_alembic_ini_path, True
 
 
 def render_file(

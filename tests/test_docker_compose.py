@@ -145,3 +145,35 @@ def test_ensure_secrets_generated_creates_keys(tmp_path, monkeypatch):
     content = dotenv.read_text(encoding="utf-8")
     assert "SECRET_KEY=" in content
     assert "DB_PASS=" in content
+
+
+def test_ensure_alembic_config_reuses_identifiable_generated_file(
+    tmp_path, monkeypatch
+):
+    from common_python_tasks.docker_compose import (
+        cleanup_temp_files,
+        ensure_alembic_config,
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "common_python_tasks.docker_compose.utils.load_data_file",
+        lambda *args, **kwargs: (
+            Path("alembic.ini.j2"),
+            "package = {{ package_name }}",
+        ),
+    )
+    monkeypatch.setattr(
+        "common_python_tasks.docker_compose.utils.get_package_name",
+        lambda **kwargs: "example_package",
+    )
+
+    config_path, should_cleanup = ensure_alembic_config("fastapi")
+
+    assert config_path == Path(".fastapi.alembic.ini.common-python-tasks")
+    assert should_cleanup
+    assert config_path.read_text(encoding="utf-8") == "package = example_package"
+    assert ensure_alembic_config("fastapi") == (config_path, True)
+
+    cleanup_temp_files([config_path])
+    assert not config_path.exists()
