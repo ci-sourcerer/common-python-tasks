@@ -909,28 +909,6 @@ def publish_github_release(
     )
 
 
-def _get_default_branch() -> str:
-    from .utils import run_command
-
-    result = run_command(
-        ["git", "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
-        capture_output=True,
-        acceptable_returncodes={0, 1},
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        return result.stdout.strip().rsplit("/", 1)[-1]
-    return "main"
-
-
-def _get_current_branch() -> str:
-    from .utils import fatal, run_command
-
-    result = run_command(["git", "branch", "--show-current"], capture_output=True)
-    if not result.stdout.strip():
-        fatal("Unable to determine current git branch.")
-    return result.stdout.strip()
-
-
 def _dependency_branch_token(name: str) -> str:
     return re.sub(r"[^a-z0-9._-]+", "-", name.lower()).strip("-") or "updates"
 
@@ -1047,6 +1025,7 @@ def update_dependencies(
         draft: Create the pull request as a draft.
         run_tests: Run the test task before committing.
     """
+    from .git import get_current_branch, get_default_branch
     from .github import create_pull_request
     from .project import get_package_manager_update_command
     from .utils import run_command
@@ -1097,12 +1076,12 @@ def update_dependencies(
         )
 
     if pr:
-        current_branch = _get_current_branch()
+        current_branch = get_current_branch()
         run_command(["git", "push", "-u", "origin", current_branch])
         create_pull_request(
             title=_dependency_update_title(changed_dependency_names),
             head=current_branch,
-            base=_get_default_branch(),
+            base=get_default_branch(),
             body="Automated dependency update.",
             draft=draft,
         )

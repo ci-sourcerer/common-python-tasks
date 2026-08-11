@@ -290,3 +290,26 @@ class TestGetImageTag:
         with patch("common_python_tasks.git.shutil.which", return_value=None):
             assert get_version() == "0.0.0"
             assert get_image_tag() == "0.0.0"
+
+
+def test_get_default_branch_uses_origin_head():
+    from common_python_tasks.git import get_default_branch
+
+    with patch(
+        "common_python_tasks.utils.run_command",
+        return_value=MagicMock(stdout="refs/remotes/origin/trunk\n", returncode=0),
+    ):
+        assert get_default_branch() == "trunk"
+
+
+def test_get_current_branch_rejects_detached_head():
+    from common_python_tasks.git import get_current_branch
+
+    with (
+        patch(
+            "common_python_tasks.utils.run_command",
+            return_value=MagicMock(stdout="\n", returncode=0),
+        ),
+        pytest.raises(SystemExit),
+    ):
+        get_current_branch()

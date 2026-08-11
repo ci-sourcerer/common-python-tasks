@@ -337,30 +337,40 @@ def has_tags_later_in_history() -> bool:
     return False
 
 
-def ensure_on_default_branch() -> None:
-    """Fail if the current branch is not the repository default branch."""
+def get_default_branch() -> str:
+    """Return the repository default branch, falling back to `main`.
 
+    Returns:
+        The branch named by `origin/HEAD`, or `main` when it is unavailable.
+    """
     result = utils.run_command(
         ["git", "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
         capture_output=True,
         acceptable_returncodes={0, 1},
     )
-
-    default_branch = "main"
     if result.returncode == 0 and result.stdout.strip():
-        default_branch = result.stdout.strip().rsplit("/", 1)[-1]
+        return result.stdout.strip().rsplit("/", 1)[-1]
+    return "main"
 
-    current_branch_result = utils.run_command(
-        ["git", "branch", "--show-current"],
-        capture_output=True,
-        acceptable_returncodes={0},
-    )
-    current_branch = current_branch_result.stdout.strip()
+
+def get_current_branch() -> str:
+    """Return the currently checked-out branch.
+
+    Returns:
+        The current branch name.
+    """
+    result = utils.run_command(["git", "branch", "--show-current"], capture_output=True)
+    current_branch = result.stdout.strip()
     if not current_branch:
-        utils.fatal(
-            "Unable to determine current git branch. "
-            "Release may only be run from the repository default branch."
-        )
+        utils.fatal("Unable to determine current git branch.")
+    return current_branch
+
+
+def ensure_on_default_branch() -> None:
+    """Fail if the current branch is not the repository default branch."""
+
+    default_branch = get_default_branch()
+    current_branch = get_current_branch()
 
     if current_branch != default_branch:
         utils.fatal(
