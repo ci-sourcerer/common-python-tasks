@@ -87,6 +87,7 @@ The generated tables below list public tasks only. Tags identify which tasks are
 | Task | Description | Tags |
 | --- | --- | --- |
 | `build-image` | Build the container image for this project using the Dockerfile template. | build, containers |
+| `render-build-image` | Render the final image build plan, persist the Dockerfile, and print the exact command. | build, containers |
 | `build-deps-image` | Build only the container dependency collector image for this project. | build, containers |
 | `run-container` | Run the Docker image as a container for this project. By default, this will run the most-recently-built tag for the project's image. | containers |
 | `push-image` | Push the Docker image for this project to the container registry. | containers, packaging, release |
