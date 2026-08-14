@@ -1,14 +1,21 @@
+import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import pytest
+
+from common_python_tasks import readme_tasks_table
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "release_script.py"
 README_PATH = SCRIPT_PATH.parents[1] / "README.md"
 
 
 def _load_release_script_module():
+    script_directory = str(SCRIPT_PATH.parent)
+    if script_directory not in sys.path:
+        sys.path.insert(0, script_directory)
+
     spec = spec_from_file_location("release_script_under_test", SCRIPT_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load release_script.py for tests")
@@ -34,10 +41,14 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
     release_script = _load_release_script_module()
 
     with (
-        patch.object(release_script, "get_available_tasks", return_value=["format"]),
-        patch.object(release_script, "_get_task_docstring", return_value="Format code"),
         patch.object(
-            release_script,
+            readme_tasks_table, "get_available_tasks", return_value=["format"]
+        ),
+        patch.object(
+            readme_tasks_table, "_get_task_docstring", return_value="Format code"
+        ),
+        patch.object(
+            readme_tasks_table,
             "get_task_tags",
             return_value=["common", "format"],
         ),
@@ -50,10 +61,9 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
                     0,
                     stdout="v1.2.2\n",
                 ),
-                None,
-                None,
             ],
         ) as mock_run,
+        patch.object(release_script, "commit_readme_update") as mock_commit,
     ):
         release_script.main()
 
@@ -61,71 +71,31 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
     assert "Version: 1.2.3" in updated_text
     assert "### Daily development" in updated_text
     assert "| `format` | Format code | common, format |" in updated_text
-    mock_run.assert_has_calls(
-        [
-            call(
-                ["git", "tag", "--sort=-version:refname"],
-                capture_output=True,
-                check=True,
-                text=True,
-            ),
-            call(["git", "add", "README.md"], check=True),
-            call(
-                [
-                    "git",
-                    "commit",
-                    "-m",
-                    "chore(release): set README version 1.2.3",
-                ],
-                check=True,
-            ),
-        ]
+    mock_run.assert_called_once_with(
+        ["git", "tag", "--sort=-version:refname"],
+        capture_output=True,
+        check=True,
+        text=True,
     )
+    mock_commit.assert_called_once_with("chore(release): set README version 1.2.3")
 
 
-def test_build_tasks_table_groups_tasks_by_category():
+def test_release_script_uses_shared_readme_tasks_table_renderer():
     release_script = _load_release_script_module()
-    task_tags = {
-        "format": ["common", "format"],
-        "release": ["packaging", "release", "containers"],
-        "build-image": ["build", "containers"],
-        "stack-up": ["containers", "fastapi", "web"],
-    }
 
-    with (
-        patch.object(
-            release_script,
-            "get_available_tasks",
-            return_value=list(task_tags),
-        ),
-        patch.object(
-            release_script,
-            "_get_task_docstring",
-            side_effect=lambda task_name: f"Run {task_name}",
-        ),
-        patch.object(release_script, "get_task_tags", side_effect=task_tags.get),
-    ):
-        table = release_script.build_tasks_table()
-
-    assert table.index("### Daily development") < table.index(
-        "### Packaging and releases"
-    )
-    assert table.index("### Packaging and releases") < table.index(
-        "### Container images"
-    )
-    assert table.index("### Container images") < table.index("### Development stacks")
-    assert table.index("| `release` |") < table.index("### Container images")
+    assert release_script.replace_tasks_table is readme_tasks_table.replace_tasks_table
 
 
 def test_readme_task_table_matches_generated_table():
-    release_script = _load_release_script_module()
+    from common_python_tasks.readme_tasks_table import build_tasks_table
+
     readme_text = README_PATH.read_text(encoding="utf-8")
     table_start = readme_text.index("<!-- tasks-table -->")
     table_end = readme_text.index("<!-- end-tasks-table -->", table_start)
 
     assert (
         readme_text[table_start : table_end + len("<!-- end-tasks-table -->")]
-        == release_script.build_tasks_table()
+        == build_tasks_table()
     )
 
 

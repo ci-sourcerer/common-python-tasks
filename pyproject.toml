@@ -44,6 +44,9 @@ PYTHONPATH = "src"
 RELEASE_UPDATE_CHANGELOG = "1"
 RELEASE_PRE_SCRIPT = "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py"
 
+[tool.poe.tasks]
+update-readme-tasks-table = { cmd = "scripts/update_readme_tasks_table.py" }
+
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
