@@ -1,3 +1,32 @@
+## [0.8.0] - 2026-08-15
+
+### 🚀 Features
+
+- Enhance bundled ruff config
+- Add task table update task
+- [**breaking**] Standardize container configuration and task argument passing
+
+### 🐛 Bug Fixes
+
+- *(docker)* Clean temporary Dockerfiles on failure
+- *(errors)* Interpolate fatal messages
+- *(fastapi)* Share container build and cleanup lifecycle
+
+### 🚜 Refactor
+
+- *(env)* Remove redundant delimiter helper
+- *(git)* Centralize branch discovery
+
+### 📚 Documentation
+
+- *(api)* Complete public function docstrings
+
+### ⚙️ Miscellaneous Tasks
+
+- *(docs)* Refresh README task table
+- Update gitignore
+- *(release)* Set README version 0.8.0
+
 ## [0.7.0] - 2026-08-03
 
 ### 🐛 Bug Fixes
