@@ -192,6 +192,38 @@ def test_get_github_release_asset_paths_returns_no_assets_for_empty_asset_list(
     assert result == []
 
 
+def test_get_github_release_asset_paths_excludes_hidden_matches_by_default(
+    monkeypatch,
+    tmp_path,
+):
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    (dist_dir / ".gitignore").write_text("*\n", encoding="utf-8")
+    (dist_dir / "package.whl").write_text("wheel", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("GITHUB_RELEASE_ASSETS", raising=False)
+
+    result = get_github_release_asset_paths()
+
+    assert result == [Path("dist/package.whl")]
+
+
+def test_get_github_release_asset_paths_includes_hidden_matches_when_explicit(
+    monkeypatch,
+    tmp_path,
+):
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    (dist_dir / ".gitignore").write_text("*\n", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+
+    result = get_github_release_asset_paths(["dist/.*"])
+
+    assert result == [Path("dist/.gitignore")]
+
+
 def test_upload_github_release_asset_reports_missing_path(tmp_path, caplog):
     missing_asset = tmp_path / "missing.whl"
 

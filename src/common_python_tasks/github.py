@@ -28,6 +28,18 @@ def _is_unreleased_placeholder(notes: str) -> bool:
     return normalized in {"[unreleased]", "## [unreleased]", "## unreleased"}
 
 
+def _pattern_targets_hidden_paths(pattern: str) -> bool:
+    return any(
+        part.startswith(".")
+        for part in pattern.split("/")
+        if part and part not in {".", ".."}
+    )
+
+
+def _path_has_hidden_segment(path: Path) -> bool:
+    return any(part.startswith(".") for part in path.parts if part not in {".", ".."})
+
+
 def _latest_tagged_changelog() -> str | None:
     result = utils.run_git_cliff(["--latest"], capture_output=True)
     changelog = result.stdout.strip()
@@ -538,6 +550,8 @@ def get_github_release_asset_paths(
             interpreted as colon-separated paths or glob patterns.
             If not provided, the default value is `dist/*`. An empty list
             explicitly disables asset selection.
+            Wildcard patterns only include hidden files when the pattern itself
+            explicitly targets hidden paths (for example, `dist/.*`).
 
     Returns:
         A sorted list of existing asset paths.
@@ -561,9 +575,14 @@ def get_github_release_asset_paths(
     asset_paths = []
     for part in source_items:
         if any(char in part for char in "*?[]"):
+            matches = [path for path in Path(".").glob(part) if path.is_file()]
+            if not _pattern_targets_hidden_paths(part):
+                matches = [
+                    path for path in matches if not _path_has_hidden_segment(path)
+                ]
             asset_paths.extend(
                 sorted(
-                    [path for path in Path(".").glob(part) if path.is_file()],
+                    matches,
                     key=lambda p: str(p),
                 )
             )
