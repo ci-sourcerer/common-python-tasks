@@ -11,9 +11,9 @@ It supplies sensible defaults for formatting, linting, testing, packaging, relea
 Add `common-python-tasks` as a development dependency from your project root.
 
 ```shell
-uv add --dev common-python-tasks==0.7.0
+uv add --dev common-python-tasks==0.8.0
 # or, for Poetry projects
-poetry add --group dev common-python-tasks==0.7.0
+poetry add --group dev common-python-tasks==0.8.0
 ```
 
 Configure Poe the Poet to expose the default `common` task set.
@@ -38,7 +38,7 @@ The helper script performs the same development-dependency installation and Poe 
 ```shell
 curl --fail --silent --show-error --location \
   --output /tmp/add_common_python_tasks.py \
-  https://raw.githubusercontent.com/ci-sourcerer/common-python-tasks/v0.7.0/scripts/add_common_python_tasks.py
+  https://raw.githubusercontent.com/ci-sourcerer/common-python-tasks/v0.8.0/scripts/add_common_python_tasks.py
 ```
 
 Review the downloaded script before executing it.
@@ -50,10 +50,10 @@ less /tmp/add_common_python_tasks.py
 Run the reviewed script with the same pinned package version.
 
 ```shell
-COMMON_PYTHON_TASKS_VERSION=0.7.0 python3 /tmp/add_common_python_tasks.py
+COMMON_PYTHON_TASKS_VERSION=0.8.0 python3 /tmp/add_common_python_tasks.py
 ```
 
-To install another release, replace both occurrences of `0.7.0` with that release's version.
+To install another release, replace both occurrences of `0.8.0` with that release's version.
 
 ## Available tasks
 
@@ -164,7 +164,7 @@ After installing the package, a minimal project configuration looks like this.
 ```toml
 [project]
 name = "simple-cli-tool"
-version = "0.7.0"
+version = "0.8.0"
 
 [tool.poe]
 include_script = "common_python_tasks:tasks()"
