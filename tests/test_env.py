@@ -3,8 +3,9 @@ import pytest
 from common_python_tasks.env import (
     inject_auto_build_args_from_env,
     load_container_env_tokens,
-    parse_container_build_args,
     parse_container_env_tokens,
+    resolve_container_docker_build_args,
+    resolve_container_dockerfile_hook_path,
     split_colon_delimited_values,
 )
 
@@ -52,32 +53,51 @@ def test_split_colon_delimited_values_preserves_escaped_colons():
     assert result == ["URL=https://example.com:8443/path", "MODE=prod"]
 
 
-def test_parse_container_build_args_accepts_escaped_colons():
-    result = parse_container_build_args(
-        None,
-        r"INDEX_URL=https\://example.com\:8443/simple:MODE=prod",
+def test_resolve_container_docker_build_args_prefers_cli_values():
+    result = resolve_container_docker_build_args(
+        ("--secret", "id=pip_conf,env=PIP_CONF"),
+        "--ssh ignored",
     )
 
-    assert result == {
-        "INDEX_URL": "https://example.com:8443/simple",
-        "MODE": "prod",
-    }
+    assert result == ["--secret", "id=pip_conf,env=PIP_CONF"]
 
 
-def test_parse_container_build_args_rejects_unescaped_colons():
+def test_resolve_container_docker_build_args_uses_shell_tokenized_env_value():
+    result = resolve_container_docker_build_args(
+        (),
+        '--secret "id=pip conf,src=/tmp/pip.conf" --add-host example:127.0.0.1',
+    )
+
+    assert result == [
+        "--secret",
+        "id=pip conf,src=/tmp/pip.conf",
+        "--add-host",
+        "example:127.0.0.1",
+    ]
+
+
+def test_resolve_container_docker_build_args_rejects_invalid_shell_quoting():
     with pytest.raises(SystemExit):
-        parse_container_build_args(
-            None, "INDEX_URL=https://example.com/simple:MODE=prod"
-        )
+        resolve_container_docker_build_args((), '--label "unterminated')
 
 
-def test_parse_container_build_args_preserves_spaces_in_values():
-    result = parse_container_build_args(None, 'APT_PACKAGES="jq curl":OTHER=two')
+def test_resolve_container_dockerfile_hook_path_validates_executable(tmp_path):
+    hook_path = tmp_path / "mutate-dockerfile.sh"
+    hook_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    hook_path.chmod(0o755)
 
-    assert result == {
-        "APT_PACKAGES": "jq curl",
-        "OTHER": "two",
-    }
+    result = resolve_container_dockerfile_hook_path(str(hook_path), None)
+
+    assert result == hook_path
+
+
+def test_resolve_container_dockerfile_hook_path_rejects_non_executable(tmp_path):
+    hook_path = tmp_path / "mutate-dockerfile.sh"
+    hook_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    hook_path.chmod(0o644)
+
+    with pytest.raises(SystemExit):
+        resolve_container_dockerfile_hook_path(str(hook_path), None)
 
 
 def test_parse_container_env_tokens_supports_whitespace_delimited_values():
@@ -313,7 +333,7 @@ class TestResolveExtensionContent:
             "args": "jq curl",
         }
         content = resolve_extension_content(desc)
-        assert "APT_PACKAGES" in content
+        assert "CONTAINER_APT_PACKAGES" in content
         assert "jq curl" not in content
 
     def test_missing_args_do_not_affect_content(self, mock_load_data_file):
@@ -327,7 +347,7 @@ class TestResolveExtensionContent:
             "args": None,
         }
         content = resolve_extension_content(desc)
-        assert "APT_PACKAGES" in content
+        assert "CONTAINER_APT_PACKAGES" in content
 
     def test_file_extension_without_placeholder_and_no_args(self, tmp_path):
         from common_python_tasks.env import resolve_extension_content

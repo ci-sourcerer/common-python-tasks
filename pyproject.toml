@@ -37,15 +37,16 @@ Source = "http://github.com/ci-sourcerer/common-python-tasks.git"
 Issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
 
 [tool.poe]
-include_script = "common_python_tasks:tasks(exclude_tags=['containers'])"
+include_script = "common_python_tasks:tasks(exclude_tags=['containers', 'fastapi'])"
 
 [tool.poe.env]
 PYTHONPATH = "src"
 RELEASE_UPDATE_CHANGELOG = "1"
-RELEASE_PRE_SCRIPT = "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py"
+RELEASE_PRE_SCRIPT = "RELEASE_SCRIPT_PHASE=pre python -m scripts.release_script"
+CONTAINER_APT_PACKAGES = "jq"
 
 [tool.poe.tasks]
-update-readme-tasks-table = { cmd = "scripts/update_readme_tasks_table.py" }
+update-readme-tasks-table = { cmd = "python -m scripts.update_readme_tasks_table" }
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"

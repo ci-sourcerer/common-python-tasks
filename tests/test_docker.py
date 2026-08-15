@@ -191,6 +191,103 @@ class TestDockerignoreHandling:
         assert actual_content == expected_content
 
 
+class TestRenderBuildImage:
+    """Tests for render-only Docker image plans."""
+
+    def test_render_build_image_returns_full_command_and_temp_dockerfile(
+        self,
+        temp_project_dir: Path,
+        mock_run_command: MagicMock,
+        mock_get_image_tag: MagicMock,
+        mock_get_authors: MagicMock,
+        mock_get_package_name: MagicMock,
+    ):
+        """Test that render mode returns the exact build command and keeps the generated Dockerfile."""
+        from common_python_tasks.docker import render_build_image
+
+        plan = render_build_image(
+            dockerfile_text="FROM python:3.11\n",
+            context_path=temp_project_dir,
+        )
+
+        assert Path(plan.dockerfile_path).exists()
+        assert plan.dockerfile_text == "FROM python:3.11\n"
+        assert plan.command[:3] == [
+            "docker",
+            "build",
+            "-f",
+        ]
+        assert plan.command_display.startswith("docker build ")
+        assert str(plan.dockerfile_path) in plan.command_display
+        assert plan.command[-1] == str(temp_project_dir)
+
+    def test_render_build_image_includes_native_docker_build_args(
+        self,
+        temp_project_dir: Path,
+        mock_run_command: MagicMock,
+        mock_get_image_tag: MagicMock,
+        mock_get_authors: MagicMock,
+        mock_get_package_name: MagicMock,
+    ):
+        """Test that render mode passes native arguments before the build context."""
+        from common_python_tasks.docker import render_build_image
+
+        plan = render_build_image(
+            dockerfile_text="FROM python:3.11\n",
+            context_path=temp_project_dir,
+            docker_build_args=[
+                "--secret",
+                "id=pip_conf,env=PIP_CONF",
+                "--add-host",
+                "example:127.0.0.1",
+            ],
+        )
+
+        assert plan.command[-5:] == [
+            "--secret",
+            "id=pip_conf,env=PIP_CONF",
+            "--add-host",
+            "example:127.0.0.1",
+            str(temp_project_dir),
+        ]
+
+    def test_render_build_image_executes_hook_before_build_planning(
+        self,
+        temp_project_dir: Path,
+        mock_run_command: MagicMock,
+        mock_get_image_tag: MagicMock,
+        mock_get_authors: MagicMock,
+        mock_get_package_name: MagicMock,
+    ):
+        """Test that a dockerfile hook can mutate generated content before planning."""
+        from common_python_tasks.docker import render_build_image
+
+        hook_path = temp_project_dir / "hook.sh"
+        hook_path.write_text("#!/bin/sh\n", encoding="utf-8")
+        hook_path.chmod(0o755)
+
+        original_side_effect = mock_run_command.side_effect
+
+        def tracking_side_effect(command, *args, **kwargs):
+            if command and str(command[0]) == str(hook_path):
+                dockerfile_path = Path(command[1])
+                dockerfile_path.write_text(
+                    dockerfile_path.read_text(encoding="utf-8") + "RUN echo hooked\n",
+                    encoding="utf-8",
+                )
+            return original_side_effect(command, *args, **kwargs)
+
+        mock_run_command.side_effect = tracking_side_effect
+
+        plan = render_build_image(
+            dockerfile_text="FROM python:3.11\n",
+            context_path=temp_project_dir,
+            dockerfile_hook_path=hook_path,
+        )
+
+        assert "RUN echo hooked" in plan.dockerfile_text
+
+
 class TestBuildImageLatestTag:
     """Tests for latest tag behavior in build_image."""
 

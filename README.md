@@ -87,7 +87,6 @@ The generated tables below list public tasks only. Tags identify which tasks are
 | Task | Description | Tags |
 | --- | --- | --- |
 | `build-image` | Build the container image for this project using the Dockerfile template. | build, containers |
-| `render-build-image` | Render the final image build plan, persist the Dockerfile, and print the exact command. | build, containers |
 | `build-deps-image` | Build only the container dependency collector image for this project. | build, containers |
 | `run-container` | Run the Docker image as a container for this project. By default, this will run the most-recently-built tag for the project's image. | containers |
 | `push-image` | Push the Docker image for this project to the container registry. | containers, packaging, release |
@@ -209,13 +208,16 @@ addopts = "-ra"
 
 - `CONTAINER_REGISTRY_USERNAME`: Container-registry username for image tagging; the default is the current local user
 - `CONTAINER_REGISTRY_URL`: Registry URL with a default of `docker.io/{username}`
-- `CONTAINER_BUILD_ARGS`: Additional Docker build arguments in `KEY=VALUE:OTHER=VALUE` format. Escape literal colons as `\:` or quote the complete value.
+- `CONTAINER_DOCKER_BUILD_ARGS`: Additional arguments passed directly to `docker build`, parsed using shell quoting rules. Free arguments provided to the task after `--` take precedence.
+- `CONTAINER_DOCKERFILE_HOOK_PATH`: Optional host path to an executable hook script that receives the generated Dockerfile path and can modify the file before `docker build` runs.
+- `CONTAINER_APT_PACKAGES`: Space-delimited system packages installed in the generated image
+- `CONTAINER_CUSTOM_ENTRYPOINT`: Custom container entrypoint script. The value must match a key in `[project].scripts`.
+- `CONTAINER_DEPS_IMAGE`: Existing dependency image used when neither `CONTAINER_DEPS_CONTENT` nor `CONTAINER_DEPS_FILE` is configured
 - `CONTAINER_EXTENSION_FILES`: Colon-delimited local extension Dockerfile paths. Escape literal colons as `\:` or quote the complete path.
 - `CONTAINER_EXTENSIONS`: Colon-delimited extension-bundle names or parameterized values. Escape literal colons as `\:` or quote the complete value.
 - `CONTAINER_ENV`: Colon-delimited `KEY=VALUE` declarations injected into the rendered Dockerfile's builder stage. Escape literal colons as `\:` or quote the complete value.
 - `.containerenv`: A project-root file that can supply the same declarations. It is loaded before the `container_envfile` task argument, `CONTAINER_ENV`, and the `container_env` task argument.
 - `CONTAINER_PRUNE_KEEP`: Image-pruning policy after builds. `-1` keeps all images, `0` keeps only the latest, and `N` keeps the latest plus `N` prior images.
-- `CUSTOM_ENTRYPOINT`: Custom container entrypoint script. The value must match a key in `[project].scripts`.
 - `CONTAINER_DEPS_CONTENT`: Inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`
 - `CONTAINER_DEPS_FILE`: One or more dependency-image Dockerfiles. It accepts colon-delimited paths with literal colons escaped as `\:` and is used only when `CONTAINER_DEPS_CONTENT` is unset.
 - `CONTAINER_DEPS_MAPPINGS`: Space-delimited `name:/target/path` entries for copying items from `/tmp/deps`. It is used only when no dependency move script is set.
@@ -261,6 +263,28 @@ addopts = "-ra"
 ## Containers and development stacks
 
 Docker Compose development-stack tasks are available when the `containers` tag is selected. The current stack supports FastAPI applications and an optional PostgreSQL database.
+
+### Native Docker build arguments
+
+Arguments after the task's `--` separator are passed directly to `docker build`. Docker performs option validation, so any supported build option and its value can be used without a package-specific allowlist.
+
+```shell
+poe build-image --single-arch -- \
+  --secret id=pip_conf,env=PIP_CONF \
+  --ssh default \
+  --add-host example:127.0.0.1
+```
+
+Set `CONTAINER_DOCKER_BUILD_ARGS` to provide the same arguments through the environment. The value uses shell quoting rules, and task arguments provided after `--` take precedence.
+
+Settings that affect generated Dockerfile content or dependency-image orchestration can be persisted directly in the project configuration.
+
+```toml
+[tool.poe.env]
+CONTAINER_APT_PACKAGES = "curl jq"
+CONTAINER_CUSTOM_ENTRYPOINT = "serve"
+CONTAINER_DEPS_IMAGE = "example/dependencies:latest"
+```
 
 ### Stack configuration
 
@@ -357,10 +381,11 @@ See the [standard Dockerfile template](src/common_python_tasks/data/generic/Dock
 
 - Multi-stage build: The build stage installs the selected package-manager backend and builds a wheel. The runtime stage installs only the wheel to keep the final image slim and reproducible.
 - Cache mounts: Pip and package-manager cache mounts speed up iterative builds without bloating the final image.
-- Explicit build arguments: `PYTHON_VERSION`, `PACKAGE_MANAGER`, `PACKAGE_MANAGER_VERSION`, `PACKAGE_NAME`, `AUTHORS`, `GIT_COMMIT`, and `CUSTOM_ENTRYPOINT` make image metadata and behavior predictable and auditable.
+- Explicit build metadata: `PYTHON_VERSION`, `PACKAGE_MANAGER`, `PACKAGE_MANAGER_VERSION`, `PACKAGE_NAME`, `AUTHORS`, and `GIT_COMMIT` make image metadata predictable and auditable.
+- Project-level build settings: `CONTAINER_APT_PACKAGES`, `CONTAINER_CUSTOM_ENTRYPOINT`, and `CONTAINER_DEPS_IMAGE` configure generated image behavior without being encoded as generic Docker arguments.
 - Optional debug stage: The image exports and installs the `debug` dependency group only when present and does not include it in the default final image.
 - Stable package path: Symlinks give entrypoints and consumers consistent `/pkg` and `/_$PACKAGE_NAME` paths regardless of wheel layout.
-- Safe entrypoint selection: The default entrypoint resolves the console script matching the package name and falls back to `python`. `CUSTOM_ENTRYPOINT` is validated against `[project].scripts`.
+- Safe entrypoint selection: The default entrypoint resolves the console script matching the package name and falls back to `python`. `CONTAINER_CUSTOM_ENTRYPOINT` is validated against `[project].scripts`.
 - Minimal final image: The standard slim Python base, cache cleanup, and explicit `runtime` final target keep the default image small.
 
 ## Project notes

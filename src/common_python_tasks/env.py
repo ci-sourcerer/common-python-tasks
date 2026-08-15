@@ -47,13 +47,13 @@ def get_workdir_path() -> str:
 def inject_auto_build_args_from_env(
     build_args: dict[str, str] | None,
 ) -> dict[str, str]:
-    """Inject configured environment variables into Docker build args when present.
+    """Inject configured environment variables into managed Docker build args.
 
     Environment-driven build args are only injected if they are set, and never
-    override explicitly provided build args.
+    override arguments already managed by the image builder.
 
     Args:
-        build_args: Existing Docker build args from CLI/env parsing.
+        build_args: Existing managed Docker build arguments.
 
     Returns:
         A build-arg dictionary with auto-injected env values merged in.
@@ -219,42 +219,57 @@ def split_colon_delimited_values(value: str) -> list[str]:
     return split_delimited_values(value, separators=":", allow_whitespace=True)
 
 
-def parse_container_build_args(
-    cli_build_args: list[str] | None,
-    env_build_args: str | None,
-) -> dict[str, str] | None:
-    """Parse container build args from CLI or environment input.
+def resolve_container_docker_build_args(
+    cli_docker_build_args: tuple[str, ...], env_docker_build_args: str | None
+) -> list[str]:
+    """Resolve arguments passed directly to `docker build`.
 
     Args:
-        cli_build_args: Repeated `KEY=VALUE` values passed on the command line.
-        env_build_args: Colon-delimited `KEY=VALUE` values from the environment.
+        cli_docker_build_args: Free arguments provided after the task's `--`
+            separator.
+        env_docker_build_args: Shell-tokenized arguments from the environment.
 
     Returns:
-        Parsed build arguments, or `None` when neither source has values.
+        The CLI arguments when provided, otherwise the environment arguments.
     """
-    if cli_build_args and any(token.strip() for token in cli_build_args):
-        build_arg_tokens = [
-            token.strip() for token in cli_build_args if token and token.strip()
-        ]
-    elif env_build_args:
-        build_arg_tokens = split_colon_delimited_values(env_build_args)
-    else:
+    if cli_docker_build_args:
+        return list(cli_docker_build_args)
+    if not env_docker_build_args:
+        return []
+
+    try:
+        return shlex.split(env_docker_build_args)
+    except ValueError as error:
+        utils.fatal(f"Invalid CONTAINER_DOCKER_BUILD_ARGS: {error}")
+
+
+def resolve_container_dockerfile_hook_path(
+    cli_hook_path: str | None, env_hook_path: str | None
+) -> Path | None:
+    """Resolve and validate the optional dockerfile hook script path.
+
+    Args:
+        cli_hook_path: Hook path provided via CLI argument.
+        env_hook_path: Hook path provided by environment.
+
+    Returns:
+        The validated hook path, or `None` when unset.
+    """
+    raw_value = (
+        cli_hook_path if cli_hook_path and cli_hook_path.strip() else env_hook_path
+    )
+    if raw_value is None or not raw_value.strip():
         return None
 
-    parsed_build_args: dict[str, str] = {}
-    for token in build_arg_tokens:
-        if "=" not in token:
-            utils.fatal(
-                f"Invalid build-arg token {token!r}; expected KEY=VALUE. "
-                "Escape literal colons in values as \\: or quote the value."
-            )
-        key, value = token.split("=", 1)
-        key = key.strip()
-        if not key:
-            utils.fatal(f"Invalid build-arg token {token!r}; the key must not be empty")
-        parsed_build_args[key] = value.strip()
+    hook_path = Path(raw_value.strip())
+    if not hook_path.exists():
+        utils.fatal(f"Dockerfile hook script not found: {hook_path}")
+    if not hook_path.is_file():
+        utils.fatal(f"Dockerfile hook path is not a file: {hook_path}")
+    if not os.access(hook_path, os.X_OK):
+        utils.fatal(f"Dockerfile hook script must be executable: {hook_path}")
 
-    return parsed_build_args or None
+    return hook_path
 
 
 def parse_container_env_tokens(value: str | list[str] | None) -> list[str]:

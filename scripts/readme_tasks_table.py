@@ -67,5 +67,12 @@ def build_tasks_table() -> str:
 
 
 def replace_tasks_table(readme_text: str) -> str:
-    """Replace the README task table with the current generated table."""
+    """Replace the task table in the README text with the generated task table.
+
+    Args:
+        readme_text: The text of the README.md file to update.
+
+    Returns:
+        The updated README.md text with the task table replaced.
+    """
     return re.sub(TASKS_TABLE_PATTERN, build_tasks_table(), readme_text)

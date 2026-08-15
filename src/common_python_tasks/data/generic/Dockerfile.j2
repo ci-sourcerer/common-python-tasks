@@ -93,17 +93,17 @@ ENV {{ env_var }}
 {%- endif %}
 
 ENV DEBIAN_FRONTEND=noninteractive
-{% if APT_PACKAGES %}
+{% if CONTAINER_APT_PACKAGES %}
 # Install optional runtime apt packages selected by Python-side template rendering
 RUN --mount=type=cache,target=/var/cache/apt,id=apt-cache{{ CACHE_ID_SUFFIX }} \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked,id=apt-lists{{ CACHE_ID_SUFFIX }} \
-    apt-get update && apt-get install -y --no-install-recommends {{ APT_PACKAGES }}
+    apt-get update && apt-get install -y --no-install-recommends {{ CONTAINER_APT_PACKAGES }}
 {% endif %}
-{% if DEPS_IMAGE %}
+{% if CONTAINER_DEPS_IMAGE %}
 
 # Pull external dependencies from the pre-built deps image
-ARG DEPS_IMAGE
-COPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps
+ARG CONTAINER_DEPS_IMAGE
+COPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps
 {% endif %}
 {% if CONTAINER_DEPS_MOVE_SCRIPT %}
 RUN set -eux; \

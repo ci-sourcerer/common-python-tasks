@@ -3,6 +3,7 @@ import inspect
 import logging
 import os
 import re
+import shlex
 from functools import partial, wraps
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -106,6 +107,11 @@ def _wrap_task_function(func: callable, task_name: str | None) -> callable:
             else:
                 args = (*args, values)
 
+        if var_positional_arg_names and (
+            poe_extra_args := os.environ.pop("POE_EXTRA_ARGS", None)
+        ):
+            args = (*args, *shlex.split(poe_extra_args))
+
         current_depth = _task_call_depth.get()
         if current_depth > 0:
             LOGGER.log(
@@ -165,6 +171,10 @@ def _script(
 tasks.script = _script
 
 NO_PROMPT_ENV_VAR = "COMMON_PYTHON_TASKS_NO_PROMPT"
+
+
+def _get_container_build_setting(name: str) -> str:
+    return os.getenv(name, "").strip()
 
 
 def _should_update_release_changelog() -> bool:
@@ -397,23 +407,28 @@ def lint_all() -> None:
 
 @tasks.script(tags=["containers", "build"])
 def build_image(
+    *docker_build_args: str,
     debug: bool = False,
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: list[str] | None = None,
+    dockerfile_hook_path: str | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
 ) -> _ContainerBuild:
     """Build the container image for this project using the Dockerfile template.
 
     Args:
+        *docker_build_args: Additional arguments passed directly to `docker build`.
+            Provide them after the task's `--` separator. Overrides
+            `CONTAINER_DOCKER_BUILD_ARGS` when provided.
         debug: Build the debug image.
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
-        build_args: Additional build arguments as repeated KEY=VALUE values.
-            Overrides CONTAINER_BUILD_ARGS if provided.
+        dockerfile_hook_path: Optional executable script path that can mutate
+            the generated Dockerfile before build. Overrides
+            CONTAINER_DOCKERFILE_HOOK_PATH if provided.
         container_env: Builder-stage environment declarations as repeated
             KEY=VALUE values.
         container_envfile: Optional repeated list of files containing builder-stage
@@ -435,11 +450,12 @@ def build_image(
         get_prune_keep,
         inject_auto_build_args_from_env,
         load_container_env_tokens,
-        parse_container_build_args,
         parse_container_deps_mappings,
         parse_container_deps_source,
         parse_container_extensions,
         render_container_deps_move_script,
+        resolve_container_docker_build_args,
+        resolve_container_dockerfile_hook_path,
         resolve_extension_content,
     )
     from .project import (
@@ -467,9 +483,13 @@ def build_image(
     # bundles or files and avoid calling resolution logic multiple times.
     resolved_fragments = [resolve_extension_content(desc) for desc in extensions]
 
-    parsed_build_args = parse_container_build_args(
-        build_args,
-        os.getenv("CONTAINER_BUILD_ARGS"),
+    resolved_docker_build_args = resolve_container_docker_build_args(
+        docker_build_args,
+        os.getenv("CONTAINER_DOCKER_BUILD_ARGS"),
+    )
+    resolved_dockerfile_hook_path = resolve_container_dockerfile_hook_path(
+        dockerfile_hook_path,
+        os.getenv("CONTAINER_DOCKERFILE_HOOK_PATH"),
     )
 
     has_debug_deps = has_debug_dependency_group()
@@ -478,10 +498,13 @@ def build_image(
             "Debug image requested, but no non-empty [dependency-groups].debug was found in pyproject.toml"
         )
 
-    apt_packages = (parsed_build_args or {}).get("APT_PACKAGES", "").strip()
+    apt_packages = _get_container_build_setting("CONTAINER_APT_PACKAGES")
+    if apt_packages:
+        LOGGER.debug("Installing container APT packages: %s", apt_packages)
     entrypoint_command = resolve_container_entrypoint_command(
-        entrypoint_script=(parsed_build_args or {}).get("CUSTOM_ENTRYPOINT")
+        entrypoint_script=_get_container_build_setting("CONTAINER_CUSTOM_ENTRYPOINT")
     )
+    LOGGER.debug("Using container entrypoint command: %s", entrypoint_command)
     container_env_vars = load_container_env_tokens(
         container_env,
         container_envfile,
@@ -491,12 +514,10 @@ def build_image(
             "Injecting builder-stage env vars: %s",
             ", ".join(container_env_vars),
         )
-    top_level_build_args = {
-        k: v
-        for k, v in (parsed_build_args or {}).items()
-        if k not in {"APT_PACKAGES", "CUSTOM_ENTRYPOINT"}
-    }
-    top_level_build_args = inject_auto_build_args_from_env(top_level_build_args)
+    top_level_build_args = inject_auto_build_args_from_env({})
+    external_deps_image = _get_container_build_setting("CONTAINER_DEPS_IMAGE")
+    if external_deps_image:
+        top_level_build_args["CONTAINER_DEPS_IMAGE"] = external_deps_image
 
     combined_content = ""
     merged_build_args = top_level_build_args or None
@@ -505,7 +526,7 @@ def build_image(
             c for c in [f.rstrip() for f in resolved_fragments] if c
         )
         # Collect extension-specific build-args (convention per-bundle)
-        extra_build_args: dict[str, str] = {}
+        extra_build_args = {}
         import re
 
         for desc, fragment in zip(extensions, resolved_fragments):
@@ -533,15 +554,14 @@ def build_image(
         merged_build_args = {**top_level_build_args}
         merged_build_args.update(extra_build_args)
 
-    # Optionally build a deps collector image
+    # Optionally build a dependency collector image
     deps_dockerfile_path, deps_content = parse_container_deps_source()
     deps_mappings = parse_container_deps_mappings()
-    external_deps_image = (top_level_build_args or {}).get("DEPS_IMAGE")
     if deps_mappings and not (
         deps_content or deps_dockerfile_path or external_deps_image
     ):
         fatal(
-            "CONTAINER_DEPS_MAPPINGS is set but no CONTAINER_DEPS_CONTENT, CONTAINER_DEPS_FILE, or DEPS_IMAGE was provided"
+            "CONTAINER_DEPS_MAPPINGS is set but no CONTAINER_DEPS_CONTENT, CONTAINER_DEPS_FILE, or CONTAINER_DEPS_IMAGE was provided"
         )
 
     deps_image_tag = external_deps_image or ""
@@ -567,24 +587,24 @@ def build_image(
 
     if deps_content or deps_dockerfile_path:
         deps_image_tag = build_deps_image_task(
+            *resolved_docker_build_args,
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
-            build_args=build_args,
         )
         if merged_build_args is None:
             merged_build_args = {}
-        merged_build_args["DEPS_IMAGE"] = deps_image_tag
+        merged_build_args["CONTAINER_DEPS_IMAGE"] = deps_image_tag
 
     dockerfile_text = render_template_text(
         load_data_file("Dockerfile.j2")[1],
         {
             "PACKAGE_MANAGER": get_package_manager(),
             "EXTENSION_CONTENT": combined_content,
-            "DEPS_IMAGE": deps_image_tag,
+            "CONTAINER_DEPS_IMAGE": deps_image_tag,
             "CONTAINER_DEPS_MOVE_SCRIPT": container_deps_move_script,
             "HAS_DEBUG_DEPS": has_debug_deps,
-            "APT_PACKAGES": apt_packages,
+            "CONTAINER_APT_PACKAGES": apt_packages,
             "ENTRYPOINT_COMMAND": entrypoint_command,
             "CONTAINER_ENV_VARS": container_env_vars,
             "CACHE_ID_SUFFIX": cache_id_suffix,
@@ -600,6 +620,8 @@ def build_image(
         plain=plain,
         single_arch=single_arch,
         extra_build_args=merged_build_args or None,
+        docker_build_args=resolved_docker_build_args,
+        dockerfile_hook_path=resolved_dockerfile_hook_path,
     )
 
     keep = get_prune_keep()
@@ -622,19 +644,20 @@ def build_image(
 
 @tasks.script(task_name="build-deps-image", tags=["containers", "build"])
 def build_deps_image_task(
+    *docker_build_args: str,
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: list[str] | None = None,
 ) -> None:
     """Build only the container dependency collector image for this project.
 
     Args:
+        *docker_build_args: Additional arguments passed directly to `docker build`.
+            Provide them after the task's `--` separator. Overrides
+            `CONTAINER_DOCKER_BUILD_ARGS` when provided.
         no_cache: Do not use cache when building the deps image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
-        build_args: Additional build arguments as repeated KEY=VALUE values.
-            Overrides CONTAINER_BUILD_ARGS if provided.
 
     Returns:
         The full dependency image tag.
@@ -643,8 +666,8 @@ def build_deps_image_task(
     from .env import (
         get_cache_id_suffix,
         inject_auto_build_args_from_env,
-        parse_container_build_args,
         parse_container_deps_source,
+        resolve_container_docker_build_args,
     )
     from .utils import fatal
 
@@ -654,11 +677,11 @@ def build_deps_image_task(
             "No container dependency source found. Set CONTAINER_DEPS_CONTENT or CONTAINER_DEPS_FILE."
         )
 
-    parsed_build_args = parse_container_build_args(
-        build_args,
-        os.getenv("CONTAINER_BUILD_ARGS"),
+    resolved_docker_build_args = resolve_container_docker_build_args(
+        docker_build_args,
+        os.getenv("CONTAINER_DOCKER_BUILD_ARGS"),
     )
-    extra_build_args = inject_auto_build_args_from_env(parsed_build_args or {})
+    extra_build_args = inject_auto_build_args_from_env({})
     cache_id_suffix = get_cache_id_suffix(no_cache)
 
     LOGGER.info("Building container dependency image")
@@ -670,6 +693,7 @@ def build_deps_image_task(
         plain=plain,
         single_arch=single_arch,
         extra_build_args=extra_build_args or None,
+        docker_build_args=resolved_docker_build_args,
         cache_id_suffix=cache_id_suffix,
     )
 
@@ -1234,7 +1258,6 @@ def _run_release_flow(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: list[str] | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
     assets: list[str] | None = None,
@@ -1323,7 +1346,6 @@ def _run_release_flow(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
-            build_args=build_args,
             container_env=container_env,
             container_envfile=container_envfile,
         )
@@ -1360,7 +1382,6 @@ def release(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: list[str] | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
     assets: list[str] | None = None,
@@ -1379,8 +1400,6 @@ def release(
         no_cache: Do not use cache when building container images.
         plain: Do not pretty-print container build output.
         single_arch: Build container image for a single architecture.
-        build_args: Additional build arguments for the Docker build as repeated
-            KEY=VALUE values.
         container_env: Inline container environment variables as repeated
             KEY=VALUE values.
         container_envfile: Repeated list of container environment files.
@@ -1399,7 +1418,6 @@ def release(
         no_cache=no_cache,
         plain=plain,
         single_arch=single_arch,
-        build_args=build_args,
         container_env=container_env,
         container_envfile=container_envfile,
         assets=assets,
@@ -1452,7 +1470,6 @@ def build(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: list[str] | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
 ) -> None:
@@ -1465,8 +1482,6 @@ def build(
         no_cache: Pass `--no-cache` to the Docker build command.
         plain: Pass `--progress plain` to the Docker build command.
         single_arch: Build the container for the current host architecture only.
-        build_args: Additional build arguments for the Docker build as repeated
-            `KEY=VALUE` values.
         container_env: Inline container environment variables as repeated
             `KEY=VALUE` values.
         container_envfile: Repeated list of container environment files.
@@ -1481,7 +1496,6 @@ def build(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
-            build_args=build_args,
             container_env=container_env,
             container_envfile=container_envfile,
         )
@@ -1496,7 +1510,6 @@ def build_with_containers(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
-    build_args: list[str] | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
 ) -> None:
@@ -1507,8 +1520,6 @@ def build_with_containers(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
-        build_args: Additional build arguments for the Docker build as repeated
-            KEY=VALUE values.
         container_env: Inline container environment variables as repeated KEY=VALUE
             values.
         container_envfile: Repeated list of container environment files.
@@ -1520,7 +1531,6 @@ def build_with_containers(
         no_cache=no_cache,
         plain=plain,
         single_arch=single_arch,
-        build_args=build_args,
         container_env=container_env,
         container_envfile=container_envfile,
     )
@@ -1539,7 +1549,6 @@ def fastapi_stack_up(
     no_cache: bool = False,
     detach: bool = False,
     services: list[str] | None = None,
-    build_args: list[str] | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
 ) -> None:
@@ -1551,8 +1560,6 @@ def fastapi_stack_up(
         detach: Run the stack in detached mode.
         services: Optional repeated list of services to start. If not provided,
             all services will be started.
-        build_args: Additional build arguments for the Docker build as repeated
-            KEY=VALUE values.
         container_env: Inline container environment variables as repeated KEY=VALUE
             values.
         container_envfile: Repeated list of container environment files.
@@ -1571,7 +1578,6 @@ def fastapi_stack_up(
         debug=debug,
         no_cache=no_cache,
         single_arch=True,
-        build_args=build_args,
         container_env=container_env,
         container_envfile=container_envfile,
     )

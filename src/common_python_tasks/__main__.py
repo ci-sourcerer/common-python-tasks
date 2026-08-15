@@ -9,6 +9,19 @@ from .tasks import tasks
 __all__ = ["get_available_tasks", "print_available_tasks"]
 
 
+def _is_package_task(task_name: str) -> bool:
+    task_config = tasks()["tasks"].get(task_name)
+    if not isinstance(task_config, dict):
+        return False
+
+    script = task_config.get("script")
+    if not isinstance(script, str) or ":" not in script:
+        return False
+
+    module_name, _ = script.split(":", 1)
+    return module_name.startswith("common_python_tasks.")
+
+
 def get_available_tasks(internal: bool = False) -> list[str]:
     """Return available task names for this package.
 
@@ -21,7 +34,7 @@ def get_available_tasks(internal: bool = False) -> list[str]:
     return [
         task_name
         for task_name in tasks()["tasks"]
-        if internal or not task_name.startswith("_")
+        if _is_package_task(task_name) and (internal or not task_name.startswith("_"))
     ]
 
 
@@ -49,8 +62,11 @@ def _get_task_docstring(task_name: str) -> str | None:
 
     module_name, func_name = script.split(":", 1)
 
-    module = importlib.import_module(module_name)
-    func = getattr(module, func_name)
+    try:
+        module = importlib.import_module(module_name)
+        func = getattr(module, func_name)
+    except (ImportError, AttributeError):
+        return None
 
     doc = inspect.getdoc(func)
     if not doc:

@@ -1,28 +1,12 @@
-import sys
-from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from common_python_tasks import readme_tasks_table
+from scripts import readme_tasks_table, release_script
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "release_script.py"
 README_PATH = SCRIPT_PATH.parents[1] / "README.md"
-
-
-def _load_release_script_module():
-    script_directory = str(SCRIPT_PATH.parent)
-    if script_directory not in sys.path:
-        sys.path.insert(0, script_directory)
-
-    spec = spec_from_file_location("release_script_under_test", SCRIPT_PATH)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("Unable to load release_script.py for tests")
-
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
@@ -37,8 +21,6 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
-
-    release_script = _load_release_script_module()
 
     with (
         patch.object(
@@ -81,21 +63,17 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
 
 
 def test_release_script_uses_shared_readme_tasks_table_renderer():
-    release_script = _load_release_script_module()
-
     assert release_script.replace_tasks_table is readme_tasks_table.replace_tasks_table
 
 
 def test_readme_task_table_matches_generated_table():
-    from common_python_tasks.readme_tasks_table import build_tasks_table
-
     readme_text = README_PATH.read_text(encoding="utf-8")
     table_start = readme_text.index("<!-- tasks-table -->")
     table_end = readme_text.index("<!-- end-tasks-table -->", table_start)
 
     assert (
         readme_text[table_start : table_end + len("<!-- end-tasks-table -->")]
-        == build_tasks_table()
+        == readme_tasks_table.build_tasks_table()
     )
 
 
@@ -112,8 +90,6 @@ def test_main_fails_for_invalid_release_phase_without_running_git(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "post")
-
-    release_script = _load_release_script_module()
 
     with (
         patch.object(release_script.subprocess, "run") as mock_run,
@@ -143,8 +119,6 @@ def test_main_dry_run_is_controlled_by_release_script_dry_run_env_pre_phase(
     monkeypatch.setenv("RELEASE_VERSION", "9.9.9")
     monkeypatch.setenv("RELEASE_SCRIPT_DRY_RUN", "1")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
-
-    release_script = _load_release_script_module()
 
     with patch.object(
         release_script.subprocess,
@@ -182,8 +156,6 @@ def test_main_pre_phase_fails_when_latest_tagged_version_is_missing(
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
 
-    release_script = _load_release_script_module()
-
     with (
         patch.object(
             release_script.subprocess,
@@ -209,8 +181,6 @@ def test_main_fails_for_invalid_release_phase_when_release_version_is_missing(
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "post")
 
-    release_script = _load_release_script_module()
-
     with (
         patch.object(release_script.subprocess, "run") as mock_run,
         pytest.raises(
@@ -235,8 +205,6 @@ def test_release_script_dry_run_env_pre_phase_prints_summary_without_modifying_f
     monkeypatch.setenv("RELEASE_VERSION", "2.0.0")
     monkeypatch.setenv("RELEASE_SCRIPT_DRY_RUN", "1")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
-
-    release_script = _load_release_script_module()
 
     with patch.object(
         release_script.subprocess,
@@ -275,8 +243,6 @@ def test_release_script_dry_run_env_post_phase_fails_before_git_commands(
     monkeypatch.setenv("RELEASE_VERSION", "2.0.0")
     monkeypatch.setenv("RELEASE_SCRIPT_DRY_RUN", "1")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "post")
-
-    release_script = _load_release_script_module()
 
     with (
         patch.object(release_script.subprocess, "run") as mock_run,

@@ -1,27 +1,11 @@
-import sys
-from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from unittest.mock import patch
 
-from common_python_tasks import readme_tasks_table
+from scripts import readme_tasks_table
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1] / "scripts" / "update_readme_tasks_table.py"
 )
-
-
-def _load_update_readme_tasks_table_script_module():
-    script_directory = str(SCRIPT_PATH.parent)
-    if script_directory not in sys.path:
-        sys.path.insert(0, script_directory)
-
-    spec = spec_from_file_location("update_readme_tasks_table_under_test", SCRIPT_PATH)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("Unable to load update_readme_tasks_table.py for tests")
-
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def test_build_tasks_table_groups_tasks_by_category():
@@ -91,7 +75,7 @@ def test_update_readme_tasks_table_script_main_updates_table_and_commits(
 
     monkeypatch.chdir(tmp_path)
 
-    script_module = _load_update_readme_tasks_table_script_module()
+    from scripts import update_readme_tasks_table as script_module
 
     with (
         patch.object(
@@ -127,7 +111,7 @@ def test_update_readme_tasks_table_script_dry_run_leaves_file_unchanged(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_SCRIPT_DRY_RUN", "1")
 
-    script_module = _load_update_readme_tasks_table_script_module()
+    from scripts import update_readme_tasks_table as script_module
 
     with (
         patch.object(

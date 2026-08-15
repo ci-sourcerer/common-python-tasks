@@ -167,10 +167,10 @@ def test_extension_template_support(
     mock_get_package_name,
     monkeypatch,
 ):
-    """CONTAINER_BUILD_ARGS should drive template-rendered apt package installation."""
+    """CONTAINER_APT_PACKAGES should drive template-rendered package installation."""
     from common_python_tasks.tasks import build_image
 
-    monkeypatch.setenv("CONTAINER_BUILD_ARGS", "APT_PACKAGES=jq")
+    monkeypatch.setenv("CONTAINER_APT_PACKAGES", "jq")
 
     original_load_data_file = mock_load_data_file.side_effect
 
@@ -181,8 +181,8 @@ def test_extension_template_support(
             return (
                 "/fake/path/Dockerfile.j2",
                 "FROM python:3.11\n"
-                "{% if APT_PACKAGES %}\n"
-                "RUN apt-get update && apt-get install -y --no-install-recommends {{ APT_PACKAGES }}\n"
+                "{% if CONTAINER_APT_PACKAGES %}\n"
+                "RUN apt-get update && apt-get install -y --no-install-recommends {{ CONTAINER_APT_PACKAGES }}\n"
                 "{% endif %}\n",
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
@@ -215,11 +215,11 @@ def test_extension_template_support(
         "apt-get install -y --no-install-recommends jq"
         in captured_dockerfile["content"]
     )
-    assert "ARG APT_PACKAGES" not in captured_dockerfile["content"]
-    assert not any("APT_PACKAGES=jq" in str(a) for a in base_build_cmd)
+    assert "ARG CONTAINER_APT_PACKAGES" not in captured_dockerfile["content"]
+    assert not any("CONTAINER_APT_PACKAGES=jq" in str(a) for a in base_build_cmd)
 
 
-def test_build_arg_with_multiple_packages(
+def test_build_image_uses_custom_entrypoint_from_direct_environment_setting(
     temp_project_dir,
     mock_run_command,
     mock_load_data_file,
@@ -230,50 +230,15 @@ def test_build_arg_with_multiple_packages(
 ):
     from common_python_tasks.tasks import build_image
 
-    monkeypatch.setenv("CONTAINER_BUILD_ARGS", 'APT_PACKAGES="jq curl"')
+    monkeypatch.setenv("CONTAINER_CUSTOM_ENTRYPOINT", "serve")
 
-    original_load_data_file = mock_load_data_file.side_effect
+    with patch(
+        "common_python_tasks.project.resolve_container_entrypoint_command",
+        return_value="serve",
+    ) as mock_resolve_entrypoint:
+        build_image()
 
-    def load_data_file_with_apt(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n"
-                "{% if APT_PACKAGES %}\n"
-                "RUN apt-get update && apt-get install -y --no-install-recommends {{ APT_PACKAGES }}\n"
-                "{% endif %}\n",
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_apt
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
-
-    build_image()
-
-    # Verify the apt package list is rendered into the generated Dockerfile
-    assert len(build_calls) == 1
-    base_build_cmd = build_calls[0]
-    assert (
-        "apt-get install -y --no-install-recommends jq curl"
-        in captured_dockerfile["content"]
-    )
-    assert not any("APT_PACKAGES=jq curl" in str(a) for a in base_build_cmd)
+    mock_resolve_entrypoint.assert_called_once_with(entrypoint_script="serve")
 
 
 def test_build_image_injects_container_env_from_containerenv_file(
@@ -523,12 +488,9 @@ def test_build_image_passes_required_dependency_versions(
     mock_get_authors,
     mock_get_package_name,
 ):
-    import os
     from unittest.mock import patch
 
     from common_python_tasks.tasks import build_image
-
-    os.environ.pop("CONTAINER_BUILD_ARGS", None)
 
     with patch(
         "common_python_tasks.project.get_installed_requirement_version",
@@ -654,7 +616,7 @@ def test_build_image_renders_uv_dynamic_versioning_bypass_for_uv_builder(
     assert any("UV_VERSION=0.8.0" in str(a) for a in build_calls[0])
 
 
-def test_build_image_accepts_build_args_param_for_real_docker_arg(
+def test_build_image_accepts_native_docker_build_arg_override(
     temp_project_dir,
     mock_run_command,
     mock_load_data_file,
@@ -662,11 +624,7 @@ def test_build_image_accepts_build_args_param_for_real_docker_arg(
     mock_get_authors,
     mock_get_package_name,
 ):
-    import os
-
     from common_python_tasks.tasks import build_image
-
-    os.environ.pop("CONTAINER_BUILD_ARGS", None)
 
     build_calls = []
     original = mock_run_command.side_effect
@@ -678,12 +636,13 @@ def test_build_image_accepts_build_args_param_for_real_docker_arg(
 
     mock_run_command.side_effect = tracking
 
-    build_image(build_args=["POETRY_VERSION=9.9.9"])
+    build_image("--build-arg", "POETRY_VERSION=9.9.9")
 
     assert len(build_calls) == 1
     base_build_cmd = build_calls[0]
-    assert any("POETRY_VERSION=9.9.9" in str(a) for a in base_build_cmd)
-    assert not any("POETRY_VERSION=1.8.0" in str(a) for a in base_build_cmd)
+    assert base_build_cmd.index("POETRY_VERSION=1.8.0") < base_build_cmd.index(
+        "POETRY_VERSION=9.9.9"
+    )
 
 
 def test_build_image_includes_workdir_path_from_env(
@@ -698,7 +657,6 @@ def test_build_image_includes_workdir_path_from_env(
     from common_python_tasks.tasks import build_image
 
     monkeypatch.setenv("WORKDIR_PATH", "/app")
-    monkeypatch.delenv("CONTAINER_BUILD_ARGS", raising=False)
 
     build_calls = []
     original = mock_run_command.side_effect
@@ -717,7 +675,7 @@ def test_build_image_includes_workdir_path_from_env(
     assert any("WORKDIR_PATH=/app" in str(a) for a in base_build_cmd)
 
 
-def test_build_image_explicit_workdir_path_build_arg_overrides_env(
+def test_build_image_native_workdir_path_build_arg_follows_managed_value(
     temp_project_dir,
     mock_run_command,
     mock_load_data_file,
@@ -729,7 +687,6 @@ def test_build_image_explicit_workdir_path_build_arg_overrides_env(
     from common_python_tasks.tasks import build_image
 
     monkeypatch.setenv("WORKDIR_PATH", "/app")
-    monkeypatch.delenv("CONTAINER_BUILD_ARGS", raising=False)
 
     build_calls = []
     original = mock_run_command.side_effect
@@ -741,12 +698,13 @@ def test_build_image_explicit_workdir_path_build_arg_overrides_env(
 
     mock_run_command.side_effect = tracking
 
-    build_image(build_args=["WORKDIR_PATH=/custom"])
+    build_image("--build-arg", "WORKDIR_PATH=/custom")
 
     assert len(build_calls) == 1
     base_build_cmd = build_calls[0]
-    assert any("WORKDIR_PATH=/custom" in str(a) for a in base_build_cmd)
-    assert not any("WORKDIR_PATH=/app" in str(a) for a in base_build_cmd)
+    assert base_build_cmd.index("WORKDIR_PATH=/app") < base_build_cmd.index(
+        "WORKDIR_PATH=/custom"
+    )
 
 
 def test_build_image_fails_for_debug_without_dependency_group(
@@ -799,7 +757,7 @@ class TestBuildImageWithDeps:
         deps_cmd = " ".join(str(x) for x in deps_call[0][0] if x is not None)
         main_cmd = " ".join(str(x) for x in main_call[0][0] if x is not None)
         assert "test-package-deps:deps-" in deps_cmd
-        assert "DEPS_IMAGE" in main_cmd
+        assert "CONTAINER_DEPS_IMAGE" in main_cmd
 
     def test_renders_container_deps_move_script_when_mappings_set(
         self,
@@ -838,7 +796,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
+                    "FROM python:3.11\n{% if CONTAINER_DEPS_IMAGE %}\nARG CONTAINER_DEPS_IMAGE\nCOPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -893,7 +851,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
+                    "FROM python:3.11\n{% if CONTAINER_DEPS_IMAGE %}\nARG CONTAINER_DEPS_IMAGE\nCOPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -954,7 +912,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
+                    "FROM python:3.11\n{% if CONTAINER_DEPS_IMAGE %}\nARG CONTAINER_DEPS_IMAGE\nCOPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1007,7 +965,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
+                    "FROM python:3.11\n{% if CONTAINER_DEPS_IMAGE %}\nARG CONTAINER_DEPS_IMAGE\nCOPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1050,7 +1008,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
+                    "FROM python:3.11\n{% if CONTAINER_DEPS_IMAGE %}\nARG CONTAINER_DEPS_IMAGE\nCOPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1108,7 +1066,7 @@ class TestBuildImageWithDeps:
             if filename == "Dockerfile.j2":
                 return (
                     "/fake/path/Dockerfile.j2",
-                    "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
+                    "FROM python:3.11\n{% if CONTAINER_DEPS_IMAGE %}\nARG CONTAINER_DEPS_IMAGE\nCOPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n{% if CONTAINER_DEPS_MOVE_SCRIPT %}\nRUN set -eux; \\\n    cat >/tmp/container-deps-move-script <<'SCRIPT' && \\\n    chmod +x /tmp/container-deps-move-script && \\\n    /tmp/container-deps-move-script\n{{ CONTAINER_DEPS_MOVE_SCRIPT }}\nSCRIPT\n{% endif %}\n",
                 )
             return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1119,7 +1077,9 @@ class TestBuildImageWithDeps:
         )
         mock_run_command.side_effect = tracking
 
-        build_image(single_arch=True, build_args=["DEPS_IMAGE=custom/deps"])
+        monkeypatch.setenv("CONTAINER_DEPS_IMAGE", "custom/deps")
+
+        build_image(single_arch=True)
 
         assert "COPY --from=custom/deps /tmp/deps /tmp/deps" in captured.get(
             "content", ""
@@ -1174,7 +1134,7 @@ def test_build_image_uses_build_deps_image_task(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n{% if DEPS_IMAGE %}\nARG DEPS_IMAGE\nCOPY --from={{ DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n",
+                "FROM python:3.11\n{% if CONTAINER_DEPS_IMAGE %}\nARG CONTAINER_DEPS_IMAGE\nCOPY --from={{ CONTAINER_DEPS_IMAGE }} /tmp/deps /tmp/deps\n{% endif %}\n",
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1183,11 +1143,55 @@ def test_build_image_uses_build_deps_image_task(
     with patch(
         "common_python_tasks.tasks.build_deps_image_task", return_value="deps-image"
     ) as mock_task:
-        build_image(single_arch=True, build_args=["FOO=bar"])
+        build_image("--build-arg", "FOO=bar", single_arch=True)
 
     mock_task.assert_called_once_with(
+        "--build-arg",
+        "FOO=bar",
         no_cache=False,
         plain=False,
         single_arch=True,
-        build_args=["FOO=bar"],
     )
+
+
+def test_build_image_forwards_native_docker_build_args_and_hook(
+    monkeypatch,
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+):
+    from common_python_tasks.tasks import build_image
+
+    cli_hook_path = temp_project_dir / "hook-cli.sh"
+    cli_hook_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    cli_hook_path.chmod(0o755)
+
+    env_hook_path = temp_project_dir / "hook-env.sh"
+    env_hook_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    env_hook_path.chmod(0o755)
+
+    monkeypatch.setenv("CONTAINER_DOCKER_BUILD_ARGS", "--ssh env")
+    monkeypatch.setenv("CONTAINER_DOCKERFILE_HOOK_PATH", str(env_hook_path))
+
+    with patch(
+        "common_python_tasks.docker.build_image",
+        return_value=("1.0.0", "abc1234"),
+    ) as mock_low_level_build:
+        build_image(
+            "--secret",
+            "id=pip_conf,env=PIP_CONF",
+            "--add-host=example:127.0.0.1",
+            dockerfile_hook_path=str(cli_hook_path),
+        )
+
+    assert mock_low_level_build.call_count == 1
+    kwargs = mock_low_level_build.call_args.kwargs
+    assert kwargs["docker_build_args"] == [
+        "--secret",
+        "id=pip_conf,env=PIP_CONF",
+        "--add-host=example:127.0.0.1",
+    ]
+    assert kwargs["dockerfile_hook_path"] == cli_hook_path

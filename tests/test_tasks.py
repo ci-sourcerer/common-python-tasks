@@ -154,6 +154,25 @@ def test_test_accepts_paths_keyword_list():
     )
 
 
+def test_test_accepts_poe_extra_args(monkeypatch):
+    from common_python_tasks.tasks import test
+
+    monkeypatch.setenv("POE_EXTRA_ARGS", "--maxfail=1 '-k=smoke test'")
+
+    with (
+        patch("common_python_tasks.utils.get_config_path", return_value=None),
+        patch("common_python_tasks.utils.is_package_installed", return_value=False),
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        test()
+
+    mock_run_command.assert_called_once_with(
+        ["pytest", "-vv", "--maxfail=1", "-k=smoke test"],
+        acceptable_returncodes={0, 5},
+    )
+    assert "POE_EXTRA_ARGS" not in os.environ
+
+
 def test_test_task_paths_arg_is_optional_in_poe_config():
     from common_python_tasks.tasks import tasks as task_collection
 
@@ -166,6 +185,39 @@ def test_test_task_paths_arg_is_optional_in_poe_config():
     assert paths_arg["positional"] is True
     assert paths_arg["multiple"] is True
     assert paths_arg["required"] is False
+
+
+@pytest.mark.parametrize("task_name", ["build-image", "build-deps-image"])
+def test_docker_build_args_are_optional_free_task_arguments(task_name):
+    from common_python_tasks.tasks import tasks as task_collection
+
+    docker_build_args = next(
+        arg
+        for arg in task_collection(include_tags=["containers"])["tasks"][task_name][
+            "args"
+        ]
+        if arg["name"] == "docker_build_args"
+    )
+
+    assert docker_build_args["positional"] is True
+    assert docker_build_args["multiple"] is True
+    assert docker_build_args["required"] is False
+
+
+@pytest.mark.parametrize(
+    "task_name", ["build-image", "build-deps-image", "build", "release", "stack-up"]
+)
+def test_container_tasks_do_not_expose_deprecated_build_args(task_name):
+    from common_python_tasks.tasks import tasks as task_collection
+
+    argument_names = {
+        argument["name"]
+        for argument in task_collection(include_tags=["containers"])["tasks"][
+            task_name
+        ].get("args", [])
+    }
+
+    assert "build_args" not in argument_names
 
 
 def test_print_available_tasks_includes_docstrings(capsys):
@@ -752,7 +804,6 @@ class TestBumpVersion:
                 no_cache=True,
                 plain=True,
                 single_arch=True,
-                build_args=None,
                 container_env=None,
                 container_envfile=None,
             )
@@ -824,8 +875,8 @@ class TestBumpVersion:
     ):
         from common_python_tasks.tasks import release_without_containers
 
-        pre_script = "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py"
-        post_script = "RELEASE_SCRIPT_PHASE=post python scripts/release_script.py"
+        pre_script = "RELEASE_SCRIPT_PHASE=pre python -m scripts.release_script"
+        post_script = "RELEASE_SCRIPT_PHASE=post python -m scripts.release_script"
 
         with (
             patch.dict(
@@ -1628,7 +1679,6 @@ def test_build_with_containers_calls_task_build_image():
         no_cache=True,
         plain=True,
         single_arch=True,
-        build_args=None,
         container_env=None,
         container_envfile=None,
     )
@@ -1650,10 +1700,11 @@ def test_build_deps_image_task_builds_dependency_image():
         patch("common_python_tasks.env.get_cache_id_suffix", return_value=""),
     ):
         task_build_deps_image(
+            "--secret",
+            "id=pip_conf,env=PIP_CONF",
             no_cache=True,
             plain=True,
             single_arch=True,
-            build_args=["FOO=bar"],
         )
 
     mock_build_deps_image.assert_called_once_with(
@@ -1663,7 +1714,8 @@ def test_build_deps_image_task_builds_dependency_image():
         no_cache=True,
         plain=True,
         single_arch=True,
-        extra_build_args={"FOO": "bar"},
+        extra_build_args=None,
+        docker_build_args=["--secret", "id=pip_conf,env=PIP_CONF"],
         cache_id_suffix="",
     )
 
@@ -1681,7 +1733,6 @@ def test_build_forwards_container_build_options():
             no_cache=True,
             plain=True,
             single_arch=True,
-            build_args=["FOO=bar"],
             container_env=["X=1"],
             container_envfile=["env1.env", "env2.env"],
         )
@@ -1692,7 +1743,6 @@ def test_build_forwards_container_build_options():
         no_cache=True,
         plain=True,
         single_arch=True,
-        build_args=["FOO=bar"],
         container_env=["X=1"],
         container_envfile=["env1.env", "env2.env"],
     )
@@ -1830,7 +1880,6 @@ def test_fastapi_stack_up_passes_container_build_options(
     ):
         fastapi_stack_up(
             detach=True,
-            build_args=["FOO=bar"],
             container_env=["X=1"],
             container_envfile=["env1.env"],
         )
@@ -1838,7 +1887,6 @@ def test_fastapi_stack_up_passes_container_build_options(
     assert len(build_image_calls) == 1
     args, kwargs = build_image_calls[0]
     assert args == ()
-    assert kwargs["build_args"] == ["FOO=bar"]
     assert kwargs["container_env"] == ["X=1"]
     assert kwargs["container_envfile"] == ["env1.env"]
     assert mock_low_level_build_image.call_count == 0

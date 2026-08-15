@@ -1,10 +1,13 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
@@ -20,11 +23,11 @@ def _set_test_environment_variables():
     os.environ.setdefault("RELEASE_UPDATE_CHANGELOG", "1")
     os.environ.setdefault(
         "RELEASE_PRE_SCRIPT",
-        "RELEASE_SCRIPT_PHASE=pre python scripts/release_script.py",
+        "RELEASE_SCRIPT_PHASE=pre python -m scripts.release_script",
     )
     os.environ.setdefault(
         "RELEASE_POST_SCRIPT",
-        "RELEASE_SCRIPT_PHASE=post python scripts/release_script.py",
+        "RELEASE_SCRIPT_PHASE=post python -m scripts.release_script",
     )
     os.environ.setdefault("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "poetry")
 
@@ -98,7 +101,7 @@ def mock_load_data_file():
             elif key == "dockerfile_extensions/template_bundle/Dockerfile":
                 return (
                     "/fake/path/Dockerfile.template_bundle",
-                    "# template bundle used by tests\nUSER root\nARG APT_PACKAGES\nRUN apt-get update && apt-get install -y --no-install-recommends ${APT_PACKAGES} && rm -rf /var/lib/apt/lists/*\nUSER py\n",
+                    "# template bundle used by tests\nUSER root\nARG CONTAINER_APT_PACKAGES\nRUN apt-get update && apt-get install -y --no-install-recommends ${CONTAINER_APT_PACKAGES} && rm -rf /var/lib/apt/lists/*\nUSER py\n",
                 )
             elif key == ".dockerignore":
                 return (

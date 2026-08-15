@@ -511,14 +511,14 @@ def resolve_container_entrypoint_command(entrypoint_script: str | None = None) -
 
         if available_scripts:
             utils.fatal(
-                "Invalid CUSTOM_ENTRYPOINT value "
+                "Invalid CONTAINER_CUSTOM_ENTRYPOINT value "
                 f"{selected_entrypoint!r}. "
                 "It must match a key in [project].scripts. "
                 f"Available scripts: {', '.join(available_scripts)}"
             )
 
         utils.fatal(
-            "Invalid CUSTOM_ENTRYPOINT value "
+            "Invalid CONTAINER_CUSTOM_ENTRYPOINT value "
             f"{selected_entrypoint!r}. "
             "No [project].scripts entries were found in pyproject.toml."
         )

@@ -6,9 +6,8 @@ import sys
 from enum import StrEnum
 from pathlib import Path
 
-from utils import commit_readme_update, configure_logger, get_logger, log_dry_run
-
-from common_python_tasks.readme_tasks_table import replace_tasks_table
+from .readme_tasks_table import replace_tasks_table
+from .utils import commit_readme_update, configure_logger, get_logger, log_dry_run
 
 LOGGER = get_logger(__name__)
 
