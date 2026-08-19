@@ -1,24 +1,12 @@
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 
 class TestDockerignoreHandling:
     """Tests for .dockerignore file handling during image builds."""
-
-    @pytest.fixture(autouse=True)
-    def mock_installed_requirement_version(self):
-        with patch(
-            "common_python_tasks.project.get_installed_requirement_version"
-        ) as mock:
-            mock.side_effect = lambda name: {
-                "poetry-dynamic-versioning[plugin]": "0.17.0",
-                "poetry-plugin-export": "1.5.0",
-                "tomlkit": "0.12.1",
-            }.get(name)
-            yield mock
 
     def test_uses_builtin_dockerignore_when_missing(
         self,
@@ -136,8 +124,8 @@ class TestDockerignoreHandling:
                 result.stdout = ""
             elif "git" in command and "rev-parse" in command:
                 result.stdout = "abc1234"
-            elif "poetry" in command and "--version" in command:
-                result.stdout = "Poetry (version 1.8.0)"
+            elif command[:2] == ["uv", "--version"]:
+                result.stdout = "uv 0.8.0"
             else:
                 result.stdout = ""
             return result

@@ -7,33 +7,10 @@ ARG PYTHON_VERSION=3
 # See https://hub.docker.com/_/python for available variants
 ARG PYTHON_VARIANT=slim
 ARG WORKDIR_PATH=/workspace
-{% set package_manager = PACKAGE_MANAGER|default('poetry') %}
 
 FROM python:${PYTHON_VERSION} AS builder
 
 ARG PACKAGE_VERSION
-
-{% if package_manager == 'poetry' %}
-ARG POETRY_VERSION
-ARG POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION
-ARG POETRY_PLUGIN_EXPORT_VERSION
-
-# Bypass VCS-based version detection: use the host-computed version directly.
-# This avoids requiring a .git directory in the build context and prevents
-# false dirty-version detection from a partial working tree.
-ENV POETRY_DYNAMIC_VERSIONING_BYPASS=${PACKAGE_VERSION}
-
-# Install Poetry and required Poetry plugins for package build
-RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} \
-    sh -c 'set -eu; \
-    poetry_spec="poetry"; \
-    if [ -n "${POETRY_VERSION:-}" ]; then poetry_spec="poetry==$POETRY_VERSION"; fi; \
-    dynamic_spec="poetry-dynamic-versioning[plugin]"; \
-    if [ -n "${POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION:-}" ]; then dynamic_spec="poetry-dynamic-versioning[plugin]==$POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION"; fi; \
-    export_spec="poetry-plugin-export"; \
-    if [ -n "${POETRY_PLUGIN_EXPORT_VERSION:-}" ]; then export_spec="poetry-plugin-export==$POETRY_PLUGIN_EXPORT_VERSION"; fi; \
-    pip install --root-user-action=ignore "$poetry_spec" "$dynamic_spec" "$export_spec"'
-{% else %}
 ARG UV_VERSION
 
 # Bypass VCS-based version detection: use the host-computed version directly.
@@ -48,7 +25,6 @@ RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }}
     else \
         pip install --root-user-action=ignore uv; \
     fi'
-{% endif %}
 
 # Build package
 WORKDIR /tmp/build
@@ -56,24 +32,15 @@ COPY . /tmp/build/
 
 {% if HAS_DEBUG_DEPS %}
 # Export debug requirements when the project defines a debug dependency group
-{% if package_manager == 'poetry' %}
-RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} \
-    poetry export --only debug --without-hashes -f requirements.txt --output requirements-debug.txt
-{% else %}
 RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }} \
     uv export --group debug --no-hashes --format requirements-txt --output-file requirements-debug.txt
 {% endif %}
-{% endif %}
 
-# Build the wheel, caching the package-manager cache directory to speed up subsequent builds.
+# Build the wheel, caching the uv cache directory to speed up subsequent builds.
 # If running this in a CI system, you must be using a persistent builder to take
 # advantage of the cache mount, and you should configure your CI to persist the
 # cache directory between builds
-{% if package_manager == 'poetry' %}
-RUN --mount=type=cache,target=/root/.cache/pypoetry,id=pypoetry-cache{{ CACHE_ID_SUFFIX }} poetry build --format=wheel
-{% else %}
 RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }} uv build --wheel
-{% endif %}
 
 FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS runtime
 ARG WORKDIR_PATH=/workspace

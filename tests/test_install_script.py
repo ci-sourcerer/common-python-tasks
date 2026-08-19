@@ -22,21 +22,14 @@ def _write_command_stub(bin_dir: Path, command: str) -> None:
     stub_path.chmod(0o755)
 
 
-def _run_installer(
-    project_dir: Path, monkeypatch, manager: str | None = None
-) -> list[str]:
+def _run_installer(project_dir: Path, monkeypatch) -> list[str]:
     bin_dir = project_dir / "bin"
     bin_dir.mkdir(exist_ok=True)
     call_log = project_dir / "calls.log"
     _write_command_stub(bin_dir, "uv")
-    _write_command_stub(bin_dir, "poetry")
     _write_command_stub(bin_dir, "poe")
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("CALL_LOG", str(call_log))
-    if manager is not None:
-        monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", manager)
-    else:
-        monkeypatch.delenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", raising=False)
 
     subprocess.run(
         [sys.executable, str(SCRIPT_PATH)],
@@ -60,8 +53,8 @@ def test_installer_updates_existing_poe_table_idempotently(tmp_path, monkeypatch
     )
     (tmp_path / "uv.lock").touch()
 
-    _run_installer(tmp_path, monkeypatch, "uv")
-    _run_installer(tmp_path, monkeypatch, "uv")
+    _run_installer(tmp_path, monkeypatch)
+    _run_installer(tmp_path, monkeypatch)
 
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     assert pyproject["tool"]["poe"] == {
@@ -70,18 +63,17 @@ def test_installer_updates_existing_poe_table_idempotently(tmp_path, monkeypatch
     }
 
 
-def test_installer_uses_poetry_with_pinned_version(tmp_path, monkeypatch):
+def test_installer_uses_uv_with_pinned_version(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "example"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("COMMON_PYTHON_TASKS_VERSION", "1.2.3")
 
-    calls = _run_installer(tmp_path, monkeypatch, "poetry")
+    calls = _run_installer(tmp_path, monkeypatch)
 
     assert any(
-        call.endswith("poetry add --group dev common-python-tasks==1.2.3")
-        for call in calls
+        call.endswith("uv add --dev common-python-tasks==1.2.3") for call in calls
     )
 
 
@@ -92,9 +84,9 @@ def test_installer_writes_include_script_for_tags_to_include(tmp_path, monkeypat
         encoding="utf-8",
     )
     monkeypatch.setenv("TAGS_TO_INCLUDE", "db redis")
-    (tmp_path / "poetry.lock").touch()
+    (tmp_path / "uv.lock").touch()
 
-    _run_installer(tmp_path, monkeypatch, "poetry")
+    _run_installer(tmp_path, monkeypatch)
 
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     assert (
@@ -103,14 +95,34 @@ def test_installer_writes_include_script_for_tags_to_include(tmp_path, monkeypat
     )
 
 
-def test_installer_selects_package_manager_from_lock_file(tmp_path, monkeypatch):
+def test_installer_uses_uv_without_a_lock_file(tmp_path, monkeypatch):
     pyproject_path = tmp_path / "pyproject.toml"
     pyproject_path.write_text(
         '[project]\nname = "example"\nversion = "0.1.0"\n',
         encoding="utf-8",
     )
-    (tmp_path / "uv.lock").touch()
-
-    calls = _run_installer(tmp_path, monkeypatch, None)
+    calls = _run_installer(tmp_path, monkeypatch)
 
     assert any(call.endswith("uv add --dev common-python-tasks") for call in calls)
+
+
+def test_installer_requires_uv(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "example"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH)],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        shell=False,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Required command not found: uv" in result.stderr

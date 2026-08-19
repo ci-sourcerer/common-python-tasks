@@ -289,37 +289,17 @@ def render_build_image(
             commit_tag = version_tag
 
         python_version = platform.python_version()
-        package_manager = project.get_package_manager()
-        package_manager_version = project.get_package_manager_version(package_manager)
-
-        manager_build_args: dict[str, str | None]
-        if package_manager == project.PackageManager.POETRY:
-            manager_build_args = {
-                "POETRY_VERSION": package_manager_version,
-                "POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION": project.get_installed_requirement_version(
-                    "poetry-dynamic-versioning[plugin]"
-                ),
-                "POETRY_PLUGIN_EXPORT_VERSION": project.get_installed_requirement_version(
-                    "poetry-plugin-export"
-                ),
-            }
-        else:
-            manager_build_args = {
-                "UV_VERSION": package_manager_version,
-            }
 
         build_args = _merge_build_args(
             {
                 "PYTHON_VERSION": python_version,
-                "PACKAGE_MANAGER": package_manager,
-                "PACKAGE_MANAGER_VERSION": package_manager_version,
+                "UV_VERSION": project.get_uv_version(),
                 "PACKAGE_VERSION": package_version,
                 "PACKAGE_NAME": utils.get_package_name(use_underscores=True),
                 "AUTHORS": ",".join(
                     [f"{name} <{email}>" for name, email in project.get_authors()]
                 ),
                 "GIT_COMMIT": commit_tag,
-                **manager_build_args,
             },
             extra_build_args,
         )

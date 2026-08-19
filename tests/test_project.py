@@ -4,164 +4,75 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from common_python_tasks.project import (
-    PackageManager,
     extract_poe_script_tags,
     get_authors,
+    get_build_command,
+    get_dependency_update_command,
     get_installed_requirement_version,
-    get_package_manager,
-    get_package_manager_build_command,
-    get_package_manager_publish_command,
-    get_package_manager_update_command,
     get_project_version,
+    get_publish_command,
     get_release_tag_from_project_version,
     get_ruff_target_version,
+    get_uv_version,
     is_task_tag_included,
 )
 
 
 def test_get_installed_requirement_version_strips_extras_and_normalizes_name():
     def version_side_effect(name):
-        if name == "poetry-dynamic-versioning":
-            return "0.17.0"
+        if name == "uv-dynamic-versioning":
+            return "0.14.0"
         raise metadata.PackageNotFoundError
 
     get_installed_requirement_version.cache_clear()
-    get_package_manager.cache_clear()
-    with (
-        patch("importlib.metadata.version", side_effect=version_side_effect),
-        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
-    ):
+    with patch("importlib.metadata.version", side_effect=version_side_effect):
         assert (
-            get_installed_requirement_version("poetry-dynamic-versioning[plugin]")
-            == "0.17.0"
+            get_installed_requirement_version("uv-dynamic-versioning[plugin]")
+            == "0.14.0"
         )
 
 
-def test_get_installed_requirement_version_uses_poetry_show_when_not_available_in_metadata():
-    def version_side_effect(name):
-        raise metadata.PackageNotFoundError
-
-    poetry_show_output = """
- name         : poetry-dynamic-versioning
- version      : 1.8.2
- description  : Plugin for Poetry to enable dynamic versioning based on VCS tags
-"""
-
-    get_installed_requirement_version.cache_clear()
-    get_package_manager.cache_clear()
-
-    def run_command_side_effect(
-        cmd, capture_output=True, acceptable_returncodes=None, env=None
-    ):
-        if cmd[:3] == ["poetry", "run", "python"]:
-            return MagicMock(stdout="", returncode=1)
-        if cmd == ["poetry", "show", "poetry-dynamic-versioning"]:
-            return MagicMock(stdout=poetry_show_output, returncode=0)
-        return MagicMock(stdout="", returncode=1)
-
-    with (
-        patch("importlib.metadata.version", side_effect=version_side_effect),
-        patch(
-            "common_python_tasks.project.get_local_poetry_plugin_version",
-            return_value=None,
-        ),
-        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
-        patch(
-            "common_python_tasks.utils.run_command",
-            side_effect=run_command_side_effect,
-        ),
-    ):
-        assert (
-            get_installed_requirement_version("poetry-dynamic-versioning[plugin]")
-            == "1.8.2"
-        )
-
-
-def test_get_installed_requirement_version_uses_poetry_self_show_when_poetry_show_fails():
-    def version_side_effect(name):
-        raise metadata.PackageNotFoundError
-
-    poetry_self_show_output = """
- name         : poetry-dynamic-versioning
- version      : 1.8.3
- description  : Plugin for Poetry to enable dynamic versioning based on VCS tags
-"""
-
-    get_installed_requirement_version.cache_clear()
-    get_package_manager.cache_clear()
-
-    def run_command_side_effect(
-        cmd, capture_output=True, acceptable_returncodes=None, env=None
-    ):
-        if cmd[:3] == ["poetry", "run", "python"]:
-            return MagicMock(stdout="", returncode=1)
-        if cmd == ["poetry", "show", "poetry-dynamic-versioning"]:
-            return MagicMock(stdout="", returncode=1)
-        if cmd == ["poetry", "self", "show", "poetry-dynamic-versioning"]:
-            return MagicMock(stdout=poetry_self_show_output, returncode=0)
-        return MagicMock(stdout="", returncode=1)
-
-    with (
-        patch("importlib.metadata.version", side_effect=version_side_effect),
-        patch(
-            "common_python_tasks.project.get_local_poetry_plugin_version",
-            return_value=None,
-        ),
-        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
-        patch(
-            "common_python_tasks.utils.run_command",
-            side_effect=run_command_side_effect,
-        ),
-    ):
-        assert (
-            get_installed_requirement_version("poetry-dynamic-versioning[plugin]")
-            == "1.8.3"
-        )
-
-
-def test_get_installed_requirement_version_uses_poetry_run_python_when_metadata_fails():
+def test_get_installed_requirement_version_uses_uv_run_when_metadata_fails():
     def version_side_effect(name):
         raise metadata.PackageNotFoundError
 
     get_installed_requirement_version.cache_clear()
-    get_package_manager.cache_clear()
     with (
         patch("importlib.metadata.version", side_effect=version_side_effect),
-        patch(
-            "common_python_tasks.project.get_local_poetry_plugin_version",
-            return_value=None,
-        ),
-        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
         patch(
             "common_python_tasks.utils.run_command",
             return_value=MagicMock(stdout="1.9.0\n", returncode=0),
         ),
     ):
-        assert get_installed_requirement_version("poetry-plugin-export") == "1.9.0"
+        assert get_installed_requirement_version("example-package") == "1.9.0"
 
 
-def test_get_installed_requirement_version_uses_local_poetry_plugins_directory(
-    tmp_path, monkeypatch
-):
-    monkeypatch.chdir(tmp_path)
-    metadata_dir = (
-        tmp_path / ".poetry" / "plugins" / "poetry_plugin_export-1.10.0.dist-info"
-    )
-    metadata_dir.mkdir(parents=True)
-    metadata_dir.joinpath("METADATA").write_text(
-        "Name: poetry-plugin-export\nVersion: 1.10.0\n", encoding="utf-8"
-    )
-
+def test_get_installed_requirement_version_uses_uv_pip_show_when_uv_run_fails():
     def version_side_effect(name):
         raise metadata.PackageNotFoundError
 
+    package_show_output = """
+Name: example-package
+Version: 1.8.3
+"""
+
     get_installed_requirement_version.cache_clear()
-    get_package_manager.cache_clear()
+
+    def run_command_side_effect(cmd, **kwargs):
+        if cmd[:3] == ["uv", "run", "python"]:
+            return MagicMock(stdout="", returncode=1)
+        if cmd == ["uv", "pip", "show", "example-package"]:
+            return MagicMock(stdout=package_show_output, returncode=0)
+        return MagicMock(stdout="", returncode=1)
+
     with (
         patch("importlib.metadata.version", side_effect=version_side_effect),
-        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
+        patch(
+            "common_python_tasks.utils.run_command",
+            side_effect=run_command_side_effect,
+        ),
     ):
-        assert get_installed_requirement_version("poetry-plugin-export") == "1.10.0"
+        assert get_installed_requirement_version("example-package") == "1.8.3"
 
 
 def test_get_installed_requirement_version_returns_none_when_not_installed():
@@ -169,10 +80,12 @@ def test_get_installed_requirement_version_returns_none_when_not_installed():
         raise metadata.PackageNotFoundError
 
     get_installed_requirement_version.cache_clear()
-    get_package_manager.cache_clear()
     with (
         patch("importlib.metadata.version", side_effect=version_side_effect),
-        patch("common_python_tasks.project.get_package_manager", return_value="poetry"),
+        patch(
+            "common_python_tasks.utils.run_command",
+            return_value=MagicMock(stdout="", returncode=1),
+        ),
     ):
         assert get_installed_requirement_version("no-such-package") is None
 
@@ -401,27 +314,6 @@ def test_resolve_container_entrypoint_command_prefers_package_script_with_multip
             assert result == "my_pkg"
 
 
-def test_get_project_version_from_poetry_parses_output():
-    from common_python_tasks.project import get_project_version_from_poetry
-
-    with patch("common_python_tasks.utils.run_command") as mock_run:
-        mock_run.return_value = MagicMock(stdout="my-project 1.2.3\n", returncode=0)
-
-        result = get_project_version_from_poetry()
-
-        assert result == "1.2.3"
-
-
-def test_get_project_version_from_poetry_fails_on_empty_output():
-    from common_python_tasks.project import get_project_version_from_poetry
-
-    with patch("common_python_tasks.utils.run_command") as mock_run:
-        with patch("common_python_tasks.utils.fatal", side_effect=SystemExit(1)):
-            mock_run.return_value = MagicMock(stdout="", returncode=0)
-            with pytest.raises(SystemExit):
-                get_project_version_from_poetry()
-
-
 def test_get_release_tag_from_project_version():
     with patch(
         "common_python_tasks.project.get_project_version",
@@ -432,152 +324,119 @@ def test_get_release_tag_from_project_version():
         assert result == "v2.1.0"
 
 
-def test_get_package_manager_uses_uv_override(monkeypatch):
-    get_package_manager.cache_clear()
-    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "uv")
-
-    with patch("shutil.which", return_value="/usr/local/bin/uv"):
-        assert get_package_manager() == "uv"
-
-
-@pytest.mark.parametrize(
-    "env_var",
-    ["COMMON_PYTHON_TASKS_BUILD_TOOL", "PACKAGE_MANAGER"],
-)
-def test_get_package_manager_supports_aliases(monkeypatch, env_var):
-    get_package_manager.cache_clear()
-    monkeypatch.delenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", raising=False)
-    monkeypatch.setenv(env_var, "uv")
-
-    with patch("shutil.which", return_value="/usr/local/bin/uv"):
-        assert get_package_manager() == PackageManager.UV
-
-
-def test_get_package_manager_prefers_primary_override(monkeypatch):
-    get_package_manager.cache_clear()
-    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "uv")
-    monkeypatch.setenv("COMMON_PYTHON_TASKS_BUILD_TOOL", "poetry")
-    monkeypatch.setenv("PACKAGE_MANAGER", "poetry")
-
-    with patch("shutil.which", return_value="/usr/local/bin/tool"):
-        assert get_package_manager() == PackageManager.UV
-
-
-def test_get_package_manager_auto_prefers_uv_when_poetry_missing(monkeypatch):
-    get_package_manager.cache_clear()
-    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "auto")
-
-    def which_side_effect(name):
-        if name == "uv":
-            return "/usr/local/bin/uv"
-        return None
-
-    with patch("shutil.which", side_effect=which_side_effect):
-        assert get_package_manager() == "uv"
-
-
-def test_get_package_manager_auto_prefers_uv_when_project_declares_uv(
-    monkeypatch,
-):
-    get_package_manager.cache_clear()
-    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "auto")
-
-    with (
-        patch("shutil.which", return_value="/usr/local/bin/tool"),
-        patch(
-            "common_python_tasks.project.read_pyproject_toml",
-            return_value={"tool": {"uv": {}}, "build-system": {}},
-        ),
-    ):
-        assert get_package_manager() == PackageManager.UV
-
-
-def test_get_package_manager_auto_prefers_poetry_when_project_declares_poetry(
-    monkeypatch,
-):
-    get_package_manager.cache_clear()
-    monkeypatch.setenv("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "auto")
-
-    with (
-        patch("shutil.which", return_value="/usr/local/bin/tool"),
-        patch(
-            "common_python_tasks.project.read_pyproject_toml",
-            return_value={"tool": {"poetry": {}}, "build-system": {}},
-        ),
-    ):
-        assert get_package_manager() == "poetry"
-
-
-def test_get_package_manager_build_command_uses_uv_when_selected():
-    with patch("common_python_tasks.project.get_package_manager", return_value="uv"):
-        assert get_package_manager_build_command() == ["uv", "build"]
-        assert get_package_manager_build_command(wheel_only=True) == [
-            "uv",
-            "build",
-            "--wheel",
-        ]
-
-
-def test_get_package_manager_update_command_uses_selected_backend():
+def test_get_uv_version_parses_output():
+    get_uv_version.cache_clear()
     with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.POETRY,
+        "common_python_tasks.utils.run_command",
+        return_value=MagicMock(stdout="uv 0.8.0\n", returncode=0),
     ):
-        assert get_package_manager_update_command() == ["poetry", "update"]
-        assert get_package_manager_update_command(["pytest", "requests"]) == [
-            "poetry",
-            "update",
-            "pytest",
-            "requests",
-        ]
+        assert get_uv_version() == "0.8.0"
 
+
+def test_get_build_command():
+    assert get_build_command() == ["uv", "build"]
+    assert get_build_command(wheel_only=True) == ["uv", "build", "--wheel"]
+
+
+def test_get_dependency_update_command():
+    assert get_dependency_update_command() == ["uv", "sync", "--upgrade"]
+    assert get_dependency_update_command(["pytest", "requests"]) == [
+        "uv",
+        "sync",
+        "--upgrade",
+        "--upgrade-package",
+        "pytest",
+        "--upgrade-package",
+        "requests",
+    ]
+
+
+def test_get_publish_command_uses_uv():
+    assert get_publish_command() == ["uv", "publish"]
+
+
+def test_get_publish_command_uses_repository_name():
+    assert get_publish_command(repository="internal") == [
+        "uv",
+        "publish",
+        "--index",
+        "internal",
+    ]
+
+
+def test_get_publish_command_uses_repository_url():
+    assert get_publish_command(
+        repository_url="https://packages.example.com/legacy/"
+    ) == [
+        "uv",
+        "publish",
+        "--publish-url",
+        "https://packages.example.com/legacy/",
+    ]
+
+
+def test_get_publish_command_rejects_repository_and_url():
+    with pytest.raises(SystemExit):
+        get_publish_command(
+            repository="internal",
+            repository_url="https://packages.example.com/legacy/",
+        )
+
+
+def test_get_publish_command_uses_uv_publish_index_env_fallback(monkeypatch):
+    monkeypatch.setenv("UV_PUBLISH_INDEX", "testpypi")
+    assert get_publish_command() == [
+        "uv",
+        "publish",
+        "--index",
+        "testpypi",
+    ]
+
+
+def test_get_publish_command_prefers_package_publish_repository_env(monkeypatch):
+    monkeypatch.setenv("COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY", "internal")
+    monkeypatch.setenv("UV_PUBLISH_INDEX", "testpypi")
+    assert get_publish_command() == [
+        "uv",
+        "publish",
+        "--index",
+        "internal",
+    ]
+
+
+def test_get_publish_command_uses_uv_publish_url_env_fallback(monkeypatch):
+    monkeypatch.setenv("UV_PUBLISH_URL", "https://packages.example.com/legacy/")
+    assert get_publish_command() == [
+        "uv",
+        "publish",
+        "--publish-url",
+        "https://packages.example.com/legacy/",
+    ]
+
+
+def test_get_publish_command_uses_uv_config_default_publishable_index():
     with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.UV,
+        "common_python_tasks.project.read_pyproject_toml",
+        return_value={
+            "tool": {
+                "uv": {
+                    "index": [
+                        {
+                            "name": "pypi",
+                            "url": "https://pypi.org/simple",
+                        },
+                        {
+                            "name": "internal",
+                            "url": "https://packages.example.com/simple",
+                            "publish-url": "https://packages.example.com/legacy/",
+                            "default": True,
+                        },
+                    ]
+                }
+            }
+        },
     ):
-        assert get_package_manager_update_command() == ["uv", "sync", "--upgrade"]
-        assert get_package_manager_update_command(["pytest", "requests"]) == [
-            "uv",
-            "sync",
-            "--upgrade",
-            "--upgrade-package",
-            "pytest",
-            "--upgrade-package",
-            "requests",
-        ]
-
-
-def test_get_package_manager_publish_command_uses_selected_backend():
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.POETRY,
-    ):
-        assert get_package_manager_publish_command() == ["poetry", "publish"]
-
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.UV,
-    ):
-        assert get_package_manager_publish_command() == ["uv", "publish"]
-
-
-def test_get_package_manager_publish_command_uses_repository_name():
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.POETRY,
-    ):
-        assert get_package_manager_publish_command(repository="internal") == [
-            "poetry",
-            "publish",
-            "-r",
-            "internal",
-        ]
-
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.UV,
-    ):
-        assert get_package_manager_publish_command(repository="internal") == [
+        assert get_publish_command() == [
             "uv",
             "publish",
             "--index",
@@ -585,167 +444,44 @@ def test_get_package_manager_publish_command_uses_repository_name():
         ]
 
 
-def test_get_package_manager_publish_command_uses_repository_url_for_uv():
+def test_get_publish_command_rejects_ambiguous_uv_config_publish_indexes():
     with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.UV,
-    ):
-        assert get_package_manager_publish_command(
-            repository_url="https://packages.example.com/legacy/"
-        ) == [
-            "uv",
-            "publish",
-            "--publish-url",
-            "https://packages.example.com/legacy/",
-        ]
-
-
-def test_get_package_manager_publish_command_rejects_repository_url_for_poetry():
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.POETRY,
+        "common_python_tasks.project.read_pyproject_toml",
+        return_value={
+            "tool": {
+                "uv": {
+                    "index": [
+                        {
+                            "name": "internal-a",
+                            "url": "https://a.example.com/simple",
+                            "publish-url": "https://a.example.com/legacy/",
+                        },
+                        {
+                            "name": "internal-b",
+                            "url": "https://b.example.com/simple",
+                            "publish-url": "https://b.example.com/legacy/",
+                        },
+                    ]
+                }
+            }
+        },
     ):
         with pytest.raises(SystemExit):
-            get_package_manager_publish_command(
-                repository_url="https://packages.example.com/legacy/"
-            )
+            get_publish_command()
 
 
-def test_get_package_manager_publish_command_uses_poetry_repository_env_fallback(
-    monkeypatch,
-):
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.POETRY,
-    ):
-        monkeypatch.setenv("COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY", "internal")
-        assert get_package_manager_publish_command() == [
-            "poetry",
-            "publish",
-            "-r",
-            "internal",
-        ]
+def test_get_publish_command_explicit_repository_overrides_defaults(monkeypatch):
+    monkeypatch.setenv("UV_PUBLISH_INDEX", "from-env")
+    assert get_publish_command(repository="from-arg") == [
+        "uv",
+        "publish",
+        "--index",
+        "from-arg",
+    ]
 
 
-def test_get_package_manager_publish_command_uses_uv_publish_index_env_fallback(
-    monkeypatch,
-):
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.UV,
-    ):
-        monkeypatch.setenv("UV_PUBLISH_INDEX", "testpypi")
-        assert get_package_manager_publish_command() == [
-            "uv",
-            "publish",
-            "--index",
-            "testpypi",
-        ]
-
-
-def test_get_package_manager_publish_command_uses_uv_publish_url_env_fallback(
-    monkeypatch,
-):
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.UV,
-    ):
-        monkeypatch.setenv("UV_PUBLISH_URL", "https://packages.example.com/legacy/")
-        assert get_package_manager_publish_command() == [
-            "uv",
-            "publish",
-            "--publish-url",
-            "https://packages.example.com/legacy/",
-        ]
-
-
-def test_get_package_manager_publish_command_uses_uv_config_default_publishable_index():
+def test_get_project_version_prefers_vcs_when_pyproject_is_placeholder():
     with (
-        patch(
-            "common_python_tasks.project.get_package_manager",
-            return_value=PackageManager.UV,
-        ),
-        patch(
-            "common_python_tasks.project.read_pyproject_toml",
-            return_value={
-                "tool": {
-                    "uv": {
-                        "index": [
-                            {
-                                "name": "pypi",
-                                "url": "https://pypi.org/simple",
-                            },
-                            {
-                                "name": "internal",
-                                "url": "https://packages.example.com/simple",
-                                "publish-url": "https://packages.example.com/legacy/",
-                                "default": True,
-                            },
-                        ]
-                    }
-                }
-            },
-        ),
-    ):
-        assert get_package_manager_publish_command() == [
-            "uv",
-            "publish",
-            "--index",
-            "internal",
-        ]
-
-
-def test_get_package_manager_publish_command_rejects_ambiguous_uv_config_publish_indexes():
-    with (
-        patch(
-            "common_python_tasks.project.get_package_manager",
-            return_value=PackageManager.UV,
-        ),
-        patch(
-            "common_python_tasks.project.read_pyproject_toml",
-            return_value={
-                "tool": {
-                    "uv": {
-                        "index": [
-                            {
-                                "name": "internal-a",
-                                "url": "https://a.example.com/simple",
-                                "publish-url": "https://a.example.com/legacy/",
-                            },
-                            {
-                                "name": "internal-b",
-                                "url": "https://b.example.com/simple",
-                                "publish-url": "https://b.example.com/legacy/",
-                            },
-                        ]
-                    }
-                }
-            },
-        ),
-    ):
-        with pytest.raises(SystemExit):
-            get_package_manager_publish_command()
-
-
-def test_get_package_manager_publish_command_explicit_repository_overrides_defaults(
-    monkeypatch,
-):
-    with patch(
-        "common_python_tasks.project.get_package_manager",
-        return_value=PackageManager.UV,
-    ):
-        monkeypatch.setenv("UV_PUBLISH_INDEX", "from-env")
-        assert get_package_manager_publish_command(repository="from-arg") == [
-            "uv",
-            "publish",
-            "--index",
-            "from-arg",
-        ]
-
-
-def test_get_project_version_prefers_vcs_for_uv_when_pyproject_is_placeholder():
-    with (
-        patch("common_python_tasks.project.get_package_manager", return_value="uv"),
         patch(
             "common_python_tasks.project.read_pyproject_toml",
             return_value={"project": {"version": "0.0.0"}},
@@ -756,3 +492,17 @@ def test_get_project_version_prefers_vcs_for_uv_when_pyproject_is_placeholder():
         ),
     ):
         assert get_project_version() == "1.4.2"
+
+
+def test_get_project_version_prefers_static_project_metadata():
+    with (
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={"project": {"version": "1.5.0"}},
+        ),
+        patch(
+            "common_python_tasks.project.get_project_version_from_vcs",
+            return_value="2.0.0",
+        ),
+    ):
+        assert get_project_version() == "1.5.0"

@@ -480,7 +480,7 @@ def test_build_image_reads_multiple_container_envfiles_in_order(
     assert not any("A=one" in str(a) for a in build_calls[0])
 
 
-def test_build_image_passes_required_dependency_versions(
+def test_build_image_passes_uv_and_package_versions(
     temp_project_dir,
     mock_run_command,
     mock_load_data_file,
@@ -488,38 +488,24 @@ def test_build_image_passes_required_dependency_versions(
     mock_get_authors,
     mock_get_package_name,
 ):
-    from unittest.mock import patch
-
     from common_python_tasks.tasks import build_image
 
-    with patch(
-        "common_python_tasks.project.get_installed_requirement_version",
-        side_effect=lambda name: {
-            "poetry-dynamic-versioning[plugin]": "0.17.0",
-            "poetry-plugin-export": "1.5.0",
-        }.get(name),
-    ):
-        build_calls = []
-        original = mock_run_command.side_effect
+    build_calls = []
+    original = mock_run_command.side_effect
 
-        def tracking(command, *args, **kwargs):
-            if "docker" in command and "build" in command:
-                build_calls.append(command)
-            return original(command, *args, **kwargs)
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+        return original(command, *args, **kwargs)
 
-        mock_run_command.side_effect = tracking
+    mock_run_command.side_effect = tracking
 
-        build_image()
+    build_image()
 
     assert len(build_calls) == 1
     base_build_cmd = build_calls[0]
-    assert any(
-        "POETRY_DYNAMIC_VERSIONING_PLUGIN_VERSION=0.17.0" in str(a)
-        for a in base_build_cmd
-    )
-    assert any("POETRY_PLUGIN_EXPORT_VERSION=1.5.0" in str(a) for a in base_build_cmd)
+    assert any("UV_VERSION=0.8.0" in str(a) for a in base_build_cmd)
     assert any("PACKAGE_VERSION=1.0.0" in str(a) for a in base_build_cmd)
-    assert not any("TOMLKIT_VERSION" in str(a) for a in base_build_cmd)
 
 
 def test_build_image_no_cache_passes_no_cache_pull_and_plain(
@@ -561,7 +547,6 @@ def test_build_image_renders_uv_dynamic_versioning_bypass_for_uv_builder(
     mock_get_authors,
     mock_get_package_name,
 ):
-    from common_python_tasks import project
     from common_python_tasks.tasks import build_image
 
     build_calls = []
@@ -596,15 +581,9 @@ def test_build_image_renders_uv_dynamic_versioning_bypass_for_uv_builder(
 
     mock_run_command.side_effect = tracking
 
-    with (
-        patch(
-            "common_python_tasks.project.get_package_manager",
-            return_value=project.PackageManager.UV,
-        ),
-        patch(
-            "common_python_tasks.project.get_package_manager_version",
-            return_value="0.8.0",
-        ),
+    with patch(
+        "common_python_tasks.project.get_uv_version",
+        return_value="0.8.0",
     ):
         build_image()
 
@@ -636,12 +615,12 @@ def test_build_image_accepts_native_docker_build_arg_override(
 
     mock_run_command.side_effect = tracking
 
-    build_image("--build-arg", "POETRY_VERSION=9.9.9")
+    build_image("--build-arg", "UV_VERSION=9.9.9")
 
     assert len(build_calls) == 1
     base_build_cmd = build_calls[0]
-    assert base_build_cmd.index("POETRY_VERSION=1.8.0") < base_build_cmd.index(
-        "POETRY_VERSION=9.9.9"
+    assert base_build_cmd.index("UV_VERSION=0.8.0") < base_build_cmd.index(
+        "UV_VERSION=9.9.9"
     )
 
 

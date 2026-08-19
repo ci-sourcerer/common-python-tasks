@@ -29,12 +29,11 @@ def _set_test_environment_variables():
         "RELEASE_POST_SCRIPT",
         "RELEASE_SCRIPT_PHASE=post python -m scripts.release_script",
     )
-    os.environ.setdefault("COMMON_PYTHON_TASKS_PACKAGE_MANAGER", "poetry")
 
 
 @pytest.fixture
 def mock_run_command():
-    """Mock _run_command with standard return values for common git/poetry commands."""
+    """Mock `_run_command` with standard return values for common commands."""
     mock = MagicMock()
 
     with patch("common_python_tasks.utils.run_command", new=mock):
@@ -52,8 +51,6 @@ def mock_run_command():
                 result.stdout = ""
             elif "git" in command and "rev-parse" in command:
                 result.stdout = "abc1234"
-            elif "poetry" in command and "--version" in command:
-                result.stdout = "Poetry (version 1.8.0)"
             elif command[:2] == ["uv", "--version"]:
                 result.stdout = "uv 0.8.0"
             elif "docker" in command:
@@ -70,19 +67,8 @@ def mock_run_command():
 def mock_load_data_file():
     """Mock _load_data_file to return test data."""
     mock = MagicMock()
-    version_mock = MagicMock()
 
-    with (
-        patch("common_python_tasks.utils.load_data_file", new=mock),
-        patch(
-            "common_python_tasks.project.get_installed_requirement_version",
-            new=version_mock,
-        ),
-    ):
-        version_mock.side_effect = lambda name: {
-            "poetry-dynamic-versioning[plugin]": "0.17.0",
-            "poetry-plugin-export": "1.5.0",
-        }.get(name)
+    with patch("common_python_tasks.utils.load_data_file", new=mock):
 
         def side_effect(filename, type_identifier="generic", fatal_on_missing=True):
             # normalize inputs for both call styles (old: single `filename`, new: `file, type_identifier`)

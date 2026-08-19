@@ -4,7 +4,7 @@
         {
             "label": "Install Dependencies",
             "type": "shell",
-            "command": "poetry install",
+            "command": "uv sync",
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -52,7 +52,7 @@
         {
             "label": "Build",
             "type": "shell",
-            "command": "poetry build",
+            "command": "uv build",
             "options": {
                 "cwd": "${workspaceFolder}"
             },

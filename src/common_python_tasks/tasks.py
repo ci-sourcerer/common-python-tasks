@@ -459,7 +459,6 @@ def build_image(
         resolve_extension_content,
     )
     from .project import (
-        get_package_manager,
         has_debug_dependency_group,
         resolve_container_entrypoint_command,
     )
@@ -599,7 +598,6 @@ def build_image(
     dockerfile_text = render_template_text(
         load_data_file("Dockerfile.j2")[1],
         {
-            "PACKAGE_MANAGER": get_package_manager(),
             "EXTENSION_CONTENT": combined_content,
             "CONTAINER_DEPS_IMAGE": deps_image_tag,
             "CONTAINER_DEPS_MOVE_SCRIPT": container_deps_move_script,
@@ -898,15 +896,13 @@ def publish_package(
         repository: Optional configured repository name to publish to.
         repository_url: Optional repository upload URL to publish to.
     """
-    from .project import get_package_manager_publish_command
+    from .project import get_publish_command
     from .utils import run_command
 
     if build_first:
         build_package(clean_dist=True)
     run_command(
-        get_package_manager_publish_command(
-            repository=repository, repository_url=repository_url
-        )
+        get_publish_command(repository=repository, repository_url=repository_url)
     )
 
 
@@ -1010,7 +1006,6 @@ def _get_changed_dependency_names() -> list[str]:
                 "--unified=3",
                 "--",
                 "pyproject.toml",
-                "poetry.lock",
                 "uv.lock",
             ],
             capture_output=True,
@@ -1028,7 +1023,6 @@ def _get_dependency_update_changed_files() -> list[Path]:
             "--porcelain",
             "--",
             "pyproject.toml",
-            "poetry.lock",
             "uv.lock",
         ],
         capture_output=True,
@@ -1065,7 +1059,7 @@ def update_dependencies(
     draft: bool = False,
     run_tests: bool = False,
 ) -> None:
-    """Update project dependencies with Poetry or uv.
+    """Update project dependencies with uv.
 
     Args:
         *dependencies: Optional dependency names to update. When omitted, update
@@ -1080,14 +1074,14 @@ def update_dependencies(
     """
     from .git import get_current_branch, get_default_branch
     from .github import create_pull_request
-    from .project import get_package_manager_update_command
+    from .project import get_dependency_update_command
     from .utils import run_command
 
     should_create_branch = branch or branch_name is not None or pr
     if should_create_branch or commit:
         _ensure_clean_dependency_update_worktree()
 
-    run_command(get_package_manager_update_command(dependencies))
+    run_command(get_dependency_update_command(dependencies))
     if not _get_dependency_update_changed_files():
         LOGGER.info(
             "Dependency update completed with no lockfile or pyproject changes."
@@ -1117,7 +1111,6 @@ def update_dependencies(
                     path
                     for path in (
                         Path("pyproject.toml"),
-                        Path("poetry.lock"),
                         Path("uv.lock"),
                     )
                     if path.exists()
@@ -1148,10 +1141,10 @@ def build_package(wheel_only: bool = False, clean_dist: bool = False) -> None:
         wheel_only: Whether to build only the wheel artifact.
         clean_dist: Whether to remove existing distribution artifacts first.
     """
-    from .project import get_package_manager_build_command
+    from .project import get_build_command
     from .utils import run_command
 
-    command = get_package_manager_build_command(wheel_only=wheel_only)
+    command = get_build_command(wheel_only=wheel_only)
     if clean_dist:
         dist_path = Path("dist")
         if dist_path.exists() and any(dist_path.iterdir()):

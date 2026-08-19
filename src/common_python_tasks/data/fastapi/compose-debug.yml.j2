@@ -22,7 +22,7 @@ services:
           path: ./src/${PACKAGE_UNDERSCORE_NAME}
           target: /${PACKAGE_UNDERSCORE_NAME}
         - action: rebuild
-          path: poetry.lock
+          path: uv.lock
     ports:
       - mode: ingress
         target: 5678

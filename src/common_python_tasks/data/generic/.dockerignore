@@ -1,7 +1,7 @@
 *
 !dist/*.whl
 !pyproject.toml
-!poetry.lock
+!uv.lock
 !README.md
 !LICENSE
 

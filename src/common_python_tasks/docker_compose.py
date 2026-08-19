@@ -14,7 +14,7 @@ from poethepoet_tasks import TaskCollection
 
 from . import utils
 from .env import get_workdir_path
-from .project import get_package_manager, get_package_manager_version
+from .project import get_uv_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -239,8 +239,7 @@ _COMPOSE_VAR_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
             "ENVIRONMENT",
             "IMAGE_TAG",
             "PYTHON_VERSION",
-            "PACKAGE_MANAGER",
-            "PACKAGE_MANAGER_VERSION",
+            "UV_VERSION",
         },
         "compose-db": {
             "PACKAGE_NAME",
@@ -250,8 +249,7 @@ _COMPOSE_VAR_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
             "DB_PORT",
             "IMAGE_TAG",
             "PYTHON_VERSION",
-            "PACKAGE_MANAGER",
-            "PACKAGE_MANAGER_VERSION",
+            "UV_VERSION",
             "POSTGRES_VERSION",
             "WORKDIR_PATH",
         },
@@ -337,13 +335,12 @@ def get_compose_env(
         "ENVIRONMENT": os.getenv("ENVIRONMENT", "production"),
         "IMAGE_TAG": image_tag or "latest",
         "PACKAGE_NAME": package_name,
-        "PACKAGE_MANAGER": get_package_manager(),
-        "PACKAGE_MANAGER_VERSION": get_package_manager_version(),
         "PACKAGE_UNDERSCORE_NAME": utils.package_name_to_underscore(package_name),
         "WORKDIR_PATH": get_workdir_path(),
         "POSTGRES_VERSION": os.getenv("POSTGRES_VERSION", "17"),
         "PYTHON_VERSION": platform.python_version(),
         "SECRET_KEY": os.getenv("SECRET_KEY", ""),
+        "UV_VERSION": get_uv_version(),
     }
 
     if compose_type and compose_files:

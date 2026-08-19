@@ -10,11 +10,6 @@ import tomllib
 from pathlib import Path
 
 PACKAGE_NAME = "common-python-tasks"
-PACKAGE_MANAGER_ENV_VARS = (
-    "COMMON_PYTHON_TASKS_PACKAGE_MANAGER",
-    "COMMON_PYTHON_TASKS_BUILD_TOOL",
-    "PACKAGE_MANAGER",
-)
 PYPROJECT_PATH = Path("pyproject.toml")
 TOOL_POE_PATTERN = re.compile(r"^\s*\[tool\.poe\]\s*(?:#.*)?$")
 TABLE_PATTERN = re.compile(r"^\s*\[")
@@ -26,47 +21,18 @@ def _require_command(command: str) -> None:
         sys.exit(f"Required command not found: {command}")
 
 
-def _get_requested_package_manager() -> str:
-    for env_var in PACKAGE_MANAGER_ENV_VARS:
-        if os.getenv(env_var, "").strip():
-            return os.environ[env_var].strip().lower()
-    return "auto"
-
-
-def _select_package_manager() -> str:
-    requested_manager = _get_requested_package_manager()
-    if requested_manager in {"poetry", "uv"}:
-        _require_command(requested_manager)
-        return requested_manager
-    if requested_manager != "auto":
-        sys.exit(f"Unsupported package manager: {requested_manager}")
-
-    for lock_file, package_manager in (
-        (Path("uv.lock"), "uv"),
-        (Path("poetry.lock"), "poetry"),
-    ):
-        if lock_file.is_file() and shutil.which(package_manager) is not None:
-            return package_manager
-
-    for package_manager in ("uv", "poetry"):
-        if shutil.which(package_manager) is not None:
-            return package_manager
-
-    sys.exit("Neither uv nor Poetry is installed.")
-
-
 def _get_package_requirement() -> str:
     if os.getenv("COMMON_PYTHON_TASKS_VERSION", "").strip():
         return f"{PACKAGE_NAME}=={os.environ['COMMON_PYTHON_TASKS_VERSION'].strip()}"
     return PACKAGE_NAME
 
 
-def _install_package(package_manager: str) -> None:
-    if package_manager == "uv":
-        command = ["uv", "add", "--dev", _get_package_requirement()]
-    else:
-        command = ["poetry", "add", "--group", "dev", _get_package_requirement()]
-    subprocess.run(command, check=True, shell=False)
+def _install_package() -> None:
+    subprocess.run(
+        ["uv", "add", "--dev", _get_package_requirement()],
+        check=True,
+        shell=False,
+    )
 
 
 def _get_include_script() -> str:
@@ -132,7 +98,8 @@ def _print_available_tasks() -> None:
 
 def main() -> None:
     """Install common tasks and configure Poe in the current project."""
-    _install_package(_select_package_manager())
+    _require_command("uv")
+    _install_package()
     _configure_poe()
     print("\n\033[1;32mCommon Python tasks added to project.\033[0m")
     print("\n\033[1mAvailable tasks:\033[0m")

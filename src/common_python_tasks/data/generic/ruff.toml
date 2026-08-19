@@ -1,2 +1,2 @@
 line-length = 88
-extend-exclude = [".dist", ".poetry", "build"]
+extend-exclude = [".dist", "build"]

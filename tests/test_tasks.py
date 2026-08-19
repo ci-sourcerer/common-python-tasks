@@ -294,8 +294,8 @@ def test_update_dependencies_runs_update_only_when_no_changes():
 
     with (
         patch(
-            "common_python_tasks.project.get_package_manager_update_command",
-            return_value=["poetry", "update", "pytest"],
+            "common_python_tasks.project.get_dependency_update_command",
+            return_value=["uv", "sync", "--upgrade", "--upgrade-package", "pytest"],
         ),
         patch(
             "common_python_tasks.utils.run_command",
@@ -306,7 +306,7 @@ def test_update_dependencies_runs_update_only_when_no_changes():
 
     mock_run_command.assert_has_calls(
         [
-            call(["poetry", "update", "pytest"]),
+            call(["uv", "sync", "--upgrade", "--upgrade-package", "pytest"]),
             call(
                 [
                     "git",
@@ -314,7 +314,6 @@ def test_update_dependencies_runs_update_only_when_no_changes():
                     "--porcelain",
                     "--",
                     "pyproject.toml",
-                    "poetry.lock",
                     "uv.lock",
                 ],
                 capture_output=True,
@@ -348,7 +347,7 @@ def test_update_dependencies_creates_branch_commit_push_and_pr(tmp_path, monkeyp
     with (
         patch("common_python_tasks.git.get_dirty_files", return_value=[]),
         patch(
-            "common_python_tasks.project.get_package_manager_update_command",
+            "common_python_tasks.project.get_dependency_update_command",
             return_value=["uv", "sync", "--upgrade", "--upgrade-package", "pytest"],
         ),
         patch("common_python_tasks.tasks.test") as mock_test,
@@ -1761,12 +1760,12 @@ def test_build_without_containers_skips_task_build_image():
     mock_build_image.assert_not_called()
 
 
-def test_build_package_uses_selected_backend_command():
+def test_build_package_uses_uv_build_command():
     from common_python_tasks.tasks import build_package
 
     with (
         patch(
-            "common_python_tasks.project.get_package_manager_build_command",
+            "common_python_tasks.project.get_build_command",
             return_value=["uv", "build", "--wheel"],
         ) as mock_build_command,
         patch("common_python_tasks.utils.run_command") as mock_run_command,
@@ -1777,13 +1776,13 @@ def test_build_package_uses_selected_backend_command():
     mock_run_command.assert_called_once_with(["uv", "build", "--wheel"])
 
 
-def test_publish_package_uses_selected_backend_command():
+def test_publish_package_uses_uv_publish_command():
     from common_python_tasks.tasks import publish_package
 
     with (
         patch("common_python_tasks.tasks.build_package") as mock_build_package,
         patch(
-            "common_python_tasks.project.get_package_manager_publish_command",
+            "common_python_tasks.project.get_publish_command",
             return_value=["uv", "publish"],
         ) as mock_publish_command,
         patch("common_python_tasks.utils.run_command") as mock_run_command,
@@ -1804,7 +1803,7 @@ def test_publish_package_forwards_repository_options():
     with (
         patch("common_python_tasks.tasks.build_package"),
         patch(
-            "common_python_tasks.project.get_package_manager_publish_command",
+            "common_python_tasks.project.get_publish_command",
             return_value=["uv", "publish", "--index", "internal"],
         ) as mock_publish_command,
         patch("common_python_tasks.utils.run_command") as mock_run_command,

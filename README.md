@@ -12,8 +12,6 @@ Add `common-python-tasks` as a development dependency from your project root.
 
 ```shell
 uv add --dev common-python-tasks==0.8.0
-# or, for Poetry projects
-poetry add --group dev common-python-tasks==0.8.0
 ```
 
 Configure Poe the Poet to expose the default `common` task set.
@@ -76,7 +74,7 @@ The generated tables below list public tasks only. Tags identify which tasks are
 | --- | --- | --- |
 | `publish-package` | Publish the package to the PyPI server. | common, packaging |
 | `publish-github-release` | Publish or update a GitHub Release for the current repository. | common, packaging, release |
-| `update-dependencies` | Update project dependencies with Poetry or uv. | common, packaging |
+| `update-dependencies` | Update project dependencies with uv. | common, packaging |
 | `build-package` | Build the package (wheel and sdist). | build, common, packaging |
 | `bump-version` | Bump the project version. | common, packaging |
 | `changelog` | Print the changelog for the current version based on git history and git-cliff. | common, packaging, release |
@@ -111,7 +109,7 @@ The generated tables below list public tasks only. Tags identify which tasks are
 
 Every project needs a `pyproject.toml` file at its root and Poe the Poet available in its development environment.
 
-Tasks that install, build, publish, or update dependencies also require either Poetry or uv. Package and release tasks need a resolvable project version from `project.version`, Poetry's version resolution, or Git tags. Dynamic-versioning plugins are supported but are not a baseline requirement.
+Tasks that install, build, publish, or update dependencies require uv. Package and release tasks need a resolvable project version from `project.version` or Git tags. Dynamic versioning is supported but is not a baseline requirement.
 
 ### Task selection
 
@@ -131,18 +129,9 @@ include_script = "common_python_tasks:tasks(include_tags=['common', 'containers'
 
 The `containers` tag also includes container-based development-stack tasks. Use the tags in the task tables to tailor a smaller task set.
 
-### Package manager backend selection
+### Package management
 
-Packaging-related tasks, including `build-package`, `publish-package`, release version resolution, and container build metadata, support Poetry and uv.
-
-Backend selection uses this precedence.
-
-1. `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
-2. `COMMON_PYTHON_TASKS_BUILD_TOOL`
-3. `PACKAGE_MANAGER`
-4. Auto-discovery (`auto`) based on installed tools and project metadata
-
-Supported values are `poetry`, `uv`, and `auto`.
+Packaging-related tasks, including `build-package`, `publish-package`, dependency updates, release version resolution, and container build metadata, use uv exclusively. The `uv` executable must be available on `PATH`.
 
 ### Publish target selection
 
@@ -151,12 +140,7 @@ The `publish-package` task resolves publish targets with this precedence.
 1. Explicit task arguments (`repository` or `repository_url`)
 2. Environment-variable fallback
 3. uv project configuration fallback from `[[tool.uv.index]]`
-4. Backend defaults (`poetry publish` or `uv publish`)
-
-Poetry uses repository names only.
-
-- `COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY`
-- `POETRY_REPOSITORY`
+4. The `uv publish` default
 
 uv prefers named publish indexes.
 
@@ -223,12 +207,8 @@ addopts = "-ra"
 #### Project and package settings
 
 - `PACKAGE_NAME`: Overrides the package name inferred from `pyproject.toml`
-- `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`: Selects the package-manager backend as `poetry`, `uv`, or `auto`
-- `COMMON_PYTHON_TASKS_BUILD_TOOL`: Alias for `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
-- `PACKAGE_MANAGER`: Alias for `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
 - `COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY`: Preferred publish repository/index name for `publish-package`
 - `COMMON_PYTHON_TASKS_PUBLISH_URL`: Preferred uv publish upload URL for `publish-package` when no repository/index is selected
-- `POETRY_REPOSITORY`: Poetry repository-name fallback for `publish-package`
 - `UV_PUBLISH_INDEX`: uv publish-index fallback for `publish-package`
 - `UV_PUBLISH_URL`: uv publish upload-url fallback for `publish-package`
 
@@ -382,7 +362,7 @@ GITHUB_RELEASE_ASSETS="dist/*.whl:dist/*.tar.gz" poe publish-github-release
 
 ### Container build fails with "unable to find package"
 
-Check that `pyproject.toml` has a correct package name and the package-discovery settings required by its build backend. For Poetry projects, this commonly includes `[tool.poetry] packages = [{ include = "your_package", from = "src" }]`.
+Check that `pyproject.toml` has a correct package name and the package-discovery settings required by its build backend. For a `src` layout built with Hatch, configure `[tool.hatch.build.targets.wheel] packages = ["src/your_package"]`.
 
 ### Stack fails to start or services cannot connect
 
@@ -407,9 +387,9 @@ Ensure the project-root `.env` file is writable and inspect its permissions with
 
 See the [standard Dockerfile template](src/common_python_tasks/data/generic/Dockerfile.j2) for the implementation.
 
-- Multi-stage build: The build stage installs the selected package-manager backend and builds a wheel. The runtime stage installs only the wheel to keep the final image slim and reproducible.
-- Cache mounts: Pip and package-manager cache mounts speed up iterative builds without bloating the final image.
-- Explicit build metadata: `PYTHON_VERSION`, `PACKAGE_MANAGER`, `PACKAGE_MANAGER_VERSION`, `PACKAGE_NAME`, `AUTHORS`, and `GIT_COMMIT` make image metadata predictable and auditable.
+- Multi-stage build: The build stage installs uv and builds a wheel. The runtime stage installs only the wheel to keep the final image slim and reproducible.
+- Cache mounts: Pip and uv cache mounts speed up iterative builds without bloating the final image.
+- Explicit build metadata: `PYTHON_VERSION`, `UV_VERSION`, `PACKAGE_VERSION`, `PACKAGE_NAME`, `AUTHORS`, and `GIT_COMMIT` make image metadata predictable and auditable.
 - Project-level build settings: `CONTAINER_APT_PACKAGES`, `CONTAINER_CUSTOM_ENTRYPOINT`, and `CONTAINER_DEPS_IMAGE` configure generated image behavior without being encoded as generic Docker arguments.
 - Optional debug stage: The image exports and installs the `debug` dependency group only when present and does not include it in the default final image.
 - Stable package path: Symlinks give entrypoints and consumers consistent `/pkg` and `/_$PACKAGE_NAME` paths regardless of wheel layout.
