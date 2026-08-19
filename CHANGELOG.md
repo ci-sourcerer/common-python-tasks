@@ -1,3 +1,15 @@
+## [0.9.0] - 2026-08-19
+
+### 🚀 Features
+
+- Avoid hidden paths in GitHub release asset processing
+- Add publish target selection and environment variable fallbacks for package publishing
+- [**breaking**] Drop Poetry support
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.9.0
+
 ## [0.8.0] - 2026-08-15
 
 ### 🚀 Features
