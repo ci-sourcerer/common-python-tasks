@@ -144,6 +144,29 @@ Backend selection uses this precedence.
 
 Supported values are `poetry`, `uv`, and `auto`.
 
+### Publish target selection
+
+The `publish-package` task resolves publish targets with this precedence.
+
+1. Explicit task arguments (`repository` or `repository_url`)
+2. Environment-variable fallback
+3. uv project configuration fallback from `[[tool.uv.index]]`
+4. Backend defaults (`poetry publish` or `uv publish`)
+
+Poetry uses repository names only.
+
+- `COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY`
+- `POETRY_REPOSITORY`
+
+uv prefers named publish indexes.
+
+- `COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY`
+- `UV_PUBLISH_INDEX`
+- `COMMON_PYTHON_TASKS_PUBLISH_URL`
+- `UV_PUBLISH_URL`
+
+When using uv project configuration fallback, `[[tool.uv.index]]` must include both `name` and `publish-url` for publish selection. If multiple publishable indexes exist, set exactly one `default = true` or pass an explicit repository.
+
 ### Configuration precedence
 
 For pytest and coverage, configuration resolves in the following order.
@@ -203,6 +226,11 @@ addopts = "-ra"
 - `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`: Selects the package-manager backend as `poetry`, `uv`, or `auto`
 - `COMMON_PYTHON_TASKS_BUILD_TOOL`: Alias for `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
 - `PACKAGE_MANAGER`: Alias for `COMMON_PYTHON_TASKS_PACKAGE_MANAGER`
+- `COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY`: Preferred publish repository/index name for `publish-package`
+- `COMMON_PYTHON_TASKS_PUBLISH_URL`: Preferred uv publish upload URL for `publish-package` when no repository/index is selected
+- `POETRY_REPOSITORY`: Poetry repository-name fallback for `publish-package`
+- `UV_PUBLISH_INDEX`: uv publish-index fallback for `publish-package`
+- `UV_PUBLISH_URL`: uv publish upload-url fallback for `publish-package`
 
 #### Container image settings
 

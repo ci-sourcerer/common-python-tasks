@@ -611,6 +611,138 @@ def test_get_package_manager_publish_command_rejects_repository_url_for_poetry()
             )
 
 
+def test_get_package_manager_publish_command_uses_poetry_repository_env_fallback(
+    monkeypatch,
+):
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.POETRY,
+    ):
+        monkeypatch.setenv("COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY", "internal")
+        assert get_package_manager_publish_command() == [
+            "poetry",
+            "publish",
+            "-r",
+            "internal",
+        ]
+
+
+def test_get_package_manager_publish_command_uses_uv_publish_index_env_fallback(
+    monkeypatch,
+):
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.UV,
+    ):
+        monkeypatch.setenv("UV_PUBLISH_INDEX", "testpypi")
+        assert get_package_manager_publish_command() == [
+            "uv",
+            "publish",
+            "--index",
+            "testpypi",
+        ]
+
+
+def test_get_package_manager_publish_command_uses_uv_publish_url_env_fallback(
+    monkeypatch,
+):
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.UV,
+    ):
+        monkeypatch.setenv("UV_PUBLISH_URL", "https://packages.example.com/legacy/")
+        assert get_package_manager_publish_command() == [
+            "uv",
+            "publish",
+            "--publish-url",
+            "https://packages.example.com/legacy/",
+        ]
+
+
+def test_get_package_manager_publish_command_uses_uv_config_default_publishable_index():
+    with (
+        patch(
+            "common_python_tasks.project.get_package_manager",
+            return_value=PackageManager.UV,
+        ),
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={
+                "tool": {
+                    "uv": {
+                        "index": [
+                            {
+                                "name": "pypi",
+                                "url": "https://pypi.org/simple",
+                            },
+                            {
+                                "name": "internal",
+                                "url": "https://packages.example.com/simple",
+                                "publish-url": "https://packages.example.com/legacy/",
+                                "default": True,
+                            },
+                        ]
+                    }
+                }
+            },
+        ),
+    ):
+        assert get_package_manager_publish_command() == [
+            "uv",
+            "publish",
+            "--index",
+            "internal",
+        ]
+
+
+def test_get_package_manager_publish_command_rejects_ambiguous_uv_config_publish_indexes():
+    with (
+        patch(
+            "common_python_tasks.project.get_package_manager",
+            return_value=PackageManager.UV,
+        ),
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={
+                "tool": {
+                    "uv": {
+                        "index": [
+                            {
+                                "name": "internal-a",
+                                "url": "https://a.example.com/simple",
+                                "publish-url": "https://a.example.com/legacy/",
+                            },
+                            {
+                                "name": "internal-b",
+                                "url": "https://b.example.com/simple",
+                                "publish-url": "https://b.example.com/legacy/",
+                            },
+                        ]
+                    }
+                }
+            },
+        ),
+    ):
+        with pytest.raises(SystemExit):
+            get_package_manager_publish_command()
+
+
+def test_get_package_manager_publish_command_explicit_repository_overrides_defaults(
+    monkeypatch,
+):
+    with patch(
+        "common_python_tasks.project.get_package_manager",
+        return_value=PackageManager.UV,
+    ):
+        monkeypatch.setenv("UV_PUBLISH_INDEX", "from-env")
+        assert get_package_manager_publish_command(repository="from-arg") == [
+            "uv",
+            "publish",
+            "--index",
+            "from-arg",
+        ]
+
+
 def test_get_project_version_prefers_vcs_for_uv_when_pyproject_is_placeholder():
     with (
         patch("common_python_tasks.project.get_package_manager", return_value="uv"),

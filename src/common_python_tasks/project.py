@@ -24,6 +24,21 @@ PACKAGE_MANAGER_ENV_VARS = (
     "PACKAGE_MANAGER",
 )
 
+PUBLISH_REPOSITORY_ENV_VAR = "COMMON_PYTHON_TASKS_PUBLISH_REPOSITORY"
+PUBLISH_REPOSITORY_URL_ENV_VAR = "COMMON_PYTHON_TASKS_PUBLISH_URL"
+POETRY_PUBLISH_REPOSITORY_ENV_VARS = (
+    PUBLISH_REPOSITORY_ENV_VAR,
+    "POETRY_REPOSITORY",
+)
+UV_PUBLISH_REPOSITORY_ENV_VARS = (
+    PUBLISH_REPOSITORY_ENV_VAR,
+    "UV_PUBLISH_INDEX",
+)
+UV_PUBLISH_URL_ENV_VARS = (
+    PUBLISH_REPOSITORY_URL_ENV_VAR,
+    "UV_PUBLISH_URL",
+)
+
 
 class PackageManager(StrEnum):
     """Supported package-manager backends for build and publish workflows."""
@@ -55,6 +70,102 @@ def _find_package_manager_override() -> tuple[str, str] | None:
         if value is not None and value.strip():
             return env_var, value.strip().lower()
     return None
+
+
+def _find_non_empty_env_override(env_vars: Sequence[str]) -> tuple[str, str] | None:
+    for env_var in env_vars:
+        value = os.getenv(env_var)
+        if value is not None and value.strip():
+            return env_var, value.strip()
+    return None
+
+
+def _resolve_uv_publish_repository_from_config() -> str | None:
+    pyproject_data = read_pyproject_toml()
+    uv_config = pyproject_data.get("tool", {}).get("uv", {})
+    raw_indexes = uv_config.get("index")
+    if raw_indexes is None:
+        return None
+
+    if not isinstance(raw_indexes, list):
+        LOGGER.warning(
+            "Ignoring malformed [tool.uv.index] configuration: expected a list of tables"
+        )
+        return None
+
+    publishable_indexes = [
+        entry
+        for entry in raw_indexes
+        if isinstance(entry, dict)
+        and isinstance(entry.get("name"), str)
+        and entry.get("name", "").strip()
+        and isinstance(entry.get("publish-url"), str)
+        and entry.get("publish-url", "").strip()
+    ]
+    if not publishable_indexes:
+        return None
+
+    default_publishable_names = [
+        entry["name"].strip()
+        for entry in publishable_indexes
+        if entry.get("default") is True
+    ]
+    if len(default_publishable_names) > 1:
+        utils.fatal(
+            "Multiple publishable `[[tool.uv.index]]` entries are marked `default = true`. "
+            "Set one default publishable index or pass an explicit publish repository."
+        )
+    if len(default_publishable_names) == 1:
+        return default_publishable_names[0]
+
+    publishable_names = [entry["name"].strip() for entry in publishable_indexes]
+    if len(publishable_names) == 1:
+        return publishable_names[0]
+
+    utils.fatal(
+        "Multiple publishable `[[tool.uv.index]]` entries were found. "
+        "Set one as `default = true` or pass an explicit publish repository."
+    )
+
+
+def _resolve_default_publish_target(
+    package_manager: PackageManager,
+) -> tuple[str | None, str | None]:
+    if package_manager == PackageManager.POETRY:
+        repository_override = _find_non_empty_env_override(
+            POETRY_PUBLISH_REPOSITORY_ENV_VARS
+        )
+        if repository_override is not None:
+            env_var, repository_name = repository_override
+            LOGGER.debug(
+                "Using Poetry publish repository %s from %s",
+                repository_name,
+                env_var,
+            )
+            return repository_name, None
+        return None, None
+
+    repository_override = _find_non_empty_env_override(UV_PUBLISH_REPOSITORY_ENV_VARS)
+    if repository_override is not None:
+        env_var, repository_name = repository_override
+        LOGGER.debug("Using uv publish index %s from %s", repository_name, env_var)
+        return repository_name, None
+
+    config_repository_name = _resolve_uv_publish_repository_from_config()
+    if config_repository_name is not None:
+        LOGGER.debug(
+            "Using uv publish index %s from [[tool.uv.index]] configuration",
+            config_repository_name,
+        )
+        return config_repository_name, None
+
+    repository_url_override = _find_non_empty_env_override(UV_PUBLISH_URL_ENV_VARS)
+    if repository_url_override is None:
+        return None, None
+
+    env_var, repository_url = repository_url_override
+    LOGGER.debug("Using uv publish URL %s from %s", repository_url, env_var)
+    return None, repository_url
 
 
 def _ensure_package_manager_available(package_manager: PackageManager) -> None:
@@ -221,6 +332,9 @@ def get_package_manager_publish_command(
         utils.fatal("Specify either `repository` or `repository_url`, not both.")
 
     package_manager = PackageManager(get_package_manager())
+    if repository is None and repository_url is None:
+        repository, repository_url = _resolve_default_publish_target(package_manager)
+
     command = [package_manager.value, "publish"]
     if repository_url is not None:
         if package_manager == PackageManager.POETRY:
