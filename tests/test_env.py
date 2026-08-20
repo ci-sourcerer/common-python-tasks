@@ -230,9 +230,11 @@ def test_load_container_env_file_returns_none_when_missing(tmp_path):
 
     from common_python_tasks.env import load_container_env_file
 
-    with patch("common_python_tasks.utils.fatal", side_effect=SystemExit(1)):
-        with pytest.raises(SystemExit):
-            load_container_env_file(str(tmp_path / "missing.env"))
+    with (
+        patch("common_python_tasks.utils.fatal", side_effect=SystemExit(1)),
+        pytest.raises(SystemExit),
+    ):
+        load_container_env_file(str(tmp_path / "missing.env"))
 
 
 def test_load_container_env_file_returns_none_for_empty_file(tmp_path):

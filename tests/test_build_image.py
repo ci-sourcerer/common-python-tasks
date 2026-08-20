@@ -180,10 +180,12 @@ def test_extension_template_support(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n"
-                "{% if CONTAINER_APT_PACKAGES %}\n"
-                "RUN apt-get update && apt-get install -y --no-install-recommends {{ CONTAINER_APT_PACKAGES }}\n"
-                "{% endif %}\n",
+                (
+                    "FROM python:3.11\n"
+                    "{% if CONTAINER_APT_PACKAGES %}\n"
+                    "RUN apt-get update && apt-get install -y --no-install-recommends {{ CONTAINER_APT_PACKAGES }}\n"
+                    "{% endif %}\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -263,12 +265,14 @@ def test_build_image_injects_container_env_from_containerenv_file(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n"
-                "{% if CONTAINER_ENV_VARS %}\n"
-                "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                "ENV {{ env_var }}\n"
-                "{% endfor %}\n"
-                "{% endif %}\n",
+                (
+                    "FROM python:3.11\n"
+                    "{% if CONTAINER_ENV_VARS %}\n"
+                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
+                    "ENV {{ env_var }}\n"
+                    "{% endfor %}\n"
+                    "{% endif %}\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -322,12 +326,14 @@ def test_build_image_container_env_precedence_overrides_file_with_env_and_cli(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n"
-                "{% if CONTAINER_ENV_VARS %}\n"
-                "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                "ENV {{ env_var }}\n"
-                "{% endfor %}\n"
-                "{% endif %}\n",
+                (
+                    "FROM python:3.11\n"
+                    "{% if CONTAINER_ENV_VARS %}\n"
+                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
+                    "ENV {{ env_var }}\n"
+                    "{% endfor %}\n"
+                    "{% endif %}\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -383,12 +389,14 @@ def test_build_image_reads_container_envfile_path_overrides_dotcontainerenv(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n"
-                "{% if CONTAINER_ENV_VARS %}\n"
-                "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                "ENV {{ env_var }}\n"
-                "{% endfor %}\n"
-                "{% endif %}\n",
+                (
+                    "FROM python:3.11\n"
+                    "{% if CONTAINER_ENV_VARS %}\n"
+                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
+                    "ENV {{ env_var }}\n"
+                    "{% endfor %}\n"
+                    "{% endif %}\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -441,12 +449,14 @@ def test_build_image_reads_multiple_container_envfiles_in_order(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11\n"
-                "{% if CONTAINER_ENV_VARS %}\n"
-                "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                "ENV {{ env_var }}\n"
-                "{% endfor %}\n"
-                "{% endif %}\n",
+                (
+                    "FROM python:3.11\n"
+                    "{% if CONTAINER_ENV_VARS %}\n"
+                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
+                    "ENV {{ env_var }}\n"
+                    "{% endfor %}\n"
+                    "{% endif %}\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1199,11 +1209,13 @@ def test_build_image_injects_uv_index_secrets_from_env(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11 AS builder\n"
-                "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
-                "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
-                "    --mount={{ mount }}{% endfor %} \\\n"
-                "    uv build --wheel\n",
+                (
+                    "FROM python:3.11 AS builder\n"
+                    "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
+                    "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
+                    "    --mount={{ mount }}{% endfor %} \\\n"
+                    "    uv build --wheel\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1267,11 +1279,13 @@ def test_build_image_no_uv_index_secrets_when_env_unset(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11 AS builder\n"
-                "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
-                "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
-                "    --mount={{ mount }}{% endfor %} \\\n"
-                "    uv build --wheel\n",
+                (
+                    "FROM python:3.11 AS builder\n"
+                    "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
+                    "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
+                    "    --mount={{ mount }}{% endfor %} \\\n"
+                    "    uv build --wheel\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1300,7 +1314,7 @@ def test_build_image_no_uv_index_secrets_when_env_unset(
     assert "--mount=type=secret" not in captured_dockerfile["content"]
 
 
-def test_build_image_renders_python_variant_when_set(
+def test_build_image_passes_python_variant_build_arg_when_set(
     temp_project_dir,
     mock_run_command,
     mock_load_data_file,
@@ -1309,7 +1323,7 @@ def test_build_image_renders_python_variant_when_set(
     mock_get_package_name,
     monkeypatch,
 ):
-    """CONTAINER_PYTHON_VARIANT should be rendered into the FROM line when set."""
+    """CONTAINER_PYTHON_VARIANT should be passed as a Docker build argument."""
     from common_python_tasks.tasks import build_image
 
     monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "alpine")
@@ -1322,7 +1336,10 @@ def test_build_image_renders_python_variant_when_set(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11{% if PYTHON_VARIANT %}-{{ PYTHON_VARIANT }}{% endif %} AS runtime\n",
+                (
+                    "ARG PYTHON_VARIANT=slim\n"
+                    "FROM python:3.11${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1345,10 +1362,14 @@ def test_build_image_renders_python_variant_when_set(
 
     build_image()
 
-    assert "FROM python:3.11-alpine AS runtime" in captured_dockerfile["content"]
+    assert (
+        "FROM python:3.11${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime"
+        in (captured_dockerfile["content"])
+    )
+    assert any("PYTHON_VARIANT=alpine" in str(arg) for arg in build_calls[0])
 
 
-def test_build_image_omits_variant_when_empty_string(
+def test_build_image_passes_empty_python_variant_build_arg(
     temp_project_dir,
     mock_run_command,
     mock_load_data_file,
@@ -1357,7 +1378,7 @@ def test_build_image_omits_variant_when_empty_string(
     mock_get_package_name,
     monkeypatch,
 ):
-    """Empty CONTAINER_PYTHON_VARIANT should omit the hyphen and variant."""
+    """An empty CONTAINER_PYTHON_VARIANT should be passed to Docker."""
     from common_python_tasks.tasks import build_image
 
     monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "")
@@ -1370,7 +1391,10 @@ def test_build_image_omits_variant_when_empty_string(
         if filename == "Dockerfile.j2":
             return (
                 "/fake/path/Dockerfile.j2",
-                "FROM python:3.11{% if PYTHON_VARIANT %}-{{ PYTHON_VARIANT }}{% endif %} AS runtime\n",
+                (
+                    "ARG PYTHON_VARIANT=slim\n"
+                    "FROM python:3.11${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime\n"
+                ),
             )
         return original_load_data_file(filename, type_identifier, fatal_on_missing)
 
@@ -1393,5 +1417,4 @@ def test_build_image_omits_variant_when_empty_string(
 
     build_image()
 
-    assert "FROM python:3.11 AS runtime" in captured_dockerfile["content"]
-    assert "FROM python:3.11- AS runtime" not in captured_dockerfile["content"]
+    assert any("PYTHON_VARIANT=" in str(arg) for arg in build_calls[0])

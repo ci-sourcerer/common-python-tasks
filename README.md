@@ -216,7 +216,7 @@ addopts = "-ra"
 
 - `CONTAINER_REGISTRY_USERNAME`: Container-registry username for image tagging; the default is the current local user
 - `CONTAINER_REGISTRY_URL`: Registry URL with a default of `docker.io/{username}`
-- `CONTAINER_PYTHON_VARIANT`: Python base-image variant such as `slim`, `alpine`, etc. See <https://hub.docker.com/_/python> for available options. Defaults to `slim`; set to empty string for no variant (e.g., `FROM python:3.11`).
+- `CONTAINER_PYTHON_VARIANT`: Python base-image variant such as `slim`, `alpine`, etc. See <https://hub.docker.com/_/python> for available options. Defaults to `slim`; set to empty string for no variant (e.g., `FROM python:3.11`). The value is passed as the `PYTHON_VARIANT` Docker build argument and recorded in the `org.opencontainers.image.python.variant` image label.
 - `CONTAINER_DOCKER_BUILD_ARGS`: Additional arguments passed directly to `docker build`, parsed using shell quoting rules. Free arguments provided to the task after `--` take precedence.
 - `CONTAINER_DOCKERFILE_HOOK_PATH`: Optional host path to an executable hook script that receives the generated Dockerfile path and can modify the file before `docker build` runs.
 - `CONTAINER_APT_PACKAGES`: Space-delimited system packages installed in the generated image

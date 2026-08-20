@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from common_python_tasks.docker_compose import (
@@ -73,7 +74,7 @@ def test_run_docker_compose_command_includes_env_files(monkeypatch, tmp_path):
     from common_python_tasks.docker_compose import run_docker_compose_command
 
     class DummyTasks:
-        envfile = [Path(".env1"), Path(".env2")]
+        envfile: ClassVar = [Path(".env1"), Path(".env2")]
 
     called = []
 

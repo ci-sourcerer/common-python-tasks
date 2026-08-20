@@ -253,16 +253,18 @@ class TestGetVersion:
     def test_returns_version_with_dirty_suffix(self):
         from common_python_tasks.git import get_version
 
-        with patch("common_python_tasks.git.get_dirty_files") as mock_dirty:
-            with patch("common_python_tasks.git.Version") as mock_version:
-                mock_dirty.return_value = ["/some/file.py"]
-                mock_instance = MagicMock()
-                mock_instance.serialize.return_value = "1.2.3+dirty"
-                mock_version.from_git.return_value = mock_instance
+        with (
+            patch("common_python_tasks.git.get_dirty_files") as mock_dirty,
+            patch("common_python_tasks.git.Version") as mock_version,
+        ):
+            mock_dirty.return_value = ["/some/file.py"]
+            mock_instance = MagicMock()
+            mock_instance.serialize.return_value = "1.2.3+dirty"
+            mock_version.from_git.return_value = mock_instance
 
-                result = get_version()
-                assert result == "1.2.3+dirty"
-                mock_instance.serialize.assert_called_once()
+            result = get_version()
+            assert result == "1.2.3+dirty"
+            mock_instance.serialize.assert_called_once()
 
 
 class TestGetImageTag:

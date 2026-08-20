@@ -3,14 +3,14 @@ import logging
 import platform
 import re
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from pathlib import Path
 from shlex import quote
-from typing import Sequence
 
 from . import git, project, utils
-from .env import get_cache_id_suffix, get_workdir_path
+from .env import get_cache_id_suffix, get_python_variant, get_workdir_path
 
 LOGGER = logging.getLogger(__name__)
 
@@ -560,7 +560,10 @@ def build_deps_image(
     archs = _resolve_archs(single_arch)
 
     build_args = _merge_build_args(
-        {"PYTHON_VERSION": python_version},
+        {
+            "PYTHON_VERSION": python_version,
+            "PYTHON_VARIANT": get_python_variant(),
+        },
         extra_build_args,
     )
     if cache_id_suffix:

@@ -246,6 +246,22 @@ def test_alembic_template_uses_ruff_post_write_hooks():
     assert "ruff_format.options = format REVISION_SCRIPT_FILENAME" in contents
 
 
+@pytest.mark.parametrize(
+    ("filename", "stage"),
+    [("Dockerfile.j2", "runtime"), ("Dockerfile.deps.j2", "deps")],
+)
+def test_dockerfile_templates_define_python_variant_argument(filename, stage):
+    """Dockerfile templates should use a Python variant build argument."""
+    _, contents = load_data_file(filename)
+
+    assert "ARG PYTHON_VARIANT=slim" in contents
+    assert (
+        f"FROM python:${{PYTHON_VERSION}}${{PYTHON_VARIANT:+-${{PYTHON_VARIANT}}}} "
+        f"AS {stage}"
+    ) in contents
+    assert 'org.opencontainers.image.python.variant="${PYTHON_VARIANT}"' in contents
+
+
 def test_run_git_cliff_passes_args_and_capture_output_to_run_command():
     with (
         patch(

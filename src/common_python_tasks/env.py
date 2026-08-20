@@ -541,7 +541,7 @@ def render_container_deps_move_script(mappings: dict[str, str]) -> str:
         "import shutil",
         "import sys",
         "",
-        f"mappings = {repr(mappings)}",
+        f"mappings = {mappings!r}",
         'source_root = pathlib.Path("/tmp/deps")',
         "",
         "for name, dest in mappings.items():",
@@ -610,7 +610,7 @@ def get_prune_keep() -> int:
         return -1
     try:
         return int(raw)
-    except Exception:
+    except ValueError:
         LOGGER.warning(
             "Invalid CONTAINER_PRUNE_KEEP value '%s' - defaulting to -1 (no prune)",
             raw,

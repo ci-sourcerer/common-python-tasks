@@ -471,61 +471,65 @@ class TestBumpVersion:
 
     @pytest.fixture
     def mock_clean_repo_no_tags(self, tag_calls):
-        with patch("common_python_tasks.git.get_dirty_files") as mock_dirty:
-            with patch("common_python_tasks.git.ensure_on_default_branch"):
-                with patch(
-                    "common_python_tasks.project.get_project_version",
-                    return_value="0.0.0",
+        with (
+            patch("common_python_tasks.git.get_dirty_files") as mock_dirty,
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch(
+                "common_python_tasks.project.get_project_version",
+                return_value="0.0.0",
+            ),
+            patch("common_python_tasks.utils.run_command") as mock_run,
+        ):
+            mock_dirty.return_value = []
+
+            def side_effect(command, *args, **kwargs):
+                result = MagicMock()
+                if (
+                    len(command) >= 2
+                    and str(command[0]) == "git"
+                    and str(command[1]) == "tag"
                 ):
-                    with patch("common_python_tasks.utils.run_command") as mock_run:
-                        mock_dirty.return_value = []
+                    result.returncode = 0
+                    tag_calls.append(str(command[-1]))
+                    result.stdout = ""
+                else:
+                    result.returncode = 0
+                    result.stdout = ""
+                return result
 
-                        def side_effect(command, *args, **kwargs):
-                            result = MagicMock()
-                            if (
-                                len(command) >= 2
-                                and str(command[0]) == "git"
-                                and str(command[1]) == "tag"
-                            ):
-                                result.returncode = 0
-                                tag_calls.append(str(command[-1]))
-                                result.stdout = ""
-                            else:
-                                result.returncode = 0
-                                result.stdout = ""
-                            return result
-
-                        mock_run.side_effect = side_effect
-                        yield mock_run
+            mock_run.side_effect = side_effect
+            yield mock_run
 
     @pytest.fixture
     def mock_clean_repo_with_tag(self, tag_calls):
-        with patch("common_python_tasks.git.get_dirty_files") as mock_dirty:
-            with patch("common_python_tasks.git.ensure_on_default_branch"):
-                with patch(
-                    "common_python_tasks.project.get_project_version",
-                    return_value="1.2.3",
+        with (
+            patch("common_python_tasks.git.get_dirty_files") as mock_dirty,
+            patch("common_python_tasks.git.ensure_on_default_branch"),
+            patch(
+                "common_python_tasks.project.get_project_version",
+                return_value="1.2.3",
+            ),
+            patch("common_python_tasks.utils.run_command") as mock_run,
+        ):
+            mock_dirty.return_value = []
+
+            def side_effect(command, *args, **kwargs):
+                result = MagicMock()
+                if (
+                    len(command) >= 2
+                    and str(command[0]) == "git"
+                    and str(command[1]) == "tag"
                 ):
-                    with patch("common_python_tasks.utils.run_command") as mock_run:
-                        mock_dirty.return_value = []
+                    result.returncode = 0
+                    tag_calls.append(str(command[-1]))
+                    result.stdout = ""
+                else:
+                    result.returncode = 0
+                    result.stdout = ""
+                return result
 
-                        def side_effect(command, *args, **kwargs):
-                            result = MagicMock()
-                            if (
-                                len(command) >= 2
-                                and str(command[0]) == "git"
-                                and str(command[1]) == "tag"
-                            ):
-                                result.returncode = 0
-                                tag_calls.append(str(command[-1]))
-                                result.stdout = ""
-                            else:
-                                result.returncode = 0
-                                result.stdout = ""
-                            return result
-
-                        mock_run.side_effect = side_effect
-                        yield mock_run
+            mock_run.side_effect = side_effect
+            yield mock_run
 
     def test_bump_patch_with_existing_tag(self, mock_clean_repo_with_tag, tag_calls):
         from common_python_tasks.tasks import bump_version
@@ -630,9 +634,9 @@ class TestBumpVersion:
                 "common_python_tasks.utils.run_command",
                 return_value=MagicMock(returncode=0, stdout=""),
             ),
+            pytest.raises(SystemExit),
         ):
-            with pytest.raises(SystemExit):
-                bump_version()
+            bump_version()
 
         assert tag_calls == []
 
@@ -1335,12 +1339,14 @@ class TestBumpVersion:
                 return MagicMock(returncode=0, stdout="feature/branch\n")
             return MagicMock(returncode=0, stdout="")
 
-        with patch(
-            "common_python_tasks.utils.run_command",
-            side_effect=run_command_side_effect,
+        with (
+            patch(
+                "common_python_tasks.utils.run_command",
+                side_effect=run_command_side_effect,
+            ),
+            pytest.raises(SystemExit) as exc_info,
         ):
-            with pytest.raises(SystemExit) as exc_info:
-                release_without_containers()
+            release_without_containers()
 
         assert exc_info.value.code == 1
 

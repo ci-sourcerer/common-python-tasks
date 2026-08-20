@@ -6,12 +6,12 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections.abc import Collection, Sequence
 from functools import lru_cache
 from getpass import getuser
 from importlib.resources import files
 from pathlib import Path
 from shlex import quote
-from typing import Collection, Sequence
 
 from jinja2 import Template
 
@@ -154,7 +154,11 @@ def run_command(
     merged_env = {**os.environ, **env} if env is not None else None
 
     out = subprocess.run(
-        command, capture_output=capture_output, text=True, env=merged_env
+        command,
+        capture_output=capture_output,
+        check=False,
+        text=True,
+        env=merged_env,
     )
     if out.returncode not in acceptable_returncodes:
         if capture_output:
@@ -234,8 +238,7 @@ def normalize_registry(registry: str | None) -> str | None:
         return None
 
     for prefix in ("https://", "http://"):
-        if registry.startswith(prefix):
-            registry = registry[len(prefix) :]
+        registry = registry.removeprefix(prefix)
 
     return registry.rstrip("/")
 
@@ -407,8 +410,13 @@ def get_package_name(use_underscores: bool = False) -> str | None:
                 name = (
                     tomllib.loads(pyproject.read_text()).get("project", {}).get("name")
                 )
-        except Exception as e:  # pragma: no cover - defensive logging
-            LOGGER.debug("Unable to read pyproject.toml: %s", e)
+        except (
+            AttributeError,
+            OSError,
+            UnicodeDecodeError,
+            tomllib.TOMLDecodeError,
+        ) as error:  # pragma: no cover - defensive logging
+            LOGGER.debug("Unable to read pyproject.toml: %s", error)
 
     if use_underscores and name:
         name = package_name_to_underscore(name)

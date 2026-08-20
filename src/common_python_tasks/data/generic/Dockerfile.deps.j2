@@ -5,7 +5,12 @@
 ARG PYTHON_VERSION=3
 ARG PYTHON_VARIANT=slim
 
-FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS deps
+FROM python:${PYTHON_VERSION}${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS deps
+ARG PYTHON_VERSION
+ARG PYTHON_VARIANT
+
+LABEL org.opencontainers.image.base.name="python:${PYTHON_VERSION}${PYTHON_VARIANT:+-${PYTHON_VARIANT}}" \
+      org.opencontainers.image.python.variant="${PYTHON_VARIANT}"
 
 ARG CACHE_ID_SUFFIX
 RUN printf '%s' "$CACHE_ID_SUFFIX" >/tmp/.cache_id_suffix

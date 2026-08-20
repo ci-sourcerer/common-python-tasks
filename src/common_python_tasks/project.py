@@ -3,10 +3,11 @@ import logging
 import os
 import re
 import tomllib
+from collections.abc import Sequence
 from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
@@ -513,7 +514,7 @@ def get_project_version_from_vcs() -> str | None:
         from dunamai import Style, Version
 
         return Version.from_git().serialize(style=Style.Pep440, dirty=False)
-    except Exception:
+    except (OSError, RuntimeError, ValueError):
         return None
 
 

@@ -178,13 +178,13 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     normalized_version = version_text.lstrip("v")
     try:
         bumped = Version.parse(normalized_version)
-    except Exception:
+    except ValueError:
         utils.fatal(f"Unable to parse bumped version from git-cliff: {version_text!r}")
 
     current_version = project.get_project_version()
     try:
         current = Version.parse(current_version)
-    except Exception:
+    except ValueError:
         utils.fatal(f"Unable to parse current project version: {current_version!r}")
 
     def _parse_semver(version_value: str | Any) -> tuple[int, int, int]:

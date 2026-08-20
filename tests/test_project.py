@@ -1,4 +1,4 @@
-import importlib.metadata as metadata
+from importlib import metadata
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -260,9 +260,9 @@ def test_resolve_container_entrypoint_command_custom_unknown_script_fails_withou
         patch(
             "common_python_tasks.utils.fatal", side_effect=SystemExit(1)
         ) as mock_fatal,
+        pytest.raises(SystemExit),
     ):
-        with pytest.raises(SystemExit):
-            resolve_container_entrypoint_command(entrypoint_script="unknown-script")
+        resolve_container_entrypoint_command(entrypoint_script="unknown-script")
 
     assert mock_fatal.call_count == 1
     assert "No [project].scripts entries were found" in mock_fatal.call_args.args[0]
@@ -271,47 +271,51 @@ def test_resolve_container_entrypoint_command_custom_unknown_script_fails_withou
 def test_resolve_container_entrypoint_command_uses_package_script_when_available():
     from common_python_tasks.project import resolve_container_entrypoint_command
 
-    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
-        with patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"):
-            mock_toml.return_value = {
-                "project": {"scripts": {"my_pkg": "my_pkg.cli:main"}}
-            }
+    with (
+        patch("common_python_tasks.project.read_pyproject_toml") as mock_toml,
+        patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"),
+    ):
+        mock_toml.return_value = {"project": {"scripts": {"my_pkg": "my_pkg.cli:main"}}}
 
-            result = resolve_container_entrypoint_command()
+        result = resolve_container_entrypoint_command()
 
-            assert result == "my_pkg"
+        assert result == "my_pkg"
 
 
 def test_resolve_container_entrypoint_command_defaults_to_python():
     from common_python_tasks.project import resolve_container_entrypoint_command
 
-    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
-        with patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"):
-            mock_toml.return_value = {"project": {}}
+    with (
+        patch("common_python_tasks.project.read_pyproject_toml") as mock_toml,
+        patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"),
+    ):
+        mock_toml.return_value = {"project": {}}
 
-            result = resolve_container_entrypoint_command()
+        result = resolve_container_entrypoint_command()
 
-            assert result == "python"
+        assert result == "python"
 
 
 def test_resolve_container_entrypoint_command_prefers_package_script_with_multiple_scripts():
     from common_python_tasks.project import resolve_container_entrypoint_command
 
-    with patch("common_python_tasks.project.read_pyproject_toml") as mock_toml:
-        with patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"):
-            mock_toml.return_value = {
-                "project": {
-                    "scripts": {
-                        "my-worker": "pkg.worker:main",
-                        "my_pkg": "pkg.api:main",
-                        "my-admin": "pkg.admin:main",
-                    }
+    with (
+        patch("common_python_tasks.project.read_pyproject_toml") as mock_toml,
+        patch("common_python_tasks.utils.get_package_name", return_value="my_pkg"),
+    ):
+        mock_toml.return_value = {
+            "project": {
+                "scripts": {
+                    "my-worker": "pkg.worker:main",
+                    "my_pkg": "pkg.api:main",
+                    "my-admin": "pkg.admin:main",
                 }
             }
+        }
 
-            result = resolve_container_entrypoint_command()
+        result = resolve_container_entrypoint_command()
 
-            assert result == "my_pkg"
+        assert result == "my_pkg"
 
 
 def test_get_release_tag_from_project_version():
@@ -445,29 +449,31 @@ def test_get_publish_command_uses_uv_config_default_publishable_index():
 
 
 def test_get_publish_command_rejects_ambiguous_uv_config_publish_indexes():
-    with patch(
-        "common_python_tasks.project.read_pyproject_toml",
-        return_value={
-            "tool": {
-                "uv": {
-                    "index": [
-                        {
-                            "name": "internal-a",
-                            "url": "https://a.example.com/simple",
-                            "publish-url": "https://a.example.com/legacy/",
-                        },
-                        {
-                            "name": "internal-b",
-                            "url": "https://b.example.com/simple",
-                            "publish-url": "https://b.example.com/legacy/",
-                        },
-                    ]
+    with (
+        patch(
+            "common_python_tasks.project.read_pyproject_toml",
+            return_value={
+                "tool": {
+                    "uv": {
+                        "index": [
+                            {
+                                "name": "internal-a",
+                                "url": "https://a.example.com/simple",
+                                "publish-url": "https://a.example.com/legacy/",
+                            },
+                            {
+                                "name": "internal-b",
+                                "url": "https://b.example.com/simple",
+                                "publish-url": "https://b.example.com/legacy/",
+                            },
+                        ]
+                    }
                 }
-            }
-        },
+            },
+        ),
+        pytest.raises(SystemExit),
     ):
-        with pytest.raises(SystemExit):
-            get_publish_command()
+        get_publish_command()
 
 
 def test_get_publish_command_explicit_repository_overrides_defaults(monkeypatch):

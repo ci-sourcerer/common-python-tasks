@@ -4,9 +4,10 @@ import logging
 import os
 import re
 import shlex
+from collections.abc import Callable
 from functools import partial, wraps
 from pathlib import Path
-from typing import Callable, NamedTuple
+from typing import ClassVar, NamedTuple
 
 from poethepoet_tasks import TaskCollection
 
@@ -14,7 +15,7 @@ from common_python_tasks.utils import confirm
 
 
 class _ColoredFormatter(logging.Formatter):
-    COLORS = {
+    COLORS: ClassVar = {
         "WARNING": "\033[93m",
         "ERROR": "\033[91m",
         "CRITICAL": "\033[91m",
@@ -526,7 +527,9 @@ def build_image(
             "Injecting builder-stage env vars: %s",
             ", ".join(container_env_vars),
         )
-    top_level_build_args = inject_auto_build_args_from_env({})
+    top_level_build_args = inject_auto_build_args_from_env(
+        {"PYTHON_VARIANT": get_python_variant()}
+    )
     external_deps_image = _get_container_build_setting("CONTAINER_DEPS_IMAGE")
     if external_deps_image:
         top_level_build_args["CONTAINER_DEPS_IMAGE"] = external_deps_image
@@ -547,7 +550,7 @@ def build_image(
                 continue
 
             arg_names = re.findall(
-                r"^\s*ARG\s+([A-Za-z_][A-Za-z0-9_]*)", fragment, re.M
+                r"^\s*ARG\s+([A-Za-z_][A-Za-z0-9_]*)", fragment, re.MULTILINE
             )
             if not arg_names:
                 LOGGER.warning(
@@ -619,7 +622,6 @@ def build_image(
             "ENTRYPOINT_COMMAND": entrypoint_command,
             "CONTAINER_ENV_VARS": container_env_vars,
             "CACHE_ID_SUFFIX": cache_id_suffix,
-            "PYTHON_VARIANT": get_python_variant(),
             "UV_INDEX_SECRET_MOUNTS": uv_index_secret_mounts(uv_credentials),
         },
     )

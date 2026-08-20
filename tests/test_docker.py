@@ -163,9 +163,12 @@ class TestDockerignoreHandling:
 
         def tracking_side_effect(command, *args, **kwargs):
             nonlocal actual_content
-            if "docker" in command and "build" in command:
-                if dockerignore_path.exists():
-                    actual_content = dockerignore_path.read_text()
+            if (
+                "docker" in command
+                and "build" in command
+                and dockerignore_path.exists()
+            ):
+                actual_content = dockerignore_path.read_text()
             return original_run_command(command, *args, **kwargs)
 
         mock_run_command.side_effect = tracking_side_effect
@@ -400,7 +403,10 @@ class TestBuildDepsImage:
         mock_run_command,
         mock_load_data_file,
         mock_get_package_name,
+        monkeypatch,
     ):
+        monkeypatch.delenv("CONTAINER_PYTHON_VARIANT", raising=False)
+
         from common_python_tasks.docker import build_deps_image
 
         tag = build_deps_image("RUN apt-get install -y curl", single_arch=True)
@@ -411,6 +417,7 @@ class TestBuildDepsImage:
             if c[0][0][0] == "docker" and c[0][0][1] == "build"
         ]
         assert len(docker_calls) == 1
+        assert "PYTHON_VARIANT=slim" in [str(arg) for arg in docker_calls[0][0][0]]
 
     def test_builds_deps_image_from_dockerfile_path(
         self,

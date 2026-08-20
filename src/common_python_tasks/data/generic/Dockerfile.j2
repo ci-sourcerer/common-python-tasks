@@ -5,8 +5,7 @@
 ARG PYTHON_VERSION=3
 # Variant for the runtime image, e.g. slim, alpine, etc.
 # See https://hub.docker.com/_/python for available variants. Leave empty for no variant.
-ARG PYTHON_VARIANT
-ARG WORKDIR_PATH=/workspace
+ARG PYTHON_VARIANT=slim
 
 FROM python:${PYTHON_VERSION} AS builder
 
@@ -45,8 +44,13 @@ RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}{%
     --mount={{ mount }}{% endfor %} \
     uv build --wheel
 
-FROM python:${PYTHON_VERSION}{% if PYTHON_VARIANT %}-${PYTHON_VARIANT}{% endif %} AS runtime
+FROM python:${PYTHON_VERSION}${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime
+ARG PYTHON_VERSION
+ARG PYTHON_VARIANT
 ARG WORKDIR_PATH=/workspace
+
+LABEL org.opencontainers.image.base.name="python:${PYTHON_VERSION}${PYTHON_VARIANT:+-${PYTHON_VARIANT}}" \
+      org.opencontainers.image.python.variant="${PYTHON_VARIANT}"
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1

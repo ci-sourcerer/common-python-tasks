@@ -1,11 +1,12 @@
 import logging
 import subprocess
+from typing import ClassVar
 
 
 class ColoredFormatter(logging.Formatter):
     """Format warning and error log levels with ANSI color codes."""
 
-    COLORS = {
+    COLORS: ClassVar = {
         "WARNING": "\033[93m",
         "ERROR": "\033[91m",
         "CRITICAL": "\033[91m",
