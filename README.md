@@ -216,6 +216,7 @@ addopts = "-ra"
 
 - `CONTAINER_REGISTRY_USERNAME`: Container-registry username for image tagging; the default is the current local user
 - `CONTAINER_REGISTRY_URL`: Registry URL with a default of `docker.io/{username}`
+- `CONTAINER_PYTHON_VARIANT`: Python base-image variant such as `slim`, `alpine`, etc. See <https://hub.docker.com/_/python> for available options. Defaults to `slim`; set to empty string for no variant (e.g., `FROM python:3.11`).
 - `CONTAINER_DOCKER_BUILD_ARGS`: Additional arguments passed directly to `docker build`, parsed using shell quoting rules. Free arguments provided to the task after `--` take precedence.
 - `CONTAINER_DOCKERFILE_HOOK_PATH`: Optional host path to an executable hook script that receives the generated Dockerfile path and can modify the file before `docker build` runs.
 - `CONTAINER_APT_PACKAGES`: Space-delimited system packages installed in the generated image
@@ -231,6 +232,7 @@ addopts = "-ra"
 - `CONTAINER_DEPS_MAPPINGS`: Space-delimited `name:/target/path` entries for copying items from `/tmp/deps`. It is used only when no dependency move script is set.
 - `CONTAINER_DEPS_MOVE_SCRIPT`: Raw executable script to run after `/tmp/deps` is copied into the image
 - `CONTAINER_DEPS_MOVE_SCRIPT_PATH`: Host path to a dependency move script. This takes precedence over `CONTAINER_DEPS_MOVE_SCRIPT`.
+- `UV_INDEX_{name}_USERNAME` and `UV_INDEX_{name}_PASSWORD`: Private Python index credentials consumed by uv during the Docker build. When any of these are set, the task automatically passes them as BuildKit secrets (`--secret id=uv_index_{name}_username,env=...`) and renders matching `--mount=type=secret` directives in the builder stage so uv can authenticate without baking credentials into the image. Multiple indices are supported; replace `{name}` with the uppercase index name (hyphens as underscores). These can be set in `tool.poe.env` for CI/CD or in the local environment for development.
 
 #### Release settings
 

@@ -1174,3 +1174,224 @@ def test_build_image_forwards_native_docker_build_args_and_hook(
         "--add-host=example:127.0.0.1",
     ]
     assert kwargs["dockerfile_hook_path"] == cli_hook_path
+
+
+def test_build_image_injects_uv_index_secrets_from_env(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """UV_INDEX_*_USERNAME/PASSWORD env vars should inject --secret build args and Dockerfile mounts."""
+    from common_python_tasks.tasks import build_image
+
+    for key in ["UV_INDEX_MYINDEX_USERNAME", "UV_INDEX_MYINDEX_PASSWORD"]:
+        monkeypatch.setenv(key, "testvalue")
+
+    original_load_data_file = mock_load_data_file.side_effect
+
+    def load_data_file_with_uv_secrets(
+        filename, type_identifier="generic", fatal_on_missing=True
+    ):
+        if filename == "Dockerfile.j2":
+            return (
+                "/fake/path/Dockerfile.j2",
+                "FROM python:3.11 AS builder\n"
+                "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
+                "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
+                "    --mount={{ mount }}{% endfor %} \\\n"
+                "    uv build --wheel\n",
+            )
+        return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+    mock_load_data_file.side_effect = load_data_file_with_uv_secrets
+
+    build_calls = []
+    captured_dockerfile: dict[str, str] = {}
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+            dockerfile_path = command[command.index("-f") + 1]
+            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
+                encoding="utf-8"
+            )
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    assert len(build_calls) == 1
+    build_cmd = build_calls[0]
+
+    assert "--secret" in build_cmd
+    assert "id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME" in build_cmd
+    assert "id=uv_index_myindex_password,env=UV_INDEX_MYINDEX_PASSWORD" in build_cmd
+
+    assert (
+        "--mount=type=secret,id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME"
+        in captured_dockerfile["content"]
+    )
+    assert (
+        "--mount=type=secret,id=uv_index_myindex_password,env=UV_INDEX_MYINDEX_PASSWORD"
+        in captured_dockerfile["content"]
+    )
+
+
+def test_build_image_no_uv_index_secrets_when_env_unset(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """No secret mounts or --secret args when no UV_INDEX_* vars are set."""
+    from common_python_tasks.tasks import build_image
+
+    for key in list(__import__("os").environ):
+        if key.startswith("UV_INDEX_"):
+            monkeypatch.delenv(key)
+
+    original_load_data_file = mock_load_data_file.side_effect
+
+    def load_data_file_with_uv_secrets(
+        filename, type_identifier="generic", fatal_on_missing=True
+    ):
+        if filename == "Dockerfile.j2":
+            return (
+                "/fake/path/Dockerfile.j2",
+                "FROM python:3.11 AS builder\n"
+                "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
+                "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
+                "    --mount={{ mount }}{% endfor %} \\\n"
+                "    uv build --wheel\n",
+            )
+        return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+    mock_load_data_file.side_effect = load_data_file_with_uv_secrets
+
+    build_calls = []
+    captured_dockerfile: dict[str, str] = {}
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+            dockerfile_path = command[command.index("-f") + 1]
+            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
+                encoding="utf-8"
+            )
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    assert len(build_calls) == 1
+    build_cmd = build_calls[0]
+    assert not any("uv_index" in str(arg) for arg in build_cmd)
+    assert "--mount=type=secret" not in captured_dockerfile["content"]
+
+
+def test_build_image_renders_python_variant_when_set(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """CONTAINER_PYTHON_VARIANT should be rendered into the FROM line when set."""
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "alpine")
+
+    original_load_data_file = mock_load_data_file.side_effect
+
+    def load_data_file_with_variant(
+        filename, type_identifier="generic", fatal_on_missing=True
+    ):
+        if filename == "Dockerfile.j2":
+            return (
+                "/fake/path/Dockerfile.j2",
+                "FROM python:3.11{% if PYTHON_VARIANT %}-{{ PYTHON_VARIANT }}{% endif %} AS runtime\n",
+            )
+        return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+    mock_load_data_file.side_effect = load_data_file_with_variant
+
+    build_calls = []
+    captured_dockerfile: dict[str, str] = {}
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+            dockerfile_path = command[command.index("-f") + 1]
+            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
+                encoding="utf-8"
+            )
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    assert "FROM python:3.11-alpine AS runtime" in captured_dockerfile["content"]
+
+
+def test_build_image_omits_variant_when_empty_string(
+    temp_project_dir,
+    mock_run_command,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """Empty CONTAINER_PYTHON_VARIANT should omit the hyphen and variant."""
+    from common_python_tasks.tasks import build_image
+
+    monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "")
+
+    original_load_data_file = mock_load_data_file.side_effect
+
+    def load_data_file_with_variant(
+        filename, type_identifier="generic", fatal_on_missing=True
+    ):
+        if filename == "Dockerfile.j2":
+            return (
+                "/fake/path/Dockerfile.j2",
+                "FROM python:3.11{% if PYTHON_VARIANT %}-{{ PYTHON_VARIANT }}{% endif %} AS runtime\n",
+            )
+        return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+    mock_load_data_file.side_effect = load_data_file_with_variant
+
+    build_calls = []
+    captured_dockerfile: dict[str, str] = {}
+    original = mock_run_command.side_effect
+
+    def tracking(command, *args, **kwargs):
+        if "docker" in command and "build" in command:
+            build_calls.append(command)
+            dockerfile_path = command[command.index("-f") + 1]
+            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
+                encoding="utf-8"
+            )
+        return original(command, *args, **kwargs)
+
+    mock_run_command.side_effect = tracking
+
+    build_image()
+
+    assert "FROM python:3.11 AS runtime" in captured_dockerfile["content"]
+    assert "FROM python:3.11- AS runtime" not in captured_dockerfile["content"]

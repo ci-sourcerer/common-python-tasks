@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import secrets
 import shlex
 from pathlib import Path
@@ -21,6 +22,82 @@ TRUTHY_VALUES = {
 WORKDIR_PATH_ENV_VAR = "WORKDIR_PATH"
 WORKDIR_PATH_DEFAULT = "/workspace"
 _AUTO_INJECTED_BUILD_ARG_ENV_VARS = (WORKDIR_PATH_ENV_VAR,)
+_UV_INDEX_CREDENTIAL_PATTERN = re.compile(r"^UV_INDEX_(.+)_(USERNAME|PASSWORD)$")
+
+
+def collect_uv_index_credentials() -> list[dict[str, str | None]]:
+    """Collect present `UV_INDEX_{name}_{USERNAME,PASSWORD}` host env vars.
+
+    Returns:
+        A list of dicts with keys `index_name`, `username_env`, and
+        `password_env`. Only indices with at least one credential set are
+        included, sorted by index name.
+    """
+    found = {}
+    for key in os.environ:
+        match = _UV_INDEX_CREDENTIAL_PATTERN.match(key)
+        if match:
+            found.setdefault(match.group(1), set()).add(match.group(2))
+
+    return [
+        {
+            "index_name": name,
+            "username_env": f"UV_INDEX_{name}_USERNAME"
+            if "USERNAME" in found[name]
+            else None,
+            "password_env": f"UV_INDEX_{name}_PASSWORD"
+            if "PASSWORD" in found[name]
+            else None,
+        }
+        for name in sorted(found)
+    ]
+
+
+def uv_index_secret_mounts(credentials: list[dict[str, str | None]]) -> list[str]:
+    """Return Dockerfile ``--mount`` strings for UV index credentials.
+
+    Args:
+        credentials: Output of `collect_uv_index_credentials`.
+
+    Returns:
+        A list of ``type=secret,...`` strings for Dockerfile ``RUN --mount=``
+        directives.
+    """
+    mounts = []
+    for cred in credentials:
+        name = cred["index_name"].lower()
+        if cred["username_env"]:
+            mounts.append(
+                f"type=secret,id=uv_index_{name}_username,env={cred['username_env']}"
+            )
+        if cred["password_env"]:
+            mounts.append(
+                f"type=secret,id=uv_index_{name}_password,env={cred['password_env']}"
+            )
+    return mounts
+
+
+def uv_index_secret_build_args(credentials: list[dict[str, str | None]]) -> list[str]:
+    """Return ``docker build --secret`` arg pairs for UV index credentials.
+
+    Args:
+        credentials: Output of `collect_uv_index_credentials`.
+
+    Returns:
+        A flat list of ``--secret`` flag-value pairs for the docker build command.
+    """
+    args = []
+    for cred in credentials:
+        name = cred["index_name"].lower()
+        if cred["username_env"]:
+            args.extend(
+                ["--secret", f"id=uv_index_{name}_username,env={cred['username_env']}"]
+            )
+        if cred["password_env"]:
+            args.extend(
+                ["--secret", f"id=uv_index_{name}_password,env={cred['password_env']}"]
+            )
+    return args
 
 
 def env_truthy(env_var: str) -> bool:
@@ -42,6 +119,16 @@ def get_workdir_path() -> str:
         The workdir path from `WORKDIR_PATH`, or the project default.
     """
     return os.getenv(WORKDIR_PATH_ENV_VAR, WORKDIR_PATH_DEFAULT)
+
+
+def get_python_variant() -> str:
+    """Return the Python image variant for container builds.
+
+    Returns:
+        The variant from `CONTAINER_PYTHON_VARIANT`, or 'slim' by default.
+        An empty string disables the variant (e.g., `FROM python:3.11`).
+    """
+    return os.getenv("CONTAINER_PYTHON_VARIANT", "slim").strip()
 
 
 def inject_auto_build_args_from_env(

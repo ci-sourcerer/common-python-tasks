@@ -445,9 +445,11 @@ def build_image(
         prune_images_keep,
     )
     from .env import (
+        collect_uv_index_credentials,
         get_cache_id_suffix,
         get_container_deps_move_script,
         get_prune_keep,
+        get_python_variant,
         inject_auto_build_args_from_env,
         load_container_env_tokens,
         parse_container_deps_mappings,
@@ -457,6 +459,8 @@ def build_image(
         resolve_container_docker_build_args,
         resolve_container_dockerfile_hook_path,
         resolve_extension_content,
+        uv_index_secret_build_args,
+        uv_index_secret_mounts,
     )
     from .project import (
         has_debug_dependency_group,
@@ -486,6 +490,15 @@ def build_image(
         docker_build_args,
         os.getenv("CONTAINER_DOCKER_BUILD_ARGS"),
     )
+    uv_credentials = collect_uv_index_credentials()
+    if uv_credentials:
+        LOGGER.debug(
+            "Passing UV index credentials for: %s",
+            ", ".join(c["index_name"] for c in uv_credentials),
+        )
+        resolved_docker_build_args = uv_index_secret_build_args(uv_credentials) + list(
+            resolved_docker_build_args
+        )
     resolved_dockerfile_hook_path = resolve_container_dockerfile_hook_path(
         dockerfile_hook_path,
         os.getenv("CONTAINER_DOCKERFILE_HOOK_PATH"),
@@ -606,6 +619,8 @@ def build_image(
             "ENTRYPOINT_COMMAND": entrypoint_command,
             "CONTAINER_ENV_VARS": container_env_vars,
             "CACHE_ID_SUFFIX": cache_id_suffix,
+            "PYTHON_VARIANT": get_python_variant(),
+            "UV_INDEX_SECRET_MOUNTS": uv_index_secret_mounts(uv_credentials),
         },
     )
 

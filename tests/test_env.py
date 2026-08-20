@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from common_python_tasks.env import (
@@ -516,6 +518,171 @@ class TestParseContainerDepsMappings:
         )
         with pytest.raises(SystemExit):
             parse_container_deps_mappings()
+
+
+class TestGetPythonVariant:
+    """Tests for Python image variant resolution."""
+
+    def test_returns_default_slim_when_unset(self, monkeypatch):
+        from common_python_tasks.env import get_python_variant
+
+        monkeypatch.delenv("CONTAINER_PYTHON_VARIANT", raising=False)
+
+        assert get_python_variant() == "slim"
+
+    def test_returns_configured_variant(self, monkeypatch):
+        from common_python_tasks.env import get_python_variant
+
+        monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "alpine")
+
+        assert get_python_variant() == "alpine"
+
+    def test_returns_empty_when_explicitly_blank(self, monkeypatch):
+        from common_python_tasks.env import get_python_variant
+
+        monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "")
+
+        assert get_python_variant() == ""
+
+    def test_strips_whitespace(self, monkeypatch):
+        from common_python_tasks.env import get_python_variant
+
+        monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "  bullseye  ")
+
+        assert get_python_variant() == "bullseye"
+
+
+class TestUvIndexCredentials:
+    """Tests for UV index credential collection and secret generation."""
+
+    def test_collect_returns_empty_when_no_uv_index_vars(self, monkeypatch):
+        from common_python_tasks.env import collect_uv_index_credentials
+
+        for key in list(os.environ):
+            if key.startswith("UV_INDEX_"):
+                monkeypatch.delenv(key)
+
+        assert collect_uv_index_credentials() == []
+
+    def test_collect_returns_single_index_with_both_credentials(self, monkeypatch):
+        from common_python_tasks.env import collect_uv_index_credentials
+
+        monkeypatch.setenv("UV_INDEX_MYINDEX_USERNAME", "user")
+        monkeypatch.setenv("UV_INDEX_MYINDEX_PASSWORD", "pass")
+
+        result = collect_uv_index_credentials()
+
+        assert result == [
+            {
+                "index_name": "MYINDEX",
+                "username_env": "UV_INDEX_MYINDEX_USERNAME",
+                "password_env": "UV_INDEX_MYINDEX_PASSWORD",
+            }
+        ]
+
+    def test_collect_handles_username_only(self, monkeypatch):
+        from common_python_tasks.env import collect_uv_index_credentials
+
+        for key in list(os.environ):
+            if key.startswith("UV_INDEX_"):
+                monkeypatch.delenv(key)
+        monkeypatch.setenv("UV_INDEX_MYINDEX_USERNAME", "user")
+
+        result = collect_uv_index_credentials()
+
+        assert result == [
+            {
+                "index_name": "MYINDEX",
+                "username_env": "UV_INDEX_MYINDEX_USERNAME",
+                "password_env": None,
+            }
+        ]
+
+    def test_collect_returns_multiple_indices_sorted(self, monkeypatch):
+        from common_python_tasks.env import collect_uv_index_credentials
+
+        for key in list(os.environ):
+            if key.startswith("UV_INDEX_"):
+                monkeypatch.delenv(key)
+        monkeypatch.setenv("UV_INDEX_ZETA_PASSWORD", "z_pass")
+        monkeypatch.setenv("UV_INDEX_ALPHA_USERNAME", "a_user")
+        monkeypatch.setenv("UV_INDEX_ALPHA_PASSWORD", "a_pass")
+
+        result = collect_uv_index_credentials()
+
+        assert [c["index_name"] for c in result] == ["ALPHA", "ZETA"]
+
+    def test_collect_handles_underscore_in_index_name(self, monkeypatch):
+        from common_python_tasks.env import collect_uv_index_credentials
+
+        for key in list(os.environ):
+            if key.startswith("UV_INDEX_"):
+                monkeypatch.delenv(key)
+        monkeypatch.setenv("UV_INDEX_MY_PRIVATE_INDEX_USERNAME", "user")
+
+        result = collect_uv_index_credentials()
+
+        assert result[0]["index_name"] == "MY_PRIVATE_INDEX"
+
+    def test_secret_mounts_generates_correct_strings(self):
+        from common_python_tasks.env import uv_index_secret_mounts
+
+        credentials = [
+            {
+                "index_name": "MYINDEX",
+                "username_env": "UV_INDEX_MYINDEX_USERNAME",
+                "password_env": "UV_INDEX_MYINDEX_PASSWORD",
+            }
+        ]
+
+        result = uv_index_secret_mounts(credentials)
+
+        assert result == [
+            "type=secret,id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME",
+            "type=secret,id=uv_index_myindex_password,env=UV_INDEX_MYINDEX_PASSWORD",
+        ]
+
+    def test_secret_mounts_skips_missing_credential(self):
+        from common_python_tasks.env import uv_index_secret_mounts
+
+        credentials = [
+            {
+                "index_name": "MYINDEX",
+                "username_env": "UV_INDEX_MYINDEX_USERNAME",
+                "password_env": None,
+            }
+        ]
+
+        result = uv_index_secret_mounts(credentials)
+
+        assert result == [
+            "type=secret,id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME",
+        ]
+
+    def test_secret_build_args_generates_flag_pairs(self):
+        from common_python_tasks.env import uv_index_secret_build_args
+
+        credentials = [
+            {
+                "index_name": "MYINDEX",
+                "username_env": "UV_INDEX_MYINDEX_USERNAME",
+                "password_env": "UV_INDEX_MYINDEX_PASSWORD",
+            }
+        ]
+
+        result = uv_index_secret_build_args(credentials)
+
+        assert result == [
+            "--secret",
+            "id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME",
+            "--secret",
+            "id=uv_index_myindex_password,env=UV_INDEX_MYINDEX_PASSWORD",
+        ]
+
+    def test_secret_build_args_empty_when_no_credentials(self):
+        from common_python_tasks.env import uv_index_secret_build_args
+
+        assert uv_index_secret_build_args([]) == []
 
 
 class TestRenderDepsMoveScript:

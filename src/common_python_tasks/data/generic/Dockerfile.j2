@@ -4,8 +4,8 @@
 # the latest. The `build-image` task passes the version properly here
 ARG PYTHON_VERSION=3
 # Variant for the runtime image, e.g. slim, alpine, etc.
-# See https://hub.docker.com/_/python for available variants
-ARG PYTHON_VARIANT=slim
+# See https://hub.docker.com/_/python for available variants. Leave empty for no variant.
+ARG PYTHON_VARIANT
 ARG WORKDIR_PATH=/workspace
 
 FROM python:${PYTHON_VERSION} AS builder
@@ -32,7 +32,8 @@ COPY . /tmp/build/
 
 {% if HAS_DEBUG_DEPS %}
 # Export debug requirements when the project defines a debug dependency group
-RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }} \
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}{% for mount in UV_INDEX_SECRET_MOUNTS %} \
+    --mount={{ mount }}{% endfor %} \
     uv export --group debug --no-hashes --format requirements-txt --output-file requirements-debug.txt
 {% endif %}
 
@@ -40,9 +41,11 @@ RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }} \
 # If running this in a CI system, you must be using a persistent builder to take
 # advantage of the cache mount, and you should configure your CI to persist the
 # cache directory between builds
-RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }} uv build --wheel
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}{% for mount in UV_INDEX_SECRET_MOUNTS %} \
+    --mount={{ mount }}{% endfor %} \
+    uv build --wheel
 
-FROM python:${PYTHON_VERSION}-${PYTHON_VARIANT} AS runtime
+FROM python:${PYTHON_VERSION}{% if PYTHON_VARIANT %}-${PYTHON_VARIANT}{% endif %} AS runtime
 ARG WORKDIR_PATH=/workspace
 
 ENV PYTHONUNBUFFERED=1
