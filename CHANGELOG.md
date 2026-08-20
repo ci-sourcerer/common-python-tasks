@@ -1,3 +1,17 @@
+## [0.10.0] - 2026-08-20
+
+### 🚀 Features
+
+- Add support for UV index credentials and Python variant in Docker builds
+
+### 🐛 Bug Fixes
+
+- Formatting; `PYTHON_VARIANT`
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.10.0
+
 ## [0.9.0] - 2026-08-19
 
 ### 🚀 Features
