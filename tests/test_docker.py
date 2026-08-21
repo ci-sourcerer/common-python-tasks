@@ -156,7 +156,7 @@ class TestDockerignoreHandling:
         from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
-        expected_content = "*\n!dist/*.whl\n!pyproject.toml\n"
+        expected_content = "*\n!pyproject.toml\n!uv.lock\n!README.md\n!LICENSE\n\n!src\n"
 
         actual_content = None
         original_run_command = mock_run_command.side_effect
@@ -180,6 +180,29 @@ class TestDockerignoreHandling:
         )
 
         assert actual_content == expected_content
+
+    def test_render_build_image_does_not_remove_dist_before_build(
+        self,
+        temp_project_dir: Path,
+        mock_run_command: MagicMock,
+        mock_get_image_tag: MagicMock,
+        mock_get_authors: MagicMock,
+        mock_get_package_name: MagicMock,
+        mock_remove_path: MagicMock,
+    ):
+        """Test that render_build_image does not delete the host dist directory."""
+        from common_python_tasks.docker import render_build_image
+
+        dist_path = temp_project_dir / "dist"
+        dist_path.mkdir()
+        (dist_path / "package.whl").write_text("content")
+
+        render_build_image(
+            dockerfile_text="FROM python:3.11\n",
+            context_path=temp_project_dir,
+        )
+
+        mock_remove_path.assert_not_called()
 
 
 class TestRenderBuildImage:
@@ -365,7 +388,7 @@ class TestBuildImageLatestTag:
         assert not any("latest" in tag for tag in tag_args)
 
 
-def test_build_image_removes_non_empty_dist_directory_before_build(
+def test_build_image_preserves_non_empty_dist_directory_before_build(
     temp_project_dir,
     mock_load_data_file,
     mock_run_command,
@@ -391,7 +414,7 @@ def test_build_image_removes_non_empty_dist_directory_before_build(
 
     build_image(dockerfile_text="FROM python:3.11\n", context_path=temp_project_dir)
 
-    assert not dist_dir.exists()
+    assert dist_dir.exists()
     assert len(build_calls) == 1
 
 

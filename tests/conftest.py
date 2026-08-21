@@ -92,13 +92,21 @@ def mock_load_data_file():
             elif key == ".dockerignore":
                 return (
                     "/fake/path/.dockerignore",
-                    "*\n!dist/*.whl\n!pyproject.toml\n",
+                    "*\n!pyproject.toml\n!uv.lock\n!README.md\n!LICENSE\n\n!src\n",
                 )
             if not fatal_on_missing:
                 return None
             return ("/fake/path/" + key, "")
 
         mock.side_effect = side_effect
+        yield mock
+
+
+@pytest.fixture
+def mock_remove_path():
+    """Mock remove_path so Docker build prep does not delete dist during tests."""
+    mock = MagicMock()
+    with patch("common_python_tasks.utils.remove_path", new=mock):
         yield mock
 
 

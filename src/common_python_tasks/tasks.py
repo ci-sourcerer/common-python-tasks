@@ -1330,6 +1330,9 @@ def _run_release_flow(
                 repository,
                 repository_url,
             )
+        log_dry_run(
+            "Would publish GitHub Release %s with built assets", hook_env["RELEASE_TAG"]
+        )
         if include_containers:
             log_dry_run(
                 "Would build container image with debug=%s no_cache=%s plain=%s single_arch=%s",
@@ -1339,9 +1342,6 @@ def _run_release_flow(
                 single_arch,
             )
             log_dry_run("Would push container image with debug=%s", debug)
-        log_dry_run(
-            "Would publish GitHub Release %s with built assets", hook_env["RELEASE_TAG"]
-        )
         if post_script:
             run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)
         return
@@ -1349,17 +1349,6 @@ def _run_release_flow(
     _build_and_publish_release_package(
         hook_env["RELEASE_TAG"], repository=repository, repository_url=repository_url
     )
-
-    if include_containers:
-        build_image(
-            debug=debug,
-            no_cache=no_cache,
-            plain=plain,
-            single_arch=single_arch,
-            container_env=container_env,
-            container_envfile=container_envfile,
-        )
-        push_image(debug=debug)
 
     run_command(["git", "push", "origin", hook_env["RELEASE_TAG"]])
     try:
@@ -1378,6 +1367,17 @@ def _run_release_flow(
             acceptable_returncodes={0, 1},
         )
         raise
+
+    if include_containers:
+        build_image(
+            debug=debug,
+            no_cache=no_cache,
+            plain=plain,
+            single_arch=single_arch,
+            container_env=container_env,
+            container_envfile=container_envfile,
+        )
+        push_image(debug=debug)
 
     if post_script:
         run_command(["sh", "-lc", post_script], env=hook_env, dry_run=False)

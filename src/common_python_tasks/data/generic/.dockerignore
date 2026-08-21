@@ -1,5 +1,4 @@
 *
-!dist/*.whl
 !pyproject.toml
 !uv.lock
 !README.md

@@ -811,6 +811,7 @@ class TestBumpVersion:
                 container_envfile=None,
             )
             mock_push_image.assert_called_once_with(debug=True)
+            assert mock_publish_github_release.call_args_list[0][0][0] == "v1.2.3"
             mock_publish_github_release.assert_called_once_with(
                 "v1.2.3",
                 release_name="v1.2.3",

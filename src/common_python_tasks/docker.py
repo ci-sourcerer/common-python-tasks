@@ -205,10 +205,6 @@ def render_build_image(
     Returns:
         The rendered build plan that contains the command and generated artifacts.
     """
-    dist_path = Path("dist")
-    if utils.directory_has_contents(dist_path):
-        utils.remove_path(dist_path)
-
     context_path = _resolve_context_path(context_path)
 
     temp_file_path = None
