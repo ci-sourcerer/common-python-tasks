@@ -1,3 +1,13 @@
+## [0.10.1] - 2026-08-27
+
+### 🐛 Bug Fixes
+
+- Missing artifacts before image build during release
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.10.1
+
 ## [0.10.0] - 2026-08-20
 
 ### 🚀 Features
