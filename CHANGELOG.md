@@ -1,3 +1,14 @@
+## [0.10.2] - 2026-08-30
+
+### 🐛 Bug Fixes
+
+- Fix entrypoint resolution to support hyphenated script names
+
+### ⚙️ Miscellaneous Tasks
+
+- Formatting
+- *(release)* Set README version 0.10.2
+
 ## [0.10.1] - 2026-08-27
 
 ### 🐛 Bug Fixes
