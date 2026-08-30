@@ -156,7 +156,9 @@ class TestDockerignoreHandling:
         from common_python_tasks.docker import build_image
 
         dockerignore_path = temp_project_dir / ".dockerignore"
-        expected_content = "*\n!pyproject.toml\n!uv.lock\n!README.md\n!LICENSE\n\n!src\n"
+        expected_content = (
+            "*\n!pyproject.toml\n!uv.lock\n!README.md\n!LICENSE\n\n!src\n"
+        )
 
         actual_content = None
         original_run_command = mock_run_command.side_effect
