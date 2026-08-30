@@ -393,8 +393,10 @@ def resolve_container_entrypoint_command(entrypoint_script: str | None = None) -
         )
 
     script_name = utils.get_package_name(use_underscores=True)
-    if script_name in scripts_set:
-        return script_name
+    hyphenated_name = script_name.replace("_", "-") if script_name else None
+    for candidate in filter(None, [script_name, hyphenated_name]):
+        if candidate in scripts_set:
+            return candidate
 
     return "python"
 

@@ -318,6 +318,47 @@ def test_resolve_container_entrypoint_command_prefers_package_script_with_multip
         assert result == "my_pkg"
 
 
+def test_resolve_container_entrypoint_command_falls_back_to_hyphenated_script():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    with (
+        patch("common_python_tasks.project.read_pyproject_toml") as mock_toml,
+        patch(
+            "common_python_tasks.utils.get_package_name", return_value="some_package"
+        ),
+    ):
+        mock_toml.return_value = {
+            "project": {"scripts": {"some-package": "some_package.cli:main"}}
+        }
+
+        result = resolve_container_entrypoint_command()
+
+        assert result == "some-package"
+
+
+def test_resolve_container_entrypoint_command_prefers_underscore_over_hyphenated():
+    from common_python_tasks.project import resolve_container_entrypoint_command
+
+    with (
+        patch("common_python_tasks.project.read_pyproject_toml") as mock_toml,
+        patch(
+            "common_python_tasks.utils.get_package_name", return_value="some_package"
+        ),
+    ):
+        mock_toml.return_value = {
+            "project": {
+                "scripts": {
+                    "some_package": "some_package.cli:main",
+                    "some-package": "some_package.alt_cli:main",
+                }
+            }
+        }
+
+        result = resolve_container_entrypoint_command()
+
+        assert result == "some_package"
+
+
 def test_get_release_tag_from_project_version():
     with patch(
         "common_python_tasks.project.get_project_version",
