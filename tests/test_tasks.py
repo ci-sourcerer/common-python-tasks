@@ -1928,27 +1928,48 @@ def test_fastapi_stack_up_detach_passes_tasks_to_compose_command(
     assert "tasks" in mock_run.call_args.kwargs
 
 
-def test_fastapi_run_db_migrations_passes_service_list(monkeypatch):
+@pytest.mark.parametrize("migration_exit", [0, 23])
+def test_fastapi_run_db_migrations_waits_and_cleans_up(tmp_path, migration_exit):
     from common_python_tasks.tasks import fastapi_run_db_migrations
 
+    compose_file = tmp_path / "compose.yml"
+    config_file = tmp_path / "alembic.ini"
+    compose_file.touch()
+    config_file.touch()
     with (
-        patch("common_python_tasks.tasks.fastapi_stack_up") as mock_stack_up,
+        patch(
+            "common_python_tasks.tasks.build_image",
+            return_value=MagicMock(commit_tag="abc123"),
+        ),
+        patch("common_python_tasks.docker_compose.ensure_secrets_generated"),
         patch(
             "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([], [], [], {"API_PORT": "8080"}),
-        ),
+            return_value=([compose_file], [compose_file], [config_file], {}),
+        ) as prepare,
         patch(
-            "common_python_tasks.docker_compose.run_docker_compose_command"
-        ) as mock_run,
-        patch("common_python_tasks.tasks.fastapi_stack_down") as mock_stack_down,
+            "common_python_tasks.docker_compose.run_docker_compose_command",
+            side_effect=[
+                None,
+                SystemExit(migration_exit) if migration_exit else None,
+                None,
+            ],
+        ) as run,
     ):
-        fastapi_run_db_migrations()
+        if migration_exit:
+            with pytest.raises(SystemExit) as error:
+                fastapi_run_db_migrations()
+            assert error.value.code == migration_exit
+        else:
+            fastapi_run_db_migrations()
 
-    mock_stack_up.assert_called_once_with(
-        debug=False, detach=True, services=["db", "migrator"]
-    )
-    mock_run.assert_called_once()
-    mock_stack_down.assert_called_once()
+    prepare.assert_called_once_with(image_tag="abc123")
+    assert [invocation.args for invocation in run.call_args_list] == [
+        ("up", "-d", "--no-build", "db"),
+        ("run", "--rm", "migrator"),
+        ("rm", "-f", "-s", "-v", "db", "migrator"),
+    ]
+    assert not compose_file.exists()
+    assert not config_file.exists()
 
 
 def test_fastapi_stack_down_passes_tasks_to_compose_command():

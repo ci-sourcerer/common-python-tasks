@@ -1731,26 +1731,49 @@ def fastapi_run_db_migrations() -> None:
     """Run database migrations."""
     from .docker_compose import (
         cleanup_temp_files,
+        ensure_secrets_generated,
         load_and_prepare_compose,
         run_docker_compose_command,
     )
 
-    services = ["db", "migrator"]
-    fastapi_stack_up(debug=False, detach=True, services=services)
+    container_build = build_image(single_arch=True)
+    ensure_secrets_generated()
+    compose_files, temp_compose_files, temp_config_files, compose_env = (
+        load_and_prepare_compose(image_tag=container_build.commit_tag)
+    )
     try:
-        compose_files, temp_compose_files, _, compose_env = load_and_prepare_compose()
+        run_docker_compose_command(
+            "up",
+            "-d",
+            "--no-build",
+            "db",
+            compose_files=compose_files,
+            compose_env=compose_env,
+            tasks=tasks,
+        )
+        run_docker_compose_command(
+            "run",
+            "--rm",
+            "migrator",
+            compose_files=compose_files,
+            compose_env=compose_env,
+            tasks=tasks,
+        )
+    finally:
         try:
             run_docker_compose_command(
-                "logs",
+                "rm",
+                "-f",
+                "-s",
+                "-v",
+                "db",
                 "migrator",
                 compose_files=compose_files,
                 compose_env=compose_env,
                 tasks=tasks,
             )
         finally:
-            cleanup_temp_files(temp_compose_files)
-    finally:
-        fastapi_stack_down()
+            cleanup_temp_files(temp_compose_files, temp_config_files)
 
 
 @tasks.script(task_name="db-shell", tags=["web", "containers", "database", "fastapi"])
