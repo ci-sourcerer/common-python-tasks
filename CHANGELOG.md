@@ -1,3 +1,19 @@
+## [0.10.3] - 2026-09-07
+
+### 🐛 Bug Fixes
+
+- *(git)* Detect tags strictly later than HEAD
+- *(migrations)* Wait for completion and propagate failures
+- *(containers)* Execute dependency mappings with Python
+- *(dependencies)* Restrict upgrades to requested packages
+- *(compose)* Preserve command exit status after cleanup
+- *(containers)* Preserve environment in builder and runtime images
+- *(database)* Separate published and internal PostgreSQL ports
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.10.3
+
 ## [0.10.2] - 2026-08-30
 
 ### 🐛 Bug Fixes
