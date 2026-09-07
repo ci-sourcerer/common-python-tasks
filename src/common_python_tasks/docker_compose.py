@@ -606,6 +606,7 @@ def build_exec_script(
         "trap 'rm -f \"$SCRIPT_PATH\"' EXIT",
         "",
         " ".join(quote(str(arg)) for arg in command),
+        "command_status=$?",
     ]
 
     if teardown_command:
@@ -619,7 +620,7 @@ def build_exec_script(
         for path in cleanup_paths:
             lines.append(f"rm -f {quote(str(path))}")
 
-    lines.append("")
+    lines.extend(['exit "$command_status"', ""])
 
     script_path.write_text("\n".join(lines), encoding="utf-8")
     script_path.chmod(0o700)

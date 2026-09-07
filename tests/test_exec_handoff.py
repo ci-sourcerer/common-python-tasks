@@ -3,6 +3,8 @@ import stat
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 
 def test_build_exec_script_basic():
     """Script contains the compose command and self-deletes via trap."""
@@ -139,3 +141,36 @@ def test_build_exec_script_full_integration(tmp_path):
             assert str(f) in content
     finally:
         os.unlink(script_path)
+
+
+@pytest.mark.parametrize("command_status", [0, 42])
+@pytest.mark.parametrize("teardown_status", [0, 7])
+def test_exec_script_preserves_command_status_and_cleans_up(
+    tmp_path, command_status, teardown_status
+):
+    import subprocess
+
+    from common_python_tasks.docker_compose import build_exec_script
+
+    cleanup_file = tmp_path / "temporary config"
+    cleanup_file.touch()
+    teardown_marker = tmp_path / "teardown-ran"
+    script = build_exec_script(
+        ["sh", "-c", f"exit {command_status}"],
+        cleanup_paths=[cleanup_file],
+        teardown_command=[
+            "sh",
+            "-c",
+            'touch "$1"; exit "$2"',
+            "teardown",
+            str(teardown_marker),
+            str(teardown_status),
+        ],
+    )
+    assert (
+        subprocess.run(["sh", str(script)], shell=False, check=False).returncode
+        == command_status
+    )
+    assert teardown_marker.exists()
+    assert not cleanup_file.exists()
+    assert not script.exists()
