@@ -295,7 +295,7 @@ def test_update_dependencies_runs_update_only_when_no_changes():
     with (
         patch(
             "common_python_tasks.project.get_dependency_update_command",
-            return_value=["uv", "sync", "--upgrade", "--upgrade-package", "pytest"],
+            return_value=["uv", "sync", "--upgrade-package", "pytest"],
         ),
         patch(
             "common_python_tasks.utils.run_command",
@@ -306,7 +306,7 @@ def test_update_dependencies_runs_update_only_when_no_changes():
 
     mock_run_command.assert_has_calls(
         [
-            call(["uv", "sync", "--upgrade", "--upgrade-package", "pytest"]),
+            call(["uv", "sync", "--upgrade-package", "pytest"]),
             call(
                 [
                     "git",
@@ -348,7 +348,7 @@ def test_update_dependencies_creates_branch_commit_push_and_pr(tmp_path, monkeyp
         patch("common_python_tasks.git.get_dirty_files", return_value=[]),
         patch(
             "common_python_tasks.project.get_dependency_update_command",
-            return_value=["uv", "sync", "--upgrade", "--upgrade-package", "pytest"],
+            return_value=["uv", "sync", "--upgrade-package", "pytest"],
         ),
         patch("common_python_tasks.tasks.test") as mock_test,
         patch(
@@ -364,7 +364,7 @@ def test_update_dependencies_creates_branch_commit_push_and_pr(tmp_path, monkeyp
     mock_test.assert_called_once_with()
     mock_run_command.assert_has_calls(
         [
-            call(["uv", "sync", "--upgrade", "--upgrade-package", "pytest"]),
+            call(["uv", "sync", "--upgrade-package", "pytest"]),
             call(["git", "checkout", "-b", "deps/pytest"]),
             call(["git", "commit", "-m", "chore(deps): update pytest"]),
             call(["git", "push", "-u", "origin", "deps/pytest"]),

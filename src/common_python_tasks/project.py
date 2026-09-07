@@ -154,7 +154,9 @@ def get_dependency_update_command(
     if dependencies is None:
         dependencies = []
 
-    command = ["uv", "sync", "--upgrade"]
+    command = ["uv", "sync"]
+    if not dependencies:
+        command.append("--upgrade")
     for dependency in dependencies:
         command.extend(["--upgrade-package", dependency])
     return command

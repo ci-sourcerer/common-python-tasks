@@ -385,10 +385,10 @@ def test_get_build_command():
 
 def test_get_dependency_update_command():
     assert get_dependency_update_command() == ["uv", "sync", "--upgrade"]
+    assert get_dependency_update_command([]) == ["uv", "sync", "--upgrade"]
     assert get_dependency_update_command(["pytest", "requests"]) == [
         "uv",
         "sync",
-        "--upgrade",
         "--upgrade-package",
         "pytest",
         "--upgrade-package",
