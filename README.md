@@ -224,7 +224,7 @@ addopts = "-ra"
 - `CONTAINER_DEPS_IMAGE`: Existing dependency image used when neither `CONTAINER_DEPS_CONTENT` nor `CONTAINER_DEPS_FILE` is configured
 - `CONTAINER_EXTENSION_FILES`: Colon-delimited local extension Dockerfile paths. Escape literal colons as `\:` or quote the complete path.
 - `CONTAINER_EXTENSIONS`: Colon-delimited extension-bundle names or parameterized values. Escape literal colons as `\:` or quote the complete value.
-- `CONTAINER_ENV`: Colon-delimited `KEY=VALUE` declarations injected into the rendered Dockerfile's builder stage. Escape literal colons as `\:` or quote the complete value.
+- `CONTAINER_ENV`: Colon-delimited `KEY=VALUE` declarations injected into both the builder and runtime stages. These variables are available to package build commands and runtime-stage build commands, and persist in the final and debug images for running containers. The `container_env` and `container_envfile` task arguments use the same behavior. Escape literal colons as `\:` or quote the complete value. Use `run-container --env` or `--envfile` to override values when starting a container.
 - `.containerenv`: A project-root file that can supply the same declarations. It is loaded before the `container_envfile` task argument, `CONTAINER_ENV`, and the `container_env` task argument.
 - `CONTAINER_PRUNE_KEEP`: Image-pruning policy after builds. `-1` keeps all images, `0` keeps only the latest, and `N` keeps the latest plus `N` prior images.
 - `CONTAINER_DEPS_CONTENT`: Inline Dockerfile instructions for a dependency image that installs artifacts into `/tmp/deps`

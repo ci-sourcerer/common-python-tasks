@@ -1418,3 +1418,24 @@ def test_build_image_passes_empty_python_variant_build_arg(
     build_image()
 
     assert any("PYTHON_VARIANT=" in str(arg) for arg in build_calls[0])
+
+
+def test_container_environment_is_available_in_builder_and_runtime():
+    from common_python_tasks.utils import load_data_file, render_template_text
+
+    dockerfile = render_template_text(
+        load_data_file("Dockerfile.j2")[1],
+        {
+            "CONTAINER_ENV_VARS": ["BUILD_SETTING=enabled"],
+            "HAS_DEBUG_DEPS": True,
+            "CONTAINER_APT_PACKAGES": "jq",
+        },
+    )
+    builder, runtime = dockerfile.split(" AS runtime", 1)
+    runtime, derived_stages = runtime.split("FROM runtime AS debug", 1)
+    assert builder.index("ENV BUILD_SETTING=enabled") < builder.index("uv export")
+    assert builder.index("ENV BUILD_SETTING=enabled") < builder.index("uv build")
+    assert runtime.index("ENV BUILD_SETTING=enabled") < runtime.index("pip install")
+    assert runtime.count("ENV BUILD_SETTING=enabled") == 1
+    assert "FROM runtime AS final" in derived_stages
+    assert "apt-get install -y --no-install-recommends jq" in runtime

@@ -430,9 +430,9 @@ def build_image(
         dockerfile_hook_path: Optional executable script path that can mutate
             the generated Dockerfile before build. Overrides
             CONTAINER_DOCKERFILE_HOOK_PATH if provided.
-        container_env: Builder-stage environment declarations as repeated
+        container_env: Builder and runtime environment declarations as repeated
             KEY=VALUE values.
-        container_envfile: Optional repeated list of files containing builder-stage
+        container_envfile: Optional repeated list of files containing builder and runtime
             environment declarations.
 
     Precedence for container env declarations is: .containerenv, container_envfile,
@@ -524,7 +524,7 @@ def build_image(
     )
     if container_env_vars:
         LOGGER.debug(
-            "Injecting builder-stage env vars: %s",
+            "Injecting builder and runtime env vars: %s",
             ", ".join(container_env_vars),
         )
     top_level_build_args = inject_auto_build_args_from_env(

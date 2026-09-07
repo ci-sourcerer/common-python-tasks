@@ -12,6 +12,13 @@ FROM python:${PYTHON_VERSION} AS builder
 ARG PACKAGE_VERSION
 ARG UV_VERSION
 
+{% if CONTAINER_ENV_VARS %}
+# Make configured variables available to package build commands.
+{% for env_var in CONTAINER_ENV_VARS -%}
+ENV {{ env_var }}
+{% endfor %}
+{%- endif %}
+
 # Bypass VCS-based version detection: use the host-computed version directly.
 # This avoids requiring a .git directory in the build context and prevents
 # false dirty-version detection from a partial working tree.
@@ -60,7 +67,7 @@ ARG NONROOT_UID=1000
 ARG NONROOT_GID=1000
 
 {% if CONTAINER_ENV_VARS %}
-# Inject custom builder stage environment variables
+# Persist the same variables for runtime build commands and running containers.
 {% for env_var in CONTAINER_ENV_VARS -%}
 ENV {{ env_var }}
 {% endfor %}
