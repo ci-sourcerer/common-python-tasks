@@ -699,3 +699,33 @@ class TestRenderDepsMoveScript:
         assert "shutil.move" in script
         assert 'source_root = pathlib.Path("/tmp/deps")' in script
         assert "'dep1': '/opt/dep1'" in script
+
+
+@pytest.mark.parametrize("source_exists", [True, False])
+def test_generated_deps_move_script_executes(tmp_path, source_exists):
+    import subprocess
+
+    from common_python_tasks.env import render_container_deps_move_script
+
+    source = tmp_path / "deps"
+    source.mkdir()
+    if source_exists:
+        (source / "example").write_text("dependency content")
+    destination = tmp_path / "installed" / "example"
+    script = tmp_path / "move-script"
+    script.write_text(
+        render_container_deps_move_script({"example": str(destination)}).replace(
+            'pathlib.Path("/tmp/deps")', f"pathlib.Path({str(source)!r})"
+        )
+    )
+    script.chmod(0o700)
+    result = subprocess.run(
+        [str(script)], capture_output=True, text=True, shell=False, check=False
+    )
+    if source_exists:
+        assert result.returncode == 0, result.stderr
+        assert destination.read_text() == "dependency content"
+        assert not (source / "example").exists()
+    else:
+        assert result.returncode == 1
+        assert "Dependency source not found:" in result.stderr

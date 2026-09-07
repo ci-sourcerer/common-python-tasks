@@ -537,6 +537,7 @@ def render_container_deps_move_script(mappings: dict[str, str]) -> str:
     import textwrap
 
     script_lines = [
+        "#!/usr/bin/env python3",
         "import pathlib",
         "import shutil",
         "import sys",
