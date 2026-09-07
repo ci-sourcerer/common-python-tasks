@@ -259,7 +259,7 @@ addopts = "-ra"
 - `SECRET_KEY`: Application secret key generated automatically when unset
 - `ENVIRONMENT`: Environment name with a default of `production`
 - `DEBUG_PORT`: Python debugger port in debug mode with a default of `5678`
-- `DB_PORT`: PostgreSQL port with a default of `5432`
+- `DB_PORT`: Published host port for PostgreSQL, defaulting to `5432`. The API and migrator connect to the database container on port `5432` regardless of this setting.
 - `DB_USER`: Database user with a default of the package name
 - `DB_BASE`: Database name with a default of the package name
 - `DB_PASS`: Database password generated automatically when unset

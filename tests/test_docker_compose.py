@@ -178,3 +178,20 @@ def test_ensure_alembic_config_reuses_identifiable_generated_file(
 
     cleanup_temp_files([config_path])
     assert not config_path.exists()
+
+
+def test_database_host_port_does_not_change_internal_port():
+    from string import Template
+
+    from common_python_tasks.utils import load_data_file, render_template_text
+
+    compose = Template(
+        render_template_text(
+            load_data_file("compose-db.yml.j2", type_identifier="fastapi")[1],
+            {"ENV_PREFIX": "EXAMPLE", "PACKAGE_NAME": "example"},
+        )
+    ).safe_substitute(DB_PORT="5433")
+    assert "EXAMPLE_DB_PORT: 5432" in compose
+    assert "target: 5432" in compose
+    assert "published: 5433" in compose
+    assert compose.count("<<: *common-environment") == 2
