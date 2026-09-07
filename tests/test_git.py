@@ -130,87 +130,60 @@ class TestComputeNextReleaseVersion:
             self._call("patch", stage="gamma")
 
 
-class TestHasTagsLaterInHistory:
-    def test_no_tags_exist(self):
-        from common_python_tasks.git import has_tags_later_in_history
+@pytest.mark.parametrize(
+    ("tag_target", "annotated", "expected"),
+    [
+        (None, False, False),
+        ("HEAD~1", False, False),
+        ("HEAD", False, False),
+        ("future", False, True),
+        ("future", True, True),
+        ("unrelated", False, False),
+    ],
+)
+def test_has_tags_later_in_history(
+    tmp_path, monkeypatch, tag_target, annotated, expected
+):
+    from common_python_tasks.git import has_tags_later_in_history
 
-        with patch("common_python_tasks.utils.run_command") as mock:
+    monkeypatch.chdir(tmp_path)
+    _review_git("init", "-q")
+    _review_git("commit", "--allow-empty", "-qm", "first")
+    _review_git("commit", "--allow-empty", "-qm", "second")
+    if tag_target in {"future", "unrelated"}:
+        _review_git("branch", "original")
+        _review_git("checkout", "-qb", "future")
+        if tag_target == "unrelated":
+            _review_git("checkout", "-q", "HEAD~1")
+        _review_git("commit", "--allow-empty", "-qm", "third")
+        _review_git("tag", *(["-a", "-m", "release"] if annotated else []), "v1.0.0")
+        _review_git("checkout", "-q", "original")
+    elif tag_target:
+        _review_git("tag", "v1.0.0", tag_target)
+    assert has_tags_later_in_history() is expected
 
-            def side_effect(command, *args, **kwargs):
-                result = MagicMock()
-                if command == ["git", "tag"]:
-                    result.returncode = 0
-                    result.stdout = ""
-                return result
 
-            mock.side_effect = side_effect
+def _review_git(*args):
+    import subprocess
 
-            assert not has_tags_later_in_history()
-
-    def test_no_tags_later_in_history(self):
-        from common_python_tasks.git import has_tags_later_in_history
-
-        with patch("common_python_tasks.utils.run_command") as mock:
-
-            def side_effect(command, *args, **kwargs):
-                result = MagicMock()
-                if command == ["git", "tag"]:
-                    result.returncode = 0
-                    result.stdout = "v1.0.0\nv1.1.0\nv1.2.0"
-                elif command[:3] == ["git", "merge-base", "--is-ancestor"]:
-                    result.returncode = 0
-                else:
-                    result.returncode = 0
-                    result.stdout = ""
-                return result
-
-            mock.side_effect = side_effect
-
-            assert not has_tags_later_in_history()
-
-    def test_has_tags_later_in_history(self):
-        from common_python_tasks.git import has_tags_later_in_history
-
-        with patch("common_python_tasks.utils.run_command") as mock:
-            call_count = 0
-
-            def side_effect(command, *args, **kwargs):
-                nonlocal call_count
-                result = MagicMock()
-                if command == ["git", "tag"]:
-                    result.returncode = 0
-                    result.stdout = "v1.0.0\nv1.1.0\nv2.0.0"
-                elif command[:3] == ["git", "merge-base", "--is-ancestor"]:
-                    call_count += 1
-                    if call_count <= 2:
-                        result.returncode = 0
-                    else:
-                        result.returncode = 1
-
-                else:
-                    result.returncode = 0
-                    result.stdout = ""
-                return result
-
-            mock.side_effect = side_effect
-
-            assert has_tags_later_in_history()
-
-    def test_git_tag_command_fails(self):
-        from common_python_tasks.git import has_tags_later_in_history
-
-        with patch("common_python_tasks.utils.run_command") as mock:
-
-            def side_effect(command, *args, **kwargs):
-                result = MagicMock()
-                if command == ["git", "tag"]:
-                    result.returncode = 128
-                    result.stdout = ""
-                return result
-
-            mock.side_effect = side_effect
-
-            assert not has_tags_later_in_history()
+    return subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "tag.gpgsign=false",
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        shell=False,
+    )
 
 
 class TestGetDirtyFiles:

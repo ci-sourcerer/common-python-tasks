@@ -335,7 +335,14 @@ def has_tags_later_in_history() -> bool:
             capture_output=True,
             acceptable_returncodes={0, 1},
         )
-        if check_result.returncode == 1:
+        if (
+            check_result.returncode == 0
+            and utils.run_command(
+                ["git", "rev-list", "--count", f"HEAD..{tag}"],
+                capture_output=True,
+            ).stdout.strip()
+            != "0"
+        ):
             return True
 
     return False
