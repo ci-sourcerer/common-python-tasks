@@ -406,6 +406,58 @@ def lint_all() -> None:
     run_command(_get_ruff_command("format", "--check", Path(".")))
 
 
+@tasks.script(task_name="docs-build", tags=["docs"])
+def docs_build(config_file: str | None = None, clean: bool = False) -> None:
+    """Build the Zensical documentation site in strict mode.
+
+    Args:
+        config_file: Optional path to a Zensical configuration file.
+        clean: Remove cached files before building the site.
+    """
+    from .utils import require_package, run_command
+
+    require_package("zensical")
+    run_command(
+        [
+            "zensical",
+            "build",
+            "--strict",
+            "--clean" if clean else None,
+            "--config-file" if config_file else None,
+            config_file,
+        ]
+    )
+
+
+@tasks.script(task_name="docs-serve", tags=["docs"])
+def docs_serve(
+    config_file: str | None = None,
+    dev_addr: str | None = None,
+    open_browser: bool = False,
+) -> None:
+    """Serve the Zensical documentation site for local preview.
+
+    Args:
+        config_file: Optional path to a Zensical configuration file.
+        dev_addr: Optional development server address in `IP:PORT` form.
+        open_browser: Open the preview in the default browser.
+    """
+    from .utils import require_package, run_command
+
+    require_package("zensical")
+    run_command(
+        [
+            "zensical",
+            "serve",
+            "--config-file" if config_file else None,
+            config_file,
+            "--dev-addr" if dev_addr else None,
+            dev_addr,
+            "--open" if open_browser else None,
+        ]
+    )
+
+
 @tasks.script(tags=["containers", "build"])
 def build_image(
     *docker_build_args: str,

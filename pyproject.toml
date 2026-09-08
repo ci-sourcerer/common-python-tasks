@@ -28,6 +28,7 @@ dependencies = [
     "git-cliff (>=2.12.0,<3.0.0)",
     "packaging (>=26.2,<27.0)",
     "requests (>=2.34.2,<3.0.0)",
+    "zensical (>=0.0.59,<0.1.0)",
 ]
 dynamic = ["version"]
 
@@ -39,14 +40,17 @@ Issues = "http://github.com/ci-sourcerer/common-python-tasks/issues"
 [tool.poe]
 include_script = "common_python_tasks:tasks(exclude_tags=['containers', 'fastapi'])"
 
+[tool.poe.tasks]
+update-docs-references = { cmd = "python -m scripts.update_docs_tasks_reference" }
+check-docs-references = { cmd = "python -m scripts.update_docs_tasks_reference --check" }
+update-docs-tasks-reference = { cmd = "python -m scripts.update_docs_tasks_reference" }
+check-docs-tasks-reference = { cmd = "python -m scripts.update_docs_tasks_reference --check" }
+
 [tool.poe.env]
 PYTHONPATH = "src"
 RELEASE_UPDATE_CHANGELOG = "1"
 RELEASE_PRE_SCRIPT = "RELEASE_SCRIPT_PHASE=pre python -m scripts.release_script"
 CONTAINER_APT_PACKAGES = "jq"
-
-[tool.poe.tasks]
-update-readme-tasks-table = { cmd = "python -m scripts.update_readme_tasks_table" }
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
@@ -55,7 +59,14 @@ source = "uv-dynamic-versioning"
 packages = ["src/common_python_tasks"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/common_python_tasks", "scripts", "README.md", "LICENSE"]
+include = [
+    "src/common_python_tasks",
+    "scripts",
+    "docs",
+    "zensical.toml",
+    "README.md",
+    "LICENSE",
+]
 
 [dependency-groups]
 debug = ["debugpy (>=1.8.16,<2.0.0)"]

@@ -1,0 +1,33 @@
+name: docs-deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/docs-deploy.yml'
+      - 'docs/**'
+      - 'zensical.toml'
+      - 'pyproject.toml'
+      - 'src/common_python_tasks/tasks.py'
+  workflow_dispatch:
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    uses: ./.github/workflows/docs.yml
+    with:
+      python_version: '3.14'
+      dependency_group: ''
+      locked: false
+      artifact_name: common-python-tasks-docs
+      generated_docs_check_task: check-docs-references
+      deploy_github_pages: true
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

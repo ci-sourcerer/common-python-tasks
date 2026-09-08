@@ -1,0 +1,348 @@
+name: reusable-docs
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        description: Python version used to build the documentation
+        required: true
+        type: string
+      dependency_group:
+        description: Optional uv dependency group installed before the build
+        required: false
+        default: dev
+        type: string
+      locked:
+        description: Require the checked-in uv lockfile to remain unchanged
+        required: false
+        default: true
+        type: boolean
+      generated_docs_check_task:
+        description: Optional client-owned Poe task that checks generated documentation
+        required: false
+        default: ''
+        type: string
+      site_path:
+        description: Directory containing the rendered static site
+        required: false
+        default: site
+        type: string
+      artifact_name:
+        description: Name of the uploaded documentation artifact
+        required: false
+        default: docs-site
+        type: string
+      deploy_github_pages:
+        description: Deploy the rendered site to GitHub Pages
+        required: false
+        default: false
+        type: boolean
+      publish_cloudflare:
+        description: Publish an internal pull request to Cloudflare Pages
+        required: false
+        default: false
+        type: boolean
+      cloudflare_project_name:
+        description: Cloudflare Pages Direct Upload project to create when absent and deploy previews to
+        required: false
+        default: ''
+        type: string
+      cloudflare_production_branch:
+        description: Production branch assigned if the Cloudflare Pages project is created
+        required: false
+        default: main
+        type: string
+      cloudflare_preview_domain:
+        description: Base custom domain for pull-request previews, such as preview.example.com
+        required: false
+        default: ''
+        type: string
+      cloudflare_preview_zone:
+        description: Cloudflare DNS zone containing the preview domain; defaults to the preview domain
+        required: false
+        default: ''
+        type: string
+    secrets:
+      cloudflare_account_id:
+        description: Cloudflare account containing the Pages project
+        required: false
+      cloudflare_api_token:
+        description: Cloudflare API token with Pages write access
+        required: false
+    outputs:
+      preview_url:
+        description: Stable Cloudflare Pages branch alias when a preview was published
+        value: ${{ jobs.build.outputs.preview_url }}
+
+jobs:
+  build:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pages: write
+    outputs:
+      preview_url: ${{ steps.preview_url.outputs.url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python ${{ inputs.python_version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Install dependencies
+        env:
+          DEPENDENCY_GROUP: ${{ inputs.dependency_group }}
+          LOCKED: ${{ inputs.locked }}
+        run: |
+          args=(sync)
+          if [[ "$LOCKED" == "true" ]]; then
+            args+=(--locked)
+          fi
+          if [[ -n "$DEPENDENCY_GROUP" ]]; then
+            args+=(--group "$DEPENDENCY_GROUP")
+          fi
+          uv "${args[@]}"
+
+      - name: Check generated documentation
+        if: inputs.generated_docs_check_task != ''
+        env:
+          GENERATED_DOCS_CHECK_TASK: ${{ inputs.generated_docs_check_task }}
+        run: |
+          if [[ ! "$GENERATED_DOCS_CHECK_TASK" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "Invalid generated documentation check task: $GENERATED_DOCS_CHECK_TASK" >&2
+            exit 2
+          fi
+          uv run poe "$GENERATED_DOCS_CHECK_TASK"
+
+      - name: Build documentation site
+        run: uv run poe docs-build
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.site_path }}/
+          if-no-files-found: error
+
+      - name: Validate Cloudflare preview configuration
+        if: inputs.publish_cloudflare
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare_account_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_PROJECT_NAME: ${{ inputs.cloudflare_project_name }}
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "Cloudflare documentation previews require a pull request event." >&2
+            exit 2
+          fi
+          if [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            echo "Cloudflare publication is unavailable for fork pull requests." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ -z "$CLOUDFLARE_PROJECT_NAME" || -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare project name, account ID, and API token are required." >&2
+            exit 2
+          fi
+
+      - name: Ensure Cloudflare Pages project
+        if: >-
+          inputs.publish_cloudflare &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare_account_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_PROJECT_NAME: ${{ inputs.cloudflare_project_name }}
+          CLOUDFLARE_PRODUCTION_BRANCH: ${{ inputs.cloudflare_production_branch }}
+        run: |
+          project_url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME"
+          project_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$project_url")"
+          case "$project_status" in
+            200)
+              echo "Cloudflare Pages project already exists."
+              ;;
+            404)
+              create_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+                --request POST \
+                --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                --header 'Content-Type: application/json' \
+                --data "$(jq --null-input \
+                  --arg name "$CLOUDFLARE_PROJECT_NAME" \
+                  --arg production_branch "$CLOUDFLARE_PRODUCTION_BRANCH" \
+                  '{name: $name, production_branch: $production_branch}')" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects")"
+              case "$create_status" in
+                200|201)
+                  echo "Created Cloudflare Pages project."
+                  ;;
+                409)
+                  project_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+                    --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                    "$project_url")"
+                  if [[ "$project_status" != "200" ]]; then
+                    echo "Cloudflare Pages project creation conflicted and the project is unavailable." >&2
+                    exit 1
+                  fi
+                  echo "Cloudflare Pages project was created by another workflow run."
+                  ;;
+                *)
+                  echo "Could not create Cloudflare Pages project (HTTP $create_status)." >&2
+                  exit 1
+                  ;;
+              esac
+              ;;
+            *)
+              echo "Could not retrieve Cloudflare Pages project (HTTP $project_status)." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Publish Cloudflare Pages preview
+        id: cloudflare
+        if: >-
+          inputs.publish_cloudflare &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: cloudflare/wrangler-action@v4
+        with:
+          accountId: ${{ secrets.cloudflare_account_id }}
+          apiToken: ${{ secrets.cloudflare_api_token }}
+          command: >-
+            pages deploy ${{ inputs.site_path }}
+            --project-name=${{ inputs.cloudflare_project_name }}
+            --branch=pr-${{ github.event.pull_request.number }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Cloudflare Pages custom preview domain
+        id: custom_preview_domain
+        if: >-
+          steps.cloudflare.outputs.pages-deployment-alias-url != '' &&
+          inputs.cloudflare_preview_domain != ''
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare_account_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_PREVIEW_BRANCH: pr-${{ github.event.pull_request.number }}
+          CLOUDFLARE_PREVIEW_DOMAIN: ${{ inputs.cloudflare_preview_domain }}
+          CLOUDFLARE_PREVIEW_ZONE: ${{ inputs.cloudflare_preview_zone }}
+          CLOUDFLARE_PROJECT_NAME: ${{ inputs.cloudflare_project_name }}
+        run: |
+          custom_domain="$CLOUDFLARE_PREVIEW_BRANCH.$CLOUDFLARE_PREVIEW_DOMAIN"
+          pages_target="$CLOUDFLARE_PREVIEW_BRANCH.$CLOUDFLARE_PROJECT_NAME.pages.dev"
+          if [[ -z "$CLOUDFLARE_PREVIEW_ZONE" ]]; then
+            CLOUDFLARE_PREVIEW_ZONE="$CLOUDFLARE_PREVIEW_DOMAIN"
+          fi
+          zone_response="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones?name=$CLOUDFLARE_PREVIEW_ZONE")"
+          zone_id="$(jq --raw-output '.result[0].id // empty' <<< "$zone_response")"
+          if [[ -z "$zone_id" ]]; then
+            echo "No Cloudflare zone exists for $CLOUDFLARE_PREVIEW_ZONE." >&2
+            exit 1
+          fi
+
+          domain_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$(jq --null-input --arg name "$custom_domain" '{name: $name}')" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/domains")"
+          case "$domain_status" in
+            200|201|409)
+              ;;
+            *)
+              echo "Could not add Cloudflare Pages custom domain (HTTP $domain_status)." >&2
+              exit 1
+              ;;
+          esac
+
+          record_response="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?type=CNAME&name=$custom_domain")"
+          record_id="$(jq --raw-output '.result[0].id // empty' <<< "$record_response")"
+          record_data="$(jq --null-input \
+            --arg content "$pages_target" \
+            --arg name "$custom_domain" \
+            '{type: "CNAME", name: $name, content: $content, proxied: true}')"
+          if [[ -n "$record_id" ]]; then
+            curl --fail --silent --show-error \
+              --request PUT \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              --header 'Content-Type: application/json' \
+              --data "$record_data" \
+              "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" > /dev/null
+          else
+            curl --fail --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              --header 'Content-Type: application/json' \
+              --data "$record_data" \
+              "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" > /dev/null
+          fi
+
+          domain_response="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/domains/$custom_domain")"
+          if [[ "$(jq --raw-output '.result.status' <<< "$domain_response")" == "active" ]]; then
+            echo "url=https://$custom_domain" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cloudflare custom domain is pending activation; using the Pages preview URL."
+          fi
+
+      - name: Set Cloudflare preview URL
+        id: preview_url
+        if: steps.cloudflare.outputs.pages-deployment-alias-url != ''
+        env:
+          CUSTOM_PREVIEW_URL: ${{ steps.custom_preview_domain.outputs.url }}
+          PAGES_PREVIEW_URL: ${{ steps.cloudflare.outputs.pages-deployment-alias-url }}
+        run: |
+          if [[ -n "$CUSTOM_PREVIEW_URL" ]]; then
+            echo "url=$CUSTOM_PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=$PAGES_PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summarize Cloudflare preview
+        if: steps.preview_url.outputs.url != ''
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          PREVIEW_URL: ${{ steps.preview_url.outputs.url }}
+        run: |
+          echo "## Documentation preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[$PREVIEW_URL]($PREVIEW_URL) for commit \`$COMMIT_SHA\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure GitHub Pages
+        if: inputs.deploy_github_pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload GitHub Pages artifact
+        if: inputs.deploy_github_pages
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ inputs.site_path }}/
+
+  deploy:
+    name: Deploy documentation
+    if: inputs.deploy_github_pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

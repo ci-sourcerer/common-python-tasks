@@ -72,6 +72,77 @@ def test_lint_all_checks_linting_and_formatting():
     ]
 
 
+def test_docs_build_uses_strict_mode_and_optional_settings():
+    from common_python_tasks.tasks import docs_build
+
+    with (
+        patch("common_python_tasks.utils.require_package") as mock_require_package,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        docs_build(config_file="docs.toml", clean=True)
+
+    mock_require_package.assert_called_once_with("zensical")
+    mock_run_command.assert_called_once_with(
+        [
+            "zensical",
+            "build",
+            "--strict",
+            "--clean",
+            "--config-file",
+            "docs.toml",
+        ]
+    )
+
+
+def test_docs_build_uses_zensical_defaults():
+    from common_python_tasks.tasks import docs_build
+
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        docs_build()
+
+    mock_run_command.assert_called_once_with(
+        ["zensical", "build", "--strict", None, None, None]
+    )
+
+
+def test_docs_serve_supports_preview_options():
+    from common_python_tasks.tasks import docs_serve
+
+    with (
+        patch("common_python_tasks.utils.require_package") as mock_require_package,
+        patch("common_python_tasks.utils.run_command") as mock_run_command,
+    ):
+        docs_serve(
+            config_file="docs.toml",
+            dev_addr="127.0.0.1:9000",
+            open_browser=True,
+        )
+
+    mock_require_package.assert_called_once_with("zensical")
+    mock_run_command.assert_called_once_with(
+        [
+            "zensical",
+            "serve",
+            "--config-file",
+            "docs.toml",
+            "--dev-addr",
+            "127.0.0.1:9000",
+            "--open",
+        ]
+    )
+
+
+def test_docs_serve_uses_zensical_defaults():
+    from common_python_tasks.tasks import docs_serve
+
+    with patch("common_python_tasks.utils.run_command") as mock_run_command:
+        docs_serve()
+
+    mock_run_command.assert_called_once_with(
+        ["zensical", "serve", None, None, None, None, None]
+    )
+
+
 def test_format_all_fails_when_ruff_is_not_installed(mock_find_spec):
     from common_python_tasks.tasks import format_all
     from common_python_tasks.utils import is_package_installed
@@ -414,6 +485,7 @@ def test_public_tasks_defaults_to_common_profile():
     assert "format" in task_map
     assert "build-image" not in task_map
     assert "stack-up" not in task_map
+    assert "docs-build" not in task_map
     assert task_map["release"]["script"].endswith(":release_without_containers")
 
 
@@ -425,6 +497,18 @@ def test_public_tasks_supports_explicit_empty_include_for_all_tasks():
 
     assert "build-image" in task_map
     assert "stack-up" in task_map
+    assert "docs-build" in task_map
+
+
+def test_public_tasks_supports_docs_profile():
+    import common_python_tasks
+
+    common_python_tasks = importlib.reload(common_python_tasks)
+
+    assert set(common_python_tasks.tasks(include_tags=["docs"])["tasks"]) == {
+        "docs-build",
+        "docs-serve",
+    }
 
 
 def test_task_decorator_does_not_log_top_level_task(caplog):
