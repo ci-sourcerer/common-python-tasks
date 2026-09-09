@@ -249,17 +249,36 @@ jobs:
             exit 1
           fi
 
+          domain_url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/domains/$custom_domain"
           domain_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-            --request POST \
             --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            --header 'Content-Type: application/json' \
-            --data "$(jq --null-input --arg name "$custom_domain" '{name: $name}')" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/domains")"
+            "$domain_url")"
           case "$domain_status" in
-            200|201|409)
+            200)
+              echo "Cloudflare Pages custom domain already exists."
+              ;;
+            404)
+              create_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+                --request POST \
+                --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                --header 'Content-Type: application/json' \
+                --data "$(jq --null-input --arg name "$custom_domain" '{name: $name}')" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/domains")"
+              case "$create_status" in
+                200|201)
+                  echo "Added Cloudflare Pages custom domain."
+                  ;;
+                409)
+                  echo "Cloudflare Pages custom domain was added concurrently."
+                  ;;
+                *)
+                  echo "Could not add Cloudflare Pages custom domain (HTTP $create_status)." >&2
+                  exit 1
+                  ;;
+              esac
               ;;
             *)
-              echo "Could not add Cloudflare Pages custom domain (HTTP $domain_status)." >&2
+              echo "Could not retrieve Cloudflare Pages custom domain (HTTP $domain_status)." >&2
               exit 1
               ;;
           esac
@@ -290,7 +309,7 @@ jobs:
 
           domain_response="$(curl --fail --silent --show-error \
             --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/domains/$custom_domain")"
+            "$domain_url")"
           if [[ "$(jq --raw-output '.result.status' <<< "$domain_response")" == "active" ]]; then
             echo "url=https://$custom_domain" >> "$GITHUB_OUTPUT"
           else
