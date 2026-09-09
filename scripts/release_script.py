@@ -6,7 +6,6 @@ import sys
 from enum import StrEnum
 from pathlib import Path
 
-from .readme_tasks_table import replace_tasks_table
 from .utils import commit_readme_update, configure_logger, get_logger, log_dry_run
 
 LOGGER = get_logger(__name__)
@@ -62,7 +61,7 @@ def _update_readme_for_pre_release(
             f"{current_version!r} to update"
         )
 
-    return replace_tasks_table(readme_text.replace(current_version, release_version))
+    return readme_text.replace(current_version, release_version)
 
 
 def main() -> None:

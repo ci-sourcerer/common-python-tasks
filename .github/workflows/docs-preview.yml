@@ -1,0 +1,34 @@
+name: docs-preview
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/docs-preview.yml'
+      - 'docs/**'
+      - 'zensical.toml'
+      - 'pyproject.toml'
+      - 'src/common_python_tasks/tasks.py'
+  workflow_dispatch:
+
+jobs:
+  docs:
+    uses: ./.github/workflows/docs.yml
+    with:
+      python_version: '3.14'
+      dependency_group: ''
+      locked: false
+      artifact_name: common-python-tasks-docs
+      generated_docs_check_task: check-docs-references
+      publish_cloudflare: ${{ github.event_name == 'pull_request' && vars.CLOUDFLARE_PAGES_PROJECT != '' }}
+      cloudflare_project_name: ci-sourcerer-common-python-tasks
+      cloudflare_preview_domain: common-python-tasks.ci-sourcerer.com
+      cloudflare_preview_zone: ci-sourcerer.com
+    permissions:
+      contents: read
+      deployments: write
+      pages: write
+      id-token: write
+    secrets:
+      cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}

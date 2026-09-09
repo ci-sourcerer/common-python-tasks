@@ -3,37 +3,20 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts import readme_tasks_table, release_script
+from scripts import release_script
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "release_script.py"
-README_PATH = SCRIPT_PATH.parents[1] / "README.md"
 
 
-def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
-    tmp_path, monkeypatch
-):
+def test_main_pre_phase_replaces_latest_tagged_version(tmp_path, monkeypatch):
     readme_path = tmp_path / "README.md"
-    readme_path.write_text(
-        "Version: 1.2.2\n<!-- tasks-table -->\nold\n<!-- end-tasks-table -->\n",
-        encoding="utf-8",
-    )
+    readme_path.write_text("Version: 1.2.2\n", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
     monkeypatch.setenv("RELEASE_SCRIPT_PHASE", "pre")
 
     with (
-        patch.object(
-            readme_tasks_table, "get_available_tasks", return_value=["format"]
-        ),
-        patch.object(
-            readme_tasks_table, "_get_task_docstring", return_value="Format code"
-        ),
-        patch.object(
-            readme_tasks_table,
-            "get_task_tags",
-            return_value=["common", "format"],
-        ),
         patch.object(
             release_script.subprocess,
             "run",
@@ -51,8 +34,6 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
 
     updated_text = readme_path.read_text(encoding="utf-8")
     assert "Version: 1.2.3" in updated_text
-    assert "### Daily development" in updated_text
-    assert "| `format` | Format code | common, format |" in updated_text
     mock_run.assert_called_once_with(
         ["git", "tag", "--sort=-version:refname"],
         capture_output=True,
@@ -62,30 +43,11 @@ def test_main_pre_phase_replaces_latest_tagged_version_and_rebuilds_table(
     mock_commit.assert_called_once_with("chore(release): set README version 1.2.3")
 
 
-def test_release_script_uses_shared_readme_tasks_table_renderer():
-    assert release_script.replace_tasks_table is readme_tasks_table.replace_tasks_table
-
-
-def test_readme_task_table_matches_generated_table():
-    readme_text = README_PATH.read_text(encoding="utf-8")
-    table_start = readme_text.index("<!-- tasks-table -->")
-    table_end = readme_text.index("<!-- end-tasks-table -->", table_start)
-
-    assert (
-        readme_text[table_start : table_end + len("<!-- end-tasks-table -->")]
-        == readme_tasks_table.build_tasks_table()
-    )
-
-
 def test_main_fails_for_invalid_release_phase_without_running_git(
     tmp_path, monkeypatch
 ):
     readme_path = tmp_path / "README.md"
-    readme_path.write_text(
-        "Version: 1.2.3\n"
-        "<!-- tasks-table -->\n| keep | this | table |\n<!-- end-tasks-table -->\n",
-        encoding="utf-8",
-    )
+    readme_path.write_text("Version: 1.2.3\n", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_VERSION", "1.2.3")
@@ -102,7 +64,6 @@ def test_main_fails_for_invalid_release_phase_without_running_git(
 
     updated_text = readme_path.read_text(encoding="utf-8")
     assert "Version: 1.2.3" in updated_text
-    assert "| keep | this | table |" in updated_text
     mock_run.assert_not_called()
 
 
@@ -110,9 +71,7 @@ def test_main_dry_run_is_controlled_by_release_script_dry_run_env_pre_phase(
     tmp_path, monkeypatch, capsys
 ):
     readme_path = tmp_path / "README.md"
-    readme_text = (
-        "Version: 8.8.8\n<!-- tasks-table -->\nold\n<!-- end-tasks-table -->\n"
-    )
+    readme_text = "Version: 8.8.8\n"
     readme_path.write_text(readme_text, encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
