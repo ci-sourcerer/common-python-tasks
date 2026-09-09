@@ -1,3 +1,17 @@
+## [0.11.0] - 2026-09-09
+
+### 🚀 Features
+
+- Add Zensical docs integration and related CI steps (#20)
+
+### 🐛 Bug Fixes
+
+- Workflow permissions
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.11.0
+
 ## [0.10.3] - 2026-09-07
 
 ### 🐛 Bug Fixes
