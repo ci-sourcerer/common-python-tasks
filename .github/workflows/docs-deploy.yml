@@ -29,5 +29,6 @@ jobs:
       deploy_github_pages: true
     permissions:
       contents: read
+      deployments: write
       pages: write
       id-token: write
