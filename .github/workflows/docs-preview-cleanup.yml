@@ -28,9 +28,11 @@ jobs:
           fi
 
           project_url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME"
-          project_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+          project_response="$(curl --silent --show-error --write-out '\n%{http_code}' \
             --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "$project_url")"
+          project_status="${project_response##*$'\n'}"
+          project_response="${project_response%$'\n'*}"
           case "$project_status" in
             200)
               ;;
@@ -39,7 +41,7 @@ jobs:
               exit 0
               ;;
             *)
-              echo "Could not retrieve Cloudflare Pages project (HTTP $project_status)." >&2
+              echo "Could not retrieve Cloudflare Pages project (HTTP $project_status): $project_response" >&2
               exit 1
               ;;
           esac
@@ -50,37 +52,62 @@ jobs:
             if [[ -z "$CLOUDFLARE_PREVIEW_ZONE" ]]; then
               CLOUDFLARE_PREVIEW_ZONE="$CLOUDFLARE_PREVIEW_DOMAIN"
             fi
-            zone_response="$(curl --fail --silent --show-error \
+            zone_response="$(curl --silent --show-error --write-out '\n%{http_code}' \
               --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               "https://api.cloudflare.com/client/v4/zones?name=$CLOUDFLARE_PREVIEW_ZONE")"
+            zone_status="${zone_response##*$'\n'}"
+            zone_response="${zone_response%$'\n'*}"
+            if [[ "$zone_status" != 200 ]]; then
+              echo "Could not retrieve Cloudflare zone (HTTP $zone_status): $zone_response" >&2
+              exit 1
+            fi
             zone_id="$(jq --raw-output '.result[0].id // empty' <<< "$zone_response")"
             if [[ -z "$zone_id" ]]; then
               echo "No Cloudflare zone exists for $CLOUDFLARE_PREVIEW_ZONE." >&2
               exit 1
             fi
 
-            record_response="$(curl --fail --silent --show-error \
+            record_response="$(curl --silent --show-error --write-out '\n%{http_code}' \
               --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?type=CNAME&name=$custom_domain")"
+            record_status="${record_response##*$'\n'}"
+            record_response="${record_response%$'\n'*}"
+            if [[ "$record_status" != 200 ]]; then
+              echo "Could not retrieve Cloudflare DNS record (HTTP $record_status): $record_response" >&2
+              exit 1
+            fi
             record_id="$(jq --raw-output --arg content "$pages_target" \
               '.result[] | select(.content | rtrimstr(".") == $content) | .id' \
               <<< "$record_response")"
             if [[ -n "$record_id" ]]; then
-              curl --fail --silent --show-error \
+              record_delete_response="$(curl --silent --show-error --write-out '\n%{http_code}' \
                 --request DELETE \
                 --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" > /dev/null
+                "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id")"
+              record_delete_status="${record_delete_response##*$'\n'}"
+              record_delete_response="${record_delete_response%$'\n'*}"
+              case "$record_delete_status" in
+                200|202|204|404)
+                  echo "Removed Cloudflare DNS record $record_id."
+                  ;;
+                *)
+                  echo "Could not remove Cloudflare DNS record $record_id (HTTP $record_delete_status): $record_delete_response" >&2
+                  exit 1
+                  ;;
+              esac
             fi
 
-            domain_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            domain_response="$(curl --silent --show-error --write-out '\n%{http_code}' \
               --request DELETE \
               --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PROJECT_NAME/domains/$custom_domain")"
+            domain_status="${domain_response##*$'\n'}"
+            domain_response="${domain_response%$'\n'*}"
             case "$domain_status" in
               200|202|204|404)
                 ;;
               *)
-                echo "Could not remove Cloudflare Pages custom domain (HTTP $domain_status)." >&2
+                echo "Could not remove Cloudflare Pages custom domain (HTTP $domain_status): $domain_response" >&2
                 exit 1
                 ;;
             esac
@@ -89,9 +116,15 @@ jobs:
           deployment_ids=()
           page=1
           while true; do
-            response="$(curl --fail --silent --show-error \
+            response="$(curl --silent --show-error --write-out '\n%{http_code}' \
               --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               "$project_url/deployments?env=preview&page=$page&per_page=100")"
+            response_status="${response##*$'\n'}"
+            response="${response%$'\n'*}"
+            if [[ "$response_status" != 200 ]]; then
+              echo "Could not retrieve Cloudflare deployments (HTTP $response_status): $response" >&2
+              exit 1
+            fi
             while IFS= read -r deployment_id; do
               deployment_ids+=("$deployment_id")
             done < <(jq --raw-output --arg branch "$CLOUDFLARE_PREVIEW_BRANCH" \
@@ -105,19 +138,21 @@ jobs:
           done
 
           for deployment_id in "${deployment_ids[@]}"; do
-            delete_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            delete_response="$(curl --silent --show-error --write-out '\n%{http_code}' \
               --request DELETE \
               --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               "$project_url/deployments/$deployment_id?force=true")"
+            delete_status="${delete_response##*$'\n'}"
+            delete_response="${delete_response%$'\n'*}"
             case "$delete_status" in
               200|202|204|404)
                 echo "Removed Cloudflare Pages deployment $deployment_id."
                 ;;
               400)
-                echo "Cloudflare retained the latest Pages deployment for this branch."
+                echo "Cloudflare retained the latest Pages deployment for this branch: $delete_response"
                 ;;
               *)
-                echo "Could not remove Cloudflare Pages deployment $deployment_id (HTTP $delete_status)." >&2
+                echo "Could not remove Cloudflare Pages deployment $deployment_id (HTTP $delete_status): $delete_response" >&2
                 exit 1
                 ;;
             esac
