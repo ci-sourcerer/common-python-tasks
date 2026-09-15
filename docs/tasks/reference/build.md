@@ -9,7 +9,7 @@ Build the project and its containers.
 ## Usage
 
 ```shell
-poe build [--debug] [--no-cache] [--plain] [--single-arch] [--container-env CONTAINER_ENV...] [--container-envfile CONTAINER_ENVFILE...]
+poe build [--debug] [--no-cache] [--plain] [--single-arch] [--dockerfile-path DOCKERFILE_PATH] [--container-env CONTAINER_ENV...] [--container-envfile CONTAINER_ENVFILE...]
 ```
 
 ## Arguments
@@ -20,5 +20,6 @@ poe build [--debug] [--no-cache] [--plain] [--single-arch] [--container-env CONT
 | `--no-cache` | `boolean` | Do not use cache when building the image. | `false` |
 | `--plain` | `boolean` | Do not pretty-print output. | `false` |
 | `--single-arch` | `boolean` | Build images for a single architecture. | `false` |
+| `--dockerfile-path` | `string` | Optional project-owned Dockerfile used for the image build. Overrides CONTAINER_DOCKERFILE_PATH if provided. | — |
 | `--container-env` | `string, repeatable` | Inline container environment variables as repeated KEY=VALUE values. | — |
 | `--container-envfile` | `string, repeatable` | Repeated list of container environment files. | — |

@@ -44,7 +44,8 @@ Container variables are read by the host-side tasks unless their description exp
 | `CONTAINER_APT_PACKAGES` | Space-delimited APT packages installed in the runtime stage |
 | `CONTAINER_CUSTOM_ENTRYPOINT` | `[project.scripts]` key selected as the image entrypoint command |
 | `CONTAINER_DOCKER_BUILD_ARGS` | Shell-tokenized arguments passed directly to `docker build`; task arguments after `--` take precedence |
-| `CONTAINER_DOCKERFILE_HOOK_PATH` | Executable host script that modifies the rendered Dockerfile before the build |
+| `CONTAINER_DOCKERFILE_PATH` | Project-owned application Dockerfile used by `build-image`, `build`, and `release` instead of the bundled template |
+| `CONTAINER_DOCKERFILE_HOOK_PATH` | Executable host script that modifies the selected Dockerfile before the build |
 | `CONTAINER_PRUNE_KEEP` | Prior images kept after a build; `-1` disables pruning, `0` keeps only the latest, and `N` keeps the latest plus `N` prior images |
 
 ### Environment and extension settings

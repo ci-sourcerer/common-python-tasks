@@ -9,7 +9,7 @@ Run a full release flow for package and containers.
 ## Usage
 
 ```shell
-poe release [--component COMPONENT] [--stage STAGE] [--dry-run] [--debug] [--no-cache] [--plain] [--single-arch] [--container-env CONTAINER_ENV...] [--container-envfile CONTAINER_ENVFILE...] [--assets ASSETS...] [--repository REPOSITORY] [--repository-url REPOSITORY_URL] [--pre-script PRE_SCRIPT] [--post-script POST_SCRIPT]
+poe release [--component COMPONENT] [--stage STAGE] [--dry-run] [--debug] [--no-cache] [--plain] [--single-arch] [--dockerfile-path DOCKERFILE_PATH] [--container-env CONTAINER_ENV...] [--container-envfile CONTAINER_ENVFILE...] [--assets ASSETS...] [--repository REPOSITORY] [--repository-url REPOSITORY_URL] [--pre-script PRE_SCRIPT] [--post-script POST_SCRIPT]
 ```
 
 ## Arguments
@@ -23,6 +23,7 @@ poe release [--component COMPONENT] [--stage STAGE] [--dry-run] [--debug] [--no-
 | `--no-cache` | `boolean` | Do not use cache when building container images. | `false` |
 | `--plain` | `boolean` | Do not pretty-print container build output. | `false` |
 | `--single-arch` | `boolean` | Build container image for a single architecture. | `false` |
+| `--dockerfile-path` | `string` | Optional project-owned Dockerfile used for the image build. Overrides CONTAINER_DOCKERFILE_PATH if provided. | — |
 | `--container-env` | `string, repeatable` | Inline container environment variables as repeated KEY=VALUE values. | — |
 | `--container-envfile` | `string, repeatable` | Repeated list of container environment files. | — |
 | `--assets` | `string, repeatable` | Optional repeated list of release asset patterns or paths. | — |

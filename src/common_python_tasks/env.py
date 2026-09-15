@@ -594,6 +594,33 @@ def get_container_deps_move_script() -> str | None:
     return inline_script if inline_script else None
 
 
+def resolve_container_dockerfile_path(
+    dockerfile_path: str | None,
+    environment_dockerfile_path: str | None,
+) -> Path | None:
+    """Resolve and validate a project-owned application Dockerfile.
+
+    Args:
+        dockerfile_path: Dockerfile path supplied directly to a task.
+        environment_dockerfile_path: Dockerfile path supplied through the
+            environment.
+
+    Returns:
+        The configured Dockerfile path, or `None` when the bundled template
+        should be used.
+    """
+    configured_path = dockerfile_path or environment_dockerfile_path
+    if not configured_path or not configured_path.strip():
+        return None
+
+    resolved_path = Path(configured_path)
+    if not resolved_path.exists():
+        utils.fatal(f"Container Dockerfile not found: {resolved_path}")
+    if not resolved_path.is_file():
+        utils.fatal(f"Container Dockerfile is not a file: {resolved_path}")
+    return resolved_path
+
+
 def get_prune_keep() -> int:
     """Return the integer value of CONTAINER_PRUNE_KEEP.
 

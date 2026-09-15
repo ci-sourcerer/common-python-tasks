@@ -851,6 +851,7 @@ class TestBumpVersion:
                 no_cache=True,
                 plain=True,
                 single_arch=True,
+                dockerfile_path="Dockerfile.custom",
             )
 
             mock_clean.assert_called_once_with()
@@ -891,6 +892,7 @@ class TestBumpVersion:
                 no_cache=True,
                 plain=True,
                 single_arch=True,
+                dockerfile_path="Dockerfile.custom",
                 container_env=None,
                 container_envfile=None,
             )
@@ -1769,6 +1771,7 @@ def test_build_with_containers_calls_task_build_image():
         no_cache=True,
         plain=True,
         single_arch=True,
+        dockerfile_path=None,
         container_env=None,
         container_envfile=None,
     )
@@ -1833,6 +1836,7 @@ def test_build_forwards_container_build_options():
         no_cache=True,
         plain=True,
         single_arch=True,
+        dockerfile_path=None,
         container_env=["X=1"],
         container_envfile=["env1.env", "env2.env"],
     )

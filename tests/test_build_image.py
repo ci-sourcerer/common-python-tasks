@@ -5,6 +5,57 @@ from unittest.mock import patch
 import pytest
 
 
+def test_build_image_uses_project_owned_dockerfile_from_environment(
+    temp_project_dir,
+    monkeypatch,
+):
+    from common_python_tasks.tasks import build_image
+
+    dockerfile_path = temp_project_dir / "Dockerfile.custom"
+    dockerfile_path.write_text("FROM alpine\n", encoding="utf-8")
+    monkeypatch.setenv("CONTAINER_DOCKERFILE_PATH", str(dockerfile_path))
+
+    with (
+        patch(
+            "common_python_tasks.docker.build_image",
+            return_value=("1.2.3", "abc123"),
+        ) as mock_build,
+        patch("common_python_tasks.tasks._prune_container_images"),
+        patch("common_python_tasks.utils.render_template_text") as mock_render,
+    ):
+        result = build_image(single_arch=True)
+
+    assert result.dockerfile_text == "FROM alpine\n"
+    assert mock_build.call_args.kwargs["dockerfile_path"] == dockerfile_path
+    assert mock_build.call_args.kwargs["omit_target"] is True
+    assert mock_build.call_args.kwargs["single_arch"] is True
+    mock_render.assert_not_called()
+
+
+def test_build_image_cli_dockerfile_overrides_environment(
+    temp_project_dir,
+    monkeypatch,
+):
+    from common_python_tasks.tasks import build_image
+
+    environment_path = temp_project_dir / "Dockerfile.environment"
+    environment_path.write_text("FROM busybox\n", encoding="utf-8")
+    cli_path = temp_project_dir / "Dockerfile.cli"
+    cli_path.write_text("FROM alpine\n", encoding="utf-8")
+    monkeypatch.setenv("CONTAINER_DOCKERFILE_PATH", str(environment_path))
+
+    with (
+        patch(
+            "common_python_tasks.docker.build_image",
+            return_value=("1.2.3", "abc123"),
+        ) as mock_build,
+        patch("common_python_tasks.tasks._prune_container_images"),
+    ):
+        build_image(dockerfile_path=str(cli_path))
+
+    assert mock_build.call_args.kwargs["dockerfile_path"] == cli_path
+
+
 def test_build_with_multiple_extensions(
     temp_project_dir,
     mock_run_command,

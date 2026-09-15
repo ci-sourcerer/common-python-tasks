@@ -1,6 +1,6 @@
 # Container images
 
-Container tasks are selected with the optional `containers` tag. They generate a multi-stage Dockerfile from the project metadata and container settings, build the application wheel, and install it in a non-root runtime image. A consuming project does not need to maintain its own application Dockerfile.
+Container tasks are selected with the optional `containers` tag. By default, they generate a multi-stage Dockerfile from the project metadata and container settings, build the application wheel, and install it in a non-root runtime image. A project can instead select a complete application Dockerfile that it owns.
 
 ```toml
 [tool.poe]
@@ -277,7 +277,28 @@ Do not use these declarations for secrets because their values persist in the im
 
 The `--env` and `--envfile` options on `run-container` and `container-shell` have ordinary `docker run` semantics. They affect only that container invocation and can override environment values embedded during the build.
 
-## Extending the runtime image
+## Using a project-owned Dockerfile
+
+Set `CONTAINER_DOCKERFILE_PATH` when a project owns its complete application Dockerfile. `build-image` and every aggregate task that invokes it, including `build` and `release`, use the same file instead of rendering the bundled template.
+
+```toml
+[tool.poe.env]
+CONTAINER_DOCKERFILE_PATH = "docker/Dockerfile"
+```
+
+The `--dockerfile-path` option overrides the environment setting for one invocation. The option is available on both the individual and aggregate tasks.
+
+```shell
+poe build-image --dockerfile-path docker/Dockerfile.ci
+poe build --dockerfile-path docker/Dockerfile.ci
+poe release --dockerfile-path docker/Dockerfile.release
+```
+
+The project root remains the Docker build context. Standard image naming, version and commit tags, metadata build arguments, `CONTAINER_DOCKER_BUILD_ARGS`, Dockerfile hooks, image pruning, and release-time image pushing continue to work. A normal custom build does not select a target stage, so the Dockerfile does not need the bundled `runtime` stage. A custom debug build selects a stage named `debug`.
+
+Settings that render content into the bundled template do not alter a project-owned Dockerfile. This includes `CONTAINER_APT_PACKAGES`, `CONTAINER_CUSTOM_ENTRYPOINT`, `CONTAINER_ENV`, extensions, and dependency-image mappings. Declare equivalent instructions in the project-owned Dockerfile when they are needed. BuildKit secrets derived from `UV_INDEX_*` credentials remain available as Docker build secrets, but the custom Dockerfile must mount them explicitly.
+
+## Extending the generated runtime image
 
 Use `CONTAINER_EXTENSION_FILES` to append project-owned Dockerfile fragments without replacing the generic Dockerfile. Its value is a colon-delimited list of paths, such as `Dockerfile.system:docker/Dockerfile.browser`.
 
@@ -295,11 +316,11 @@ Extension content is treated as raw Dockerfile syntax, not as a Jinja template. 
 
 `CONTAINER_EXTENSIONS` selects extension bundles shipped in the installed package's `data/dockerfile_extensions/` directory. Bundle names are colon-delimited and are applied after local extension files. A bundle may accept one value with `bundle=value`; that value is passed to the first `ARG` declared by the bundle that has not already been assigned to another extension. Arguments are ignored with a warning when the bundle declares no `ARG`.
 
-Use an extension for additive runtime instructions. Use `CONTAINER_DOCKERFILE_HOOK_PATH` only when a change must rewrite another part of the generated Dockerfile. The hook must be an executable host-side script; it receives the generated Dockerfile path as its first argument and must edit that file in place. The hook also receives the following context variables.
+Use an extension for additive runtime instructions. Use `CONTAINER_DOCKERFILE_HOOK_PATH` only when a change must rewrite another part of the selected Dockerfile. The hook must be an executable host-side script; it receives a temporary copy of the selected Dockerfile as its first argument and must edit that file in place. The hook also receives the following context variables.
 
 | Variable | Meaning |
 | - | - |
-| `COMMON_PYTHON_TASKS_DOCKERFILE_PATH` | Generated Dockerfile path, matching the first script argument |
+| `COMMON_PYTHON_TASKS_DOCKERFILE_PATH` | Temporary selected Dockerfile path, matching the first script argument |
 | `COMMON_PYTHON_TASKS_DOCKER_CONTEXT` | Docker build context path |
 | `COMMON_PYTHON_TASKS_DOCKER_DEBUG` | `1` for a debug build, otherwise `0` |
 | `COMMON_PYTHON_TASKS_DOCKER_NO_CACHE` | `1` when `--no-cache` is active, otherwise `0` |
@@ -344,7 +365,7 @@ See [Container settings](../configuration.md#container-settings) for the complet
 
 | Task | Description |
 | - | - |
-| [`build-image`](reference/build-image.md) | Build the container image for this project using the Dockerfile template. |
+| [`build-image`](reference/build-image.md) | Build the container image using a project-owned or bundled Dockerfile. |
 | [`build-deps-image`](reference/build-deps-image.md) | Build only the container dependency collector image for this project. |
 | [`run-container`](reference/run-container.md) | Run the Docker image as a container for this project. |
 | [`push-image`](reference/push-image.md) | Push the Docker image for this project to the container registry. |

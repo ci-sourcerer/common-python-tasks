@@ -70,6 +70,28 @@ class _ContainerBuild(NamedTuple):
     commit_tag: str
 
 
+def _prune_container_images(version_tag: str, commit_tag: str) -> None:
+    from .docker import prune_images_keep
+    from .env import get_prune_keep
+    from .utils import get_full_image_name, get_package_name
+
+    keep = get_prune_keep()
+    if keep < 0:
+        return
+
+    LOGGER.debug(
+        "Pruning old images; keeping %d and protecting tags: %s",
+        keep,
+        [version_tag, commit_tag],
+    )
+    prune_images_keep(
+        get_full_image_name(),
+        get_package_name(),
+        keep,
+        protect_tags=[version_tag, commit_tag],
+    )
+
+
 def _make_var_positional_task_args_optional(
     func: callable, resolved_task_name: str
 ) -> None:
@@ -465,11 +487,12 @@ def build_image(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    dockerfile_path: str | None = None,
     dockerfile_hook_path: str | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
 ) -> _ContainerBuild:
-    """Build the container image for this project using the Dockerfile template.
+    """Build the container image using a project-owned or bundled Dockerfile.
 
     Args:
         *docker_build_args: Additional arguments passed directly to `docker build`.
@@ -479,8 +502,10 @@ def build_image(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
+        dockerfile_path: Optional project-owned Dockerfile. Overrides
+            CONTAINER_DOCKERFILE_PATH if provided.
         dockerfile_hook_path: Optional executable script path that can mutate
-            the generated Dockerfile before build. Overrides
+            the selected Dockerfile before build. Overrides
             CONTAINER_DOCKERFILE_HOOK_PATH if provided.
         container_env: Builder and runtime environment declarations as repeated
             KEY=VALUE values.
@@ -494,14 +519,10 @@ def build_image(
         The generated Dockerfile text and image tags.
     """
     from .docker import build_image as _build_image
-    from .docker import (
-        prune_images_keep,
-    )
     from .env import (
         collect_uv_index_credentials,
         get_cache_id_suffix,
         get_container_deps_move_script,
-        get_prune_keep,
         get_python_variant,
         inject_auto_build_args_from_env,
         load_container_env_tokens,
@@ -511,6 +532,7 @@ def build_image(
         render_container_deps_move_script,
         resolve_container_docker_build_args,
         resolve_container_dockerfile_hook_path,
+        resolve_container_dockerfile_path,
         resolve_extension_content,
         uv_index_secret_build_args,
         uv_index_secret_mounts,
@@ -521,14 +543,17 @@ def build_image(
     )
     from .utils import (
         fatal,
-        get_full_image_name,
-        get_package_name,
         load_data_file,
         render_template_text,
     )
 
+    resolved_dockerfile_path = resolve_container_dockerfile_path(
+        dockerfile_path,
+        os.getenv("CONTAINER_DOCKERFILE_PATH"),
+    )
+
     # Determine extensions up-front so we can log a single, accurate message
-    extensions = parse_container_extensions()
+    extensions = [] if resolved_dockerfile_path else parse_container_extensions()
     extension_ids = [desc.get("id") for desc in extensions if desc.get("id")]
     if extension_ids:
         LOGGER.info("Building image (with extensions: %s)", ", ".join(extension_ids))
@@ -556,6 +581,29 @@ def build_image(
         dockerfile_hook_path,
         os.getenv("CONTAINER_DOCKERFILE_HOOK_PATH"),
     )
+    top_level_build_args = inject_auto_build_args_from_env(
+        {"PYTHON_VARIANT": get_python_variant()}
+    )
+
+    if resolved_dockerfile_path:
+        version_tag, commit_tag = _build_image(
+            dockerfile_path=resolved_dockerfile_path,
+            context_path=Path("."),
+            debug=debug,
+            no_cache=no_cache,
+            plain=plain,
+            single_arch=single_arch,
+            omit_target=not debug,
+            extra_build_args=top_level_build_args or None,
+            docker_build_args=resolved_docker_build_args,
+            dockerfile_hook_path=resolved_dockerfile_hook_path,
+        )
+        _prune_container_images(version_tag, commit_tag)
+        return _ContainerBuild(
+            dockerfile_text=resolved_dockerfile_path.read_text(encoding="utf-8"),
+            version_tag=version_tag,
+            commit_tag=commit_tag,
+        )
 
     has_debug_deps = has_debug_dependency_group()
     if debug and not has_debug_deps:
@@ -579,9 +627,6 @@ def build_image(
             "Injecting builder and runtime env vars: %s",
             ", ".join(container_env_vars),
         )
-    top_level_build_args = inject_auto_build_args_from_env(
-        {"PYTHON_VARIANT": get_python_variant()}
-    )
     external_deps_image = _get_container_build_setting("CONTAINER_DEPS_IMAGE")
     if external_deps_image:
         top_level_build_args["CONTAINER_DEPS_IMAGE"] = external_deps_image
@@ -691,16 +736,7 @@ def build_image(
         dockerfile_hook_path=resolved_dockerfile_hook_path,
     )
 
-    keep = get_prune_keep()
-    if keep >= 0:
-        # Protect the tags created by this build
-        protect = [t for t in (version_tag, commit_tag) if t is not None]
-        LOGGER.debug(
-            "Pruning old images; keeping %d and protecting tags: %s", keep, protect
-        )
-        prune_images_keep(
-            get_full_image_name(), get_package_name(), keep, protect_tags=protect
-        )
+    _prune_container_images(version_tag, commit_tag)
 
     return _ContainerBuild(
         dockerfile_text=dockerfile_text,
@@ -1320,6 +1356,7 @@ def _run_release_flow(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    dockerfile_path: str | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
     assets: list[str] | None = None,
@@ -1426,6 +1463,7 @@ def _run_release_flow(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
+            dockerfile_path=dockerfile_path,
             container_env=container_env,
             container_envfile=container_envfile,
         )
@@ -1444,6 +1482,7 @@ def release(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    dockerfile_path: str | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
     assets: list[str] | None = None,
@@ -1462,6 +1501,8 @@ def release(
         no_cache: Do not use cache when building container images.
         plain: Do not pretty-print container build output.
         single_arch: Build container image for a single architecture.
+        dockerfile_path: Optional project-owned Dockerfile used for the image
+            build. Overrides CONTAINER_DOCKERFILE_PATH if provided.
         container_env: Inline container environment variables as repeated
             KEY=VALUE values.
         container_envfile: Repeated list of container environment files.
@@ -1480,6 +1521,7 @@ def release(
         no_cache=no_cache,
         plain=plain,
         single_arch=single_arch,
+        dockerfile_path=dockerfile_path,
         container_env=container_env,
         container_envfile=container_envfile,
         assets=assets,
@@ -1532,6 +1574,7 @@ def build(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    dockerfile_path: str | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
 ) -> None:
@@ -1544,6 +1587,8 @@ def build(
         no_cache: Pass `--no-cache` to the Docker build command.
         plain: Pass `--progress plain` to the Docker build command.
         single_arch: Build the container for the current host architecture only.
+        dockerfile_path: Optional project-owned Dockerfile used for the image
+            build. Overrides CONTAINER_DOCKERFILE_PATH if provided.
         container_env: Inline container environment variables as repeated
             `KEY=VALUE` values.
         container_envfile: Repeated list of container environment files.
@@ -1558,6 +1603,7 @@ def build(
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
+            dockerfile_path=dockerfile_path,
             container_env=container_env,
             container_envfile=container_envfile,
         )
@@ -1572,6 +1618,7 @@ def build_with_containers(
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
+    dockerfile_path: str | None = None,
     container_env: list[str] | None = None,
     container_envfile: list[str] | None = None,
 ) -> None:
@@ -1582,6 +1629,8 @@ def build_with_containers(
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
+        dockerfile_path: Optional project-owned Dockerfile used for the image
+            build. Overrides CONTAINER_DOCKERFILE_PATH if provided.
         container_env: Inline container environment variables as repeated KEY=VALUE
             values.
         container_envfile: Repeated list of container environment files.
@@ -1593,6 +1642,7 @@ def build_with_containers(
         no_cache=no_cache,
         plain=plain,
         single_arch=single_arch,
+        dockerfile_path=dockerfile_path,
         container_env=container_env,
         container_envfile=container_envfile,
     )
