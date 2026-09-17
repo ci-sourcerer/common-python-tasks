@@ -330,6 +330,28 @@ def resolve_container_docker_build_args(
         utils.fatal(f"Invalid CONTAINER_DOCKER_BUILD_ARGS: {error}")
 
 
+def _resolve_optional_file_path(
+    cli_path: str | None,
+    environment_path: str | None,
+    description: str,
+) -> Path | None:
+    resolved_path = next(
+        (
+            Path(value.strip())
+            for value in (cli_path, environment_path)
+            if value and value.strip()
+        ),
+        None,
+    )
+    if resolved_path is None:
+        return None
+    if not resolved_path.exists():
+        utils.fatal(f"{description} not found: {resolved_path}")
+    if not resolved_path.is_file():
+        utils.fatal(f"{description} is not a file: {resolved_path}")
+    return resolved_path
+
+
 def resolve_container_dockerfile_hook_path(
     cli_hook_path: str | None, env_hook_path: str | None
 ) -> Path | None:
@@ -342,17 +364,13 @@ def resolve_container_dockerfile_hook_path(
     Returns:
         The validated hook path, or `None` when unset.
     """
-    raw_value = (
-        cli_hook_path if cli_hook_path and cli_hook_path.strip() else env_hook_path
+    hook_path = _resolve_optional_file_path(
+        cli_hook_path,
+        env_hook_path,
+        "Dockerfile hook script",
     )
-    if raw_value is None or not raw_value.strip():
+    if hook_path is None:
         return None
-
-    hook_path = Path(raw_value.strip())
-    if not hook_path.exists():
-        utils.fatal(f"Dockerfile hook script not found: {hook_path}")
-    if not hook_path.is_file():
-        utils.fatal(f"Dockerfile hook path is not a file: {hook_path}")
     if not os.access(hook_path, os.X_OK):
         utils.fatal(f"Dockerfile hook script must be executable: {hook_path}")
 
@@ -609,16 +627,11 @@ def resolve_container_dockerfile_path(
         The configured Dockerfile path, or `None` when the bundled template
         should be used.
     """
-    configured_path = dockerfile_path or environment_dockerfile_path
-    if not configured_path or not configured_path.strip():
-        return None
-
-    resolved_path = Path(configured_path)
-    if not resolved_path.exists():
-        utils.fatal(f"Container Dockerfile not found: {resolved_path}")
-    if not resolved_path.is_file():
-        utils.fatal(f"Container Dockerfile is not a file: {resolved_path}")
-    return resolved_path
+    return _resolve_optional_file_path(
+        dockerfile_path,
+        environment_dockerfile_path,
+        "Container Dockerfile",
+    )
 
 
 def get_prune_keep() -> int:

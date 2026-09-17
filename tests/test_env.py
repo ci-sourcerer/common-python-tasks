@@ -8,6 +8,7 @@ from common_python_tasks.env import (
     parse_container_env_tokens,
     resolve_container_docker_build_args,
     resolve_container_dockerfile_hook_path,
+    resolve_container_dockerfile_path,
     split_colon_delimited_values,
 )
 
@@ -100,6 +101,17 @@ def test_resolve_container_dockerfile_hook_path_rejects_non_executable(tmp_path)
 
     with pytest.raises(SystemExit):
         resolve_container_dockerfile_hook_path(str(hook_path), None)
+
+
+def test_resolve_container_dockerfile_path_uses_trimmed_environment_fallback(
+    tmp_path,
+):
+    dockerfile_path = tmp_path / "Dockerfile.custom"
+    dockerfile_path.write_text("FROM python:3.11\n", encoding="utf-8")
+
+    result = resolve_container_dockerfile_path("  ", f"  {dockerfile_path}  ")
+
+    assert result == dockerfile_path
 
 
 def test_parse_container_env_tokens_supports_whitespace_delimited_values():
