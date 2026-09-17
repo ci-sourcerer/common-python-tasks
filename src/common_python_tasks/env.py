@@ -54,13 +54,13 @@ def collect_uv_index_credentials() -> list[dict[str, str | None]]:
 
 
 def uv_index_secret_mounts(credentials: list[dict[str, str | None]]) -> list[str]:
-    """Return Dockerfile ``--mount`` strings for UV index credentials.
+    """Return Dockerfile `--mount` strings for UV index credentials.
 
     Args:
         credentials: Output of `collect_uv_index_credentials`.
 
     Returns:
-        A list of ``type=secret,...`` strings for Dockerfile ``RUN --mount=``
+        A list of `type=secret,...` strings for Dockerfile `RUN --mount=`
         directives.
     """
     mounts = []
@@ -78,13 +78,13 @@ def uv_index_secret_mounts(credentials: list[dict[str, str | None]]) -> list[str
 
 
 def uv_index_secret_build_args(credentials: list[dict[str, str | None]]) -> list[str]:
-    """Return ``docker build --secret`` arg pairs for UV index credentials.
+    """Return `docker build --secret` arg pairs for UV index credentials.
 
     Args:
         credentials: Output of `collect_uv_index_credentials`.
 
     Returns:
-        A flat list of ``--secret`` flag-value pairs for the docker build command.
+        A flat list of `--secret` flag-value pairs for the docker build command.
     """
     args = []
     for cred in credentials:
