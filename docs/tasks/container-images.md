@@ -317,6 +317,8 @@ Extension content is treated as raw Dockerfile syntax, not as a Jinja template. 
 
 `CONTAINER_EXTENSIONS` selects extension bundles shipped in the installed package's `data/dockerfile_extensions/` directory. Bundle names are colon-delimited and are applied after local extension files. A bundle may accept one value with `bundle=value`; that value is passed to the first `ARG` declared by the bundle that has not already been assigned to another extension. Arguments are ignored with a warning when the bundle declares no `ARG`.
 
+A bundled extension can keep scripts and other supporting files beside its `Dockerfile`. The image builder exposes that directory as a BuildKit named context called `cpt-extension-<bundle-name>`, with unsupported characters normalized to hyphens. The bundle can copy an asset with `COPY --from=cpt-extension-example script.sh /usr/local/bin/script` without embedding it in a heredoc. These managed contexts are added only to the application image build.
+
 Use an extension for additive runtime instructions. Use `CONTAINER_DOCKERFILE_HOOK_PATH` only when a change must rewrite another part of the selected Dockerfile. The hook must be an executable host-side script; it receives a temporary copy of the selected Dockerfile as its first argument and must edit that file in place. The hook also receives the following context variables.
 
 | Variable | Meaning |
@@ -330,7 +332,7 @@ Use an extension for additive runtime instructions. Use `CONTAINER_DOCKERFILE_HO
 
 ### Docker-in-Docker
 
-The bundled `docker-in-docker` extension installs Docker CE, containerd, Buildx, and Compose from Docker's signed APT repository. Installation and startup code live in this package; image builds do not download scripts from the devcontainer feature repository.
+The bundled `docker-in-docker` extension installs Docker CE, containerd, Buildx, and Compose from Docker's signed APT repository. Its installation and supervisor scripts are separate packaged files copied through the extension's named build context; image builds do not download scripts from the devcontainer feature repository.
 
 Initial support is limited to Debian Bookworm variants (`slim-bookworm` and `bookworm`) on `amd64` and `arm64`. The extension checks the actual distribution and architecture during the build and rejects everything else, including Alpine and Trixie. Select extensions independently for each image build; other images do not need to enable Docker-in-Docker.
 

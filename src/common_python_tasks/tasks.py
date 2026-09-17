@@ -541,6 +541,7 @@ def build_image(
         resolve_container_docker_build_args,
         resolve_container_dockerfile_hook_path,
         resolve_container_dockerfile_path,
+        resolve_extension_build_context,
         resolve_extension_content,
         uv_index_secret_build_args,
         uv_index_secret_mounts,
@@ -571,6 +572,11 @@ def build_image(
     # Resolve all extension fragments up-front so we fail fast on missing
     # bundles or files and avoid calling resolution logic multiple times.
     resolved_fragments = [resolve_extension_content(desc) for desc in extensions]
+    extension_build_contexts = [
+        context
+        for desc in extensions
+        if (context := resolve_extension_build_context(desc)) is not None
+    ]
 
     resolved_docker_build_args = resolve_container_docker_build_args(
         docker_build_args,
@@ -740,7 +746,14 @@ def build_image(
         plain=plain,
         single_arch=single_arch,
         extra_build_args=merged_build_args or None,
-        docker_build_args=resolved_docker_build_args,
+        docker_build_args=[
+            *resolved_docker_build_args,
+            *(
+                item
+                for name, path in extension_build_contexts
+                for item in ("--build-context", f"{name}={path}")
+            ),
+        ],
         dockerfile_hook_path=resolved_dockerfile_hook_path,
     )
 

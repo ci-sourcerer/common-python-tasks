@@ -7,6 +7,7 @@ import pytest
 
 from common_python_tasks.env import (
     parse_container_extensions,
+    resolve_extension_build_context,
     resolve_extension_content,
 )
 from common_python_tasks.utils import load_data_file, render_template_text
@@ -18,6 +19,12 @@ def _extension():
     )[1]
 
 
+def _extension_context():
+    return load_data_file(
+        "docker-in-docker/Dockerfile", type_identifier="dockerfile_extensions"
+    )[0].parent
+
+
 def test_dind_bundle_resolves_without_project_files(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CONTAINER_EXTENSION_FILES", raising=False)
@@ -26,6 +33,25 @@ def test_dind_bundle_resolves_without_project_files(monkeypatch, tmp_path):
     )
     assert resolve_extension_content(parse_container_extensions()[0]) == _extension()
     assert parse_container_extensions()[0]["args"] == "5:29.8.1-1~debian.12~bookworm"
+    assert resolve_extension_build_context(parse_container_extensions()[0]) == (
+        "cpt-extension-docker-in-docker",
+        _extension_context(),
+    )
+
+
+def test_dind_scripts_are_packaged_as_separate_assets():
+    extension = _extension()
+    assert "<<'INSTALL_DIND'" not in extension
+    assert "<<'DIND_ENTRYPOINT'" not in extension
+    assert "COPY --from=cpt-extension-docker-in-docker" in extension
+    assert (_extension_context() / "install.sh").is_file()
+    assert (_extension_context() / "supervisor.sh").is_file()
+
+
+def test_cgroup_migration_suppresses_expected_write_races():
+    supervisor = (_extension_context() / "supervisor.sh").read_text(encoding="utf-8")
+    assert "/sys/fs/cgroup/cpt-init/cgroup.procs >/dev/null 2>&1 || true" in supervisor
+    assert "/sys/fs/cgroup/cgroup.subtree_control >/dev/null 2>&1" in supervisor
 
 
 @pytest.mark.parametrize("debug", [False, True])
@@ -102,6 +128,8 @@ def dind_image(tmp_path_factory):
             "PYTHON_VARIANT=slim-bookworm",
             "--build-arg",
             "PACKAGE_NAME=dind_smoke",
+            "--build-context",
+            f"cpt-extension-docker-in-docker={_extension_context()}",
             "--tag",
             image,
             str(context),
@@ -148,6 +176,7 @@ def test_dind_runs_nested_workload_as_py(dind_image, dind_container):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "nested-ok" in result.stdout
+    assert "write error: Device or resource busy" not in result.stderr
 
 
 def test_dind_preserves_application_exit_code(dind_image, dind_container):
@@ -204,7 +233,13 @@ def test_dind_startup_timeout_prevents_application_start(
 
 def test_dind_rejects_unsupported_distribution(dind_image, tmp_path):
     (tmp_path / "Dockerfile").write_text("FROM alpine:3.22\n" + _extension())
-    result = _docker("build", str(tmp_path), check=False)
+    result = _docker(
+        "build",
+        "--build-context",
+        f"cpt-extension-docker-in-docker={_extension_context()}",
+        str(tmp_path),
+        check=False,
+    )
     assert result.returncode != 0
     assert "requires Debian Bookworm" in result.stderr
 
