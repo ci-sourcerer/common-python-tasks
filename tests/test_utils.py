@@ -262,6 +262,12 @@ def test_dockerfile_templates_define_python_variant_argument(filename, stage):
     assert 'org.opencontainers.image.python.variant="${PYTHON_VARIANT}"' in contents
 
 
+def test_application_dockerfile_exports_only_debug_dependencies():
+    _, contents = load_data_file("Dockerfile.j2")
+
+    assert "uv export --frozen --only-group debug" in contents
+
+
 def test_run_git_cliff_passes_args_and_capture_output_to_run_command():
     with (
         patch(

@@ -40,7 +40,7 @@ COPY . /tmp/build/
 # Export debug requirements when the project defines a debug dependency group
 RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}{% for mount in UV_INDEX_SECRET_MOUNTS %} \
     --mount={{ mount }}{% endfor %} \
-    uv export --group debug --no-hashes --format requirements-txt --output-file requirements-debug.txt
+    uv export --frozen --only-group debug --no-hashes --format requirements-txt --output-file requirements-debug.txt
 {% endif %}
 
 # Build the wheel, caching the uv cache directory to speed up subsequent builds.
@@ -133,10 +133,11 @@ LABEL git.commit=${GIT_COMMIT}
 # This entrypoint is deliberately not configurable via environment variables in order to
 # ensure that the container always uses the entrypoint selected at build time. If the
 # current package does not provide a console script, the entrypoint will default to `python`
-RUN echo "#!/bin/sh\n\n{{ ENTRYPOINT_COMMAND|default('python') }} \"\$@\"" >/pkg/entrypoint.sh \
+RUN echo "#!/bin/sh\n\nexec {{ ENTRYPOINT_COMMAND|default('python') }} \"\$@\"" >/pkg/entrypoint.sh \
     && chmod +x /pkg/entrypoint.sh
 
-USER py
+ARG RUNTIME_USER=py
+USER ${RUNTIME_USER}
 
 {% if EXTENSION_CONTENT %}
 {{ EXTENSION_CONTENT }}
@@ -154,10 +155,10 @@ COPY --from=builder /tmp/build /tmp/build
 
 RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} pip install --root-user-action=ignore -r /tmp/build/requirements-debug.txt
 
-USER py
+USER ${RUNTIME_USER}
 {% endif %}
 
 # Final (default) image: explicitly use runtime as the final target so debug is not used unless requested
 FROM runtime AS final
 
-USER py
+USER ${RUNTIME_USER}
