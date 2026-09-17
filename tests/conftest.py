@@ -13,6 +13,62 @@ if TYPE_CHECKING:
     from pytest import MonkeyPatch
 
 
+class _DockerBuildHarness:
+    def __init__(self, mock_run_command, mock_load_data_file):
+        self.commands: list[list[str]] = []
+        self.dockerfile_contents: list[str] = []
+        self._dockerfile_template: str | None = None
+        self._original_run_command = mock_run_command.side_effect
+        self._original_load_data_file = mock_load_data_file.side_effect
+        mock_run_command.side_effect = self._run_command
+        mock_load_data_file.side_effect = self._load_data_file
+
+    @property
+    def dockerfile_text(self) -> str:
+        """Return the most recently captured Dockerfile content.
+
+        Returns:
+            The rendered Dockerfile text, or an empty string before a build.
+        """
+        return self.dockerfile_contents[-1] if self.dockerfile_contents else ""
+
+    def use_template(self, template: str) -> None:
+        """Use the supplied application Dockerfile template for the test.
+
+        Args:
+            template: Jinja Dockerfile template content.
+        """
+        self._dockerfile_template = template
+
+    def _load_data_file(
+        self,
+        filename,
+        type_identifier="generic",
+        fatal_on_missing=True,
+    ):
+        if filename == "Dockerfile.j2" and self._dockerfile_template is not None:
+            return "/fake/path/Dockerfile.j2", self._dockerfile_template
+        return self._original_load_data_file(
+            filename,
+            type_identifier,
+            fatal_on_missing,
+        )
+
+    def _run_command(self, command, *args, **kwargs):
+        normalized_command = [str(item) for item in command if item is not None]
+        if normalized_command[:2] == ["docker", "build"]:
+            self.commands.append(normalized_command)
+            try:
+                self.dockerfile_contents.append(
+                    Path(
+                        normalized_command[normalized_command.index("-f") + 1]
+                    ).read_text(encoding="utf-8")
+                )
+            except FileNotFoundError:
+                self.dockerfile_contents.append("")
+        return self._original_run_command(command, *args, **kwargs)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _set_test_environment_variables():
     """Set environment variables required for tests to pass.
@@ -100,6 +156,20 @@ def mock_load_data_file():
 
         mock.side_effect = side_effect
         yield mock
+
+
+@pytest.fixture
+def docker_build_harness(mock_run_command, mock_load_data_file):
+    """Inject Dockerfile templates and capture rendered Docker builds.
+
+    Args:
+        mock_run_command: Standard command-runner mock.
+        mock_load_data_file: Standard bundled-data loader mock.
+
+    Returns:
+        A harness containing captured commands and rendered Dockerfile content.
+    """
+    return _DockerBuildHarness(mock_run_command, mock_load_data_file)
 
 
 @pytest.fixture

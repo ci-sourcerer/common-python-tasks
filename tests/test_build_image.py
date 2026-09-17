@@ -4,6 +4,22 @@ from unittest.mock import patch
 
 import pytest
 
+CONTAINER_ENV_DOCKERFILE = """FROM python:3.11
+{% if CONTAINER_ENV_VARS %}
+{% for env_var in CONTAINER_ENV_VARS %}
+ENV {{ env_var }}
+{% endfor %}
+{% endif %}
+"""
+UV_INDEX_DOCKERFILE = r"""FROM python:3.11 AS builder
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}{% for mount in UV_INDEX_SECRET_MOUNTS %} \
+    --mount={{ mount }}{% endfor %} \
+    uv build --wheel
+"""
+PYTHON_VARIANT_DOCKERFILE = """ARG PYTHON_VARIANT=slim
+FROM python:3.11${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime
+"""
+
 
 def test_build_image_uses_project_owned_dockerfile_from_environment(
     temp_project_dir,
@@ -296,8 +312,7 @@ def test_build_image_uses_custom_entrypoint_from_direct_environment_setting(
 
 def test_build_image_injects_container_env_from_containerenv_file(
     temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
+    docker_build_harness,
     mock_get_image_tag,
     mock_get_authors,
     mock_get_package_name,
@@ -307,56 +322,24 @@ def test_build_image_injects_container_env_from_containerenv_file(
     (temp_project_dir / ".containerenv").write_text(
         'FOO=bar BAZ="hello world"\n', encoding="utf-8"
     )
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_env(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "FROM python:3.11\n"
-                    "{% if CONTAINER_ENV_VARS %}\n"
-                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                    "ENV {{ env_var }}\n"
-                    "{% endfor %}\n"
-                    "{% endif %}\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_env
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
+    docker_build_harness.use_template(CONTAINER_ENV_DOCKERFILE)
 
     build_image()
 
-    assert len(build_calls) == 1
-    assert "ENV FOO=bar" in captured_dockerfile["content"]
-    assert "ENV BAZ=hello world" in captured_dockerfile["content"]
-    assert not any("FOO=bar" in str(a) for a in build_calls[0])
-    assert not any("BAZ=hello world" in str(a) for a in build_calls[0])
+    assert len(docker_build_harness.commands) == 1
+    assert "ENV FOO=bar" in docker_build_harness.dockerfile_text
+    assert "ENV BAZ=hello world" in docker_build_harness.dockerfile_text
+    assert not any(
+        "FOO=bar" in argument for argument in docker_build_harness.commands[0]
+    )
+    assert not any(
+        "BAZ=hello world" in argument for argument in docker_build_harness.commands[0]
+    )
 
 
 def test_build_image_container_env_precedence_overrides_file_with_env_and_cli(
     temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
+    docker_build_harness,
     mock_get_image_tag,
     mock_get_authors,
     mock_get_package_name,
@@ -368,57 +351,23 @@ def test_build_image_container_env_precedence_overrides_file_with_env_and_cli(
         "SOURCE=containerenv\n", encoding="utf-8"
     )
     monkeypatch.setenv("CONTAINER_ENV", "SOURCE=env")
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_env(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "FROM python:3.11\n"
-                    "{% if CONTAINER_ENV_VARS %}\n"
-                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                    "ENV {{ env_var }}\n"
-                    "{% endfor %}\n"
-                    "{% endif %}\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_env
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
+    docker_build_harness.use_template(CONTAINER_ENV_DOCKERFILE)
 
     build_image(container_env=["SOURCE=cli"])
 
-    assert len(build_calls) == 1
-    assert "ENV SOURCE=containerenv" in captured_dockerfile["content"]
-    assert "ENV SOURCE=env" in captured_dockerfile["content"]
-    assert "ENV SOURCE=cli" in captured_dockerfile["content"]
-    assert captured_dockerfile["content"].strip().endswith("ENV SOURCE=cli")
-    assert not any("SOURCE=cli" in str(a) for a in build_calls[0])
+    assert len(docker_build_harness.commands) == 1
+    assert "ENV SOURCE=containerenv" in docker_build_harness.dockerfile_text
+    assert "ENV SOURCE=env" in docker_build_harness.dockerfile_text
+    assert "ENV SOURCE=cli" in docker_build_harness.dockerfile_text
+    assert docker_build_harness.dockerfile_text.strip().endswith("ENV SOURCE=cli")
+    assert not any(
+        "SOURCE=cli" in argument for argument in docker_build_harness.commands[0]
+    )
 
 
 def test_build_image_reads_container_envfile_path_overrides_dotcontainerenv(
     temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
+    docker_build_harness,
     mock_get_image_tag,
     mock_get_authors,
     mock_get_package_name,
@@ -431,56 +380,22 @@ def test_build_image_reads_container_envfile_path_overrides_dotcontainerenv(
     )
     envfile_path = temp_project_dir / "mycontainer.env"
     envfile_path.write_text("SOURCE=envfile\n", encoding="utf-8")
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_env(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "FROM python:3.11\n"
-                    "{% if CONTAINER_ENV_VARS %}\n"
-                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                    "ENV {{ env_var }}\n"
-                    "{% endfor %}\n"
-                    "{% endif %}\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_env
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
+    docker_build_harness.use_template(CONTAINER_ENV_DOCKERFILE)
 
     build_image(container_envfile=[str(envfile_path)])
 
-    assert len(build_calls) == 1
-    assert "ENV SOURCE=containerenv" in captured_dockerfile["content"]
-    assert "ENV SOURCE=envfile" in captured_dockerfile["content"]
-    assert captured_dockerfile["content"].strip().endswith("ENV SOURCE=envfile")
-    assert not any("SOURCE=envfile" in str(a) for a in build_calls[0])
+    assert len(docker_build_harness.commands) == 1
+    assert "ENV SOURCE=containerenv" in docker_build_harness.dockerfile_text
+    assert "ENV SOURCE=envfile" in docker_build_harness.dockerfile_text
+    assert docker_build_harness.dockerfile_text.strip().endswith("ENV SOURCE=envfile")
+    assert not any(
+        "SOURCE=envfile" in argument for argument in docker_build_harness.commands[0]
+    )
 
 
 def test_build_image_reads_multiple_container_envfiles_in_order(
     temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
+    docker_build_harness,
     mock_get_image_tag,
     mock_get_authors,
     mock_get_package_name,
@@ -491,54 +406,19 @@ def test_build_image_reads_multiple_container_envfiles_in_order(
     envfile_path_1.write_text("A=one:B=two", encoding="utf-8")
     envfile_path_2 = temp_project_dir / "second.env"
     envfile_path_2.write_text("C=three:D=four", encoding="utf-8")
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_env(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "FROM python:3.11\n"
-                    "{% if CONTAINER_ENV_VARS %}\n"
-                    "{% for env_var in CONTAINER_ENV_VARS %}\n"
-                    "ENV {{ env_var }}\n"
-                    "{% endfor %}\n"
-                    "{% endif %}\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_env
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
+    docker_build_harness.use_template(CONTAINER_ENV_DOCKERFILE)
 
     build_image(container_envfile=[str(envfile_path_1), str(envfile_path_2)])
 
-    assert len(build_calls) == 1
-    assert "ENV A=one" in captured_dockerfile["content"]
-    assert "ENV B=two" in captured_dockerfile["content"]
-    assert "ENV C=three" in captured_dockerfile["content"]
-    assert "ENV D=four" in captured_dockerfile["content"]
-    assert captured_dockerfile["content"].index("ENV A=one") < captured_dockerfile[
-        "content"
-    ].index("ENV C=three")
-    assert not any("A=one" in str(a) for a in build_calls[0])
+    assert len(docker_build_harness.commands) == 1
+    assert "ENV A=one" in docker_build_harness.dockerfile_text
+    assert "ENV B=two" in docker_build_harness.dockerfile_text
+    assert "ENV C=three" in docker_build_harness.dockerfile_text
+    assert "ENV D=four" in docker_build_harness.dockerfile_text
+    assert docker_build_harness.dockerfile_text.index(
+        "ENV A=one"
+    ) < docker_build_harness.dockerfile_text.index("ENV C=three")
+    assert not any("A=one" in argument for argument in docker_build_harness.commands[0])
 
 
 def test_build_image_passes_uv_and_package_versions(
@@ -1239,8 +1119,7 @@ def test_build_image_forwards_native_docker_build_args_and_hook(
 
 def test_build_image_injects_uv_index_secrets_from_env(
     temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
+    docker_build_harness,
     mock_get_image_tag,
     mock_get_authors,
     mock_get_package_name,
@@ -1251,46 +1130,12 @@ def test_build_image_injects_uv_index_secrets_from_env(
 
     for key in ["UV_INDEX_MYINDEX_USERNAME", "UV_INDEX_MYINDEX_PASSWORD"]:
         monkeypatch.setenv(key, "testvalue")
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_uv_secrets(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "FROM python:3.11 AS builder\n"
-                    "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
-                    "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
-                    "    --mount={{ mount }}{% endfor %} \\\n"
-                    "    uv build --wheel\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_uv_secrets
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
+    docker_build_harness.use_template(UV_INDEX_DOCKERFILE)
 
     build_image()
 
-    assert len(build_calls) == 1
-    build_cmd = build_calls[0]
+    assert len(docker_build_harness.commands) == 1
+    build_cmd = docker_build_harness.commands[0]
 
     assert "--secret" in build_cmd
     assert "id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME" in build_cmd
@@ -1298,18 +1143,17 @@ def test_build_image_injects_uv_index_secrets_from_env(
 
     assert (
         "--mount=type=secret,id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME"
-        in captured_dockerfile["content"]
+        in docker_build_harness.dockerfile_text
     )
     assert (
         "--mount=type=secret,id=uv_index_myindex_password,env=UV_INDEX_MYINDEX_PASSWORD"
-        in captured_dockerfile["content"]
+        in docker_build_harness.dockerfile_text
     )
 
 
 def test_build_image_no_uv_index_secrets_when_env_unset(
     temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
+    docker_build_harness,
     mock_get_image_tag,
     mock_get_authors,
     mock_get_package_name,
@@ -1321,154 +1165,48 @@ def test_build_image_no_uv_index_secrets_when_env_unset(
     for key in list(__import__("os").environ):
         if key.startswith("UV_INDEX_"):
             monkeypatch.delenv(key)
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_uv_secrets(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "FROM python:3.11 AS builder\n"
-                    "RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}"
-                    "{% for mount in UV_INDEX_SECRET_MOUNTS %} \\\n"
-                    "    --mount={{ mount }}{% endfor %} \\\n"
-                    "    uv build --wheel\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_uv_secrets
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
+    docker_build_harness.use_template(UV_INDEX_DOCKERFILE)
 
     build_image()
 
-    assert len(build_calls) == 1
-    build_cmd = build_calls[0]
-    assert not any("uv_index" in str(arg) for arg in build_cmd)
-    assert "--mount=type=secret" not in captured_dockerfile["content"]
+    assert len(docker_build_harness.commands) == 1
+    assert not any(
+        "uv_index" in argument for argument in docker_build_harness.commands[0]
+    )
+    assert "--mount=type=secret" not in docker_build_harness.dockerfile_text
 
 
-def test_build_image_passes_python_variant_build_arg_when_set(
+@pytest.mark.parametrize(
+    ("variant", "expected_build_arg"),
+    [
+        ("alpine", "PYTHON_VARIANT=alpine"),
+        ("", "PYTHON_VARIANT="),
+    ],
+)
+def test_build_image_passes_python_variant_build_arg(
     temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
+    docker_build_harness,
     mock_get_image_tag,
     mock_get_authors,
     mock_get_package_name,
     monkeypatch,
+    variant,
+    expected_build_arg,
 ):
-    """CONTAINER_PYTHON_VARIANT should be passed as a Docker build argument."""
     from common_python_tasks.tasks import build_image
 
-    monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "alpine")
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_variant(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "ARG PYTHON_VARIANT=slim\n"
-                    "FROM python:3.11${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_variant
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
+    monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", variant)
+    docker_build_harness.use_template(PYTHON_VARIANT_DOCKERFILE)
 
     build_image()
 
     assert (
         "FROM python:3.11${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime"
-        in (captured_dockerfile["content"])
+        in docker_build_harness.dockerfile_text
     )
-    assert any("PYTHON_VARIANT=alpine" in str(arg) for arg in build_calls[0])
-
-
-def test_build_image_passes_empty_python_variant_build_arg(
-    temp_project_dir,
-    mock_run_command,
-    mock_load_data_file,
-    mock_get_image_tag,
-    mock_get_authors,
-    mock_get_package_name,
-    monkeypatch,
-):
-    """An empty CONTAINER_PYTHON_VARIANT should be passed to Docker."""
-    from common_python_tasks.tasks import build_image
-
-    monkeypatch.setenv("CONTAINER_PYTHON_VARIANT", "")
-
-    original_load_data_file = mock_load_data_file.side_effect
-
-    def load_data_file_with_variant(
-        filename, type_identifier="generic", fatal_on_missing=True
-    ):
-        if filename == "Dockerfile.j2":
-            return (
-                "/fake/path/Dockerfile.j2",
-                (
-                    "ARG PYTHON_VARIANT=slim\n"
-                    "FROM python:3.11${PYTHON_VARIANT:+-${PYTHON_VARIANT}} AS runtime\n"
-                ),
-            )
-        return original_load_data_file(filename, type_identifier, fatal_on_missing)
-
-    mock_load_data_file.side_effect = load_data_file_with_variant
-
-    build_calls = []
-    captured_dockerfile: dict[str, str] = {}
-    original = mock_run_command.side_effect
-
-    def tracking(command, *args, **kwargs):
-        if "docker" in command and "build" in command:
-            build_calls.append(command)
-            dockerfile_path = command[command.index("-f") + 1]
-            captured_dockerfile["content"] = Path(dockerfile_path).read_text(
-                encoding="utf-8"
-            )
-        return original(command, *args, **kwargs)
-
-    mock_run_command.side_effect = tracking
-
-    build_image()
-
-    assert any("PYTHON_VARIANT=" in str(arg) for arg in build_calls[0])
+    assert any(
+        expected_build_arg in argument for argument in docker_build_harness.commands[0]
+    )
 
 
 def test_container_environment_is_available_in_builder_and_runtime():
