@@ -3,6 +3,7 @@ import os
 import re
 import secrets
 import shlex
+from collections.abc import Iterator
 from pathlib import Path
 
 from . import utils
@@ -53,6 +54,17 @@ def collect_uv_index_credentials() -> list[dict[str, str | None]]:
     ]
 
 
+def _iter_uv_index_secrets(
+    credentials: list[dict[str, str | None]],
+) -> Iterator[tuple[str, str]]:
+    for credential in credentials:
+        index_name = credential["index_name"].lower()
+        for credential_type in ("username", "password"):
+            environment_name = credential[f"{credential_type}_env"]
+            if environment_name:
+                yield f"uv_index_{index_name}_{credential_type}", environment_name
+
+
 def uv_index_secret_mounts(credentials: list[dict[str, str | None]]) -> list[str]:
     """Return Dockerfile `--mount` strings for UV index credentials.
 
@@ -63,18 +75,10 @@ def uv_index_secret_mounts(credentials: list[dict[str, str | None]]) -> list[str
         A list of `type=secret,...` strings for Dockerfile `RUN --mount=`
         directives.
     """
-    mounts = []
-    for cred in credentials:
-        name = cred["index_name"].lower()
-        if cred["username_env"]:
-            mounts.append(
-                f"type=secret,id=uv_index_{name}_username,env={cred['username_env']}"
-            )
-        if cred["password_env"]:
-            mounts.append(
-                f"type=secret,id=uv_index_{name}_password,env={cred['password_env']}"
-            )
-    return mounts
+    return [
+        f"type=secret,id={secret_id},env={environment_name}"
+        for secret_id, environment_name in _iter_uv_index_secrets(credentials)
+    ]
 
 
 def uv_index_secret_build_args(credentials: list[dict[str, str | None]]) -> list[str]:
@@ -86,18 +90,11 @@ def uv_index_secret_build_args(credentials: list[dict[str, str | None]]) -> list
     Returns:
         A flat list of `--secret` flag-value pairs for the docker build command.
     """
-    args = []
-    for cred in credentials:
-        name = cred["index_name"].lower()
-        if cred["username_env"]:
-            args.extend(
-                ["--secret", f"id=uv_index_{name}_username,env={cred['username_env']}"]
-            )
-        if cred["password_env"]:
-            args.extend(
-                ["--secret", f"id=uv_index_{name}_password,env={cred['password_env']}"]
-            )
-    return args
+    return [
+        item
+        for secret_id, environment_name in _iter_uv_index_secrets(credentials)
+        for item in ("--secret", f"id={secret_id},env={environment_name}")
+    ]
 
 
 def env_truthy(env_var: str) -> bool:
