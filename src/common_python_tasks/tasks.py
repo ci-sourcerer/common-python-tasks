@@ -389,11 +389,19 @@ def clean(dist_only: bool = False) -> None:
         return
     else:
         to_clean = [
-            *[Path(p) for p in [".pytest_cache", "dist", ".mypy_cache"]],
+            *[
+                Path(p)
+                for p in [
+                    ".pytest_cache",
+                    "dist",
+                    ".mypy_cache",
+                    ".coverage",
+                    "coverage.xml",
+                    ".ruff_cache",
+                ]
+            ],
             *Path(".").rglob("__pycache__"),
             *Path(".").rglob("*.pyc"),
-            Path(".coverage"),
-            Path("coverage.xml"),
         ]
 
     for item in to_clean:
