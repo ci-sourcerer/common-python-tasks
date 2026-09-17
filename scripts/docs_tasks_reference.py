@@ -111,46 +111,6 @@ def _escape_table_text(value: str) -> str:
     return value.replace("|", "\\|")
 
 
-def _render_task_full(task_name: str) -> list[str]:
-    task_config = _get_task_config(task_name)
-    arguments = task_config.get("args", [])
-    lines = [
-        f"## `{task_name}`",
-        "",
-        task_config.get("help", "No description is available."),
-        "",
-        f"**Tags:** {', '.join(f'`{tag}`' for tag in get_task_tags(task_name) or [])}",
-        "",
-        "```shell",
-        " ".join(
-            [f"poe {task_name}", *[_format_usage_argument(arg) for arg in arguments]]
-        ),
-        "```",
-    ]
-    if not arguments:
-        return lines
-
-    docstring_help = _get_docstring_argument_help(task_config)
-    lines.extend(
-        [
-            "",
-            "### Arguments",
-            "",
-            "| Argument | Type | Description | Default |",
-            "| - | - | - | - |",
-        ]
-    )
-    lines.extend(
-        "| "
-        f"{_format_argument_name(argument)} | "
-        f"{_format_argument_type(argument)} | "
-        f"{_escape_table_text(argument.get('help') or docstring_help.get(argument['name'], 'Additional value passed to the task.'))} | "
-        f"{_format_default(argument)} |"
-        for argument in arguments
-    )
-    return lines
-
-
 def build_task_reference(category: str) -> str:
     """Build the generated Markdown reference for a task category (link table).
 
