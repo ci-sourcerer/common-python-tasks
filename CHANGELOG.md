@@ -1,3 +1,23 @@
+## [0.11.1] - 2026-09-17
+
+### 🐛 Bug Fixes
+
+- *(docs-cleanup)* Report Cloudflare API errors
+- Support project-owned Dockerfiles in build and release tasks
+- *(clean)* More stuff to clean
+- *(env)* Unify container file path resolution
+
+### 🚜 Refactor
+
+- *(docs)* Remove unused task renderer
+- *(env)* Centralize UV secret expansion
+- *(tests)* Consolidate Docker build setup
+
+### ⚙️ Miscellaneous Tasks
+
+- Formatting
+- *(release)* Set README version 0.11.1
+
 ## [0.11.0] - 2026-09-09
 
 ### 🚀 Features
