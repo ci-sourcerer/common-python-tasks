@@ -1,3 +1,21 @@
+## [0.12.0] - 2026-09-18
+
+### 🚀 Features
+
+- *(docker)* Add Docker-in-Docker support for container image
+
+### 🐛 Bug Fixes
+
+- Only 20 per page
+
+### 🚜 Refactor
+
+- *(containers)* Package extension scripts as build contexts
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.12.0
+
 ## [0.11.1] - 2026-09-17
 
 ### 🐛 Bug Fixes
