@@ -118,7 +118,7 @@ jobs:
           while true; do
             response="$(curl --silent --show-error --write-out '\n%{http_code}' \
               --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              "$project_url/deployments?env=preview&page=$page&per_page=100")"
+              "$project_url/deployments?env=preview&page=$page&per_page=20")"
             response_status="${response##*$'\n'}"
             response="${response%$'\n'*}"
             if [[ "$response_status" != 200 ]]; then
@@ -134,7 +134,7 @@ jobs:
             if (( page >= total_pages )); then
               break
             fi
-            ((page++))
+            ((page += 1))
           done
 
           for deployment_id in "${deployment_ids[@]}"; do
