@@ -54,6 +54,15 @@ def test_cgroup_migration_suppresses_expected_write_races():
     assert "/sys/fs/cgroup/cgroup.subtree_control >/dev/null 2>&1" in supervisor
 
 
+def test_dind_redirects_daemon_logs_to_a_dedicated_file():
+    supervisor = (_extension_context() / "supervisor.sh").read_text(encoding="utf-8")
+    assert (
+        "DIND_DOCKER_LOG_PATH=${DIND_DOCKER_LOG_PATH:-/var/log/docker.log}"
+        in supervisor
+    )
+    assert '>>"$DIND_DOCKER_LOG_PATH" 2>&1' in supervisor
+
+
 @pytest.mark.parametrize("debug", [False, True])
 @pytest.mark.parametrize("extension", ["", "ARG RUNTIME_USER=root\nUSER root"])
 def test_derived_stages_preserve_runtime_user(debug, extension):

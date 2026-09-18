@@ -87,6 +87,7 @@ _main() {
         return 1
     fi
     export DIND_STARTUP_TIMEOUT=${DIND_STARTUP_TIMEOUT:-60}
+    export DIND_DOCKER_LOG_PATH=${DIND_DOCKER_LOG_PATH:-/var/log/docker.log}
     export DOCKER_HOST=unix:///var/run/docker.sock
     export container=docker
     unset DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH
@@ -96,8 +97,8 @@ _main() {
     trap _shutdown EXIT
     trap 'exit 143' TERM
     trap 'exit 130' INT
-    # Keep daemon logs on stderr and expose only the local Unix socket.
-    setsid dockerd --host "$DOCKER_HOST" --group docker >&2 &
+    setsid dockerd --host "$DOCKER_HOST" --group docker \
+        >>"$DIND_DOCKER_LOG_PATH" 2>&1 &
     daemon_pid=$!
     _wait_for_docker
     setsid setpriv --reuid py --regid py --init-groups \

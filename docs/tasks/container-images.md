@@ -344,6 +344,8 @@ poe run-container --privileged
 
 The image starts as root through Tini and the DinD supervisor. The supervisor prepares nested cgroups, starts a dedicated Docker daemon, and waits for `docker info` to succeed before launching the existing `/pkg/entrypoint.sh` as `py`. Application arguments and exit status are preserved. Signals reach the application, and shutdown stops the application before stopping Docker. Startup failure or loss of the daemon terminates the container with a nonzero status. `DIND_STARTUP_TIMEOUT` controls the readiness deadline in seconds (default `60`, accepted range `1`–`9999`). Each process group gets up to five seconds to stop before being killed; allow more than ten seconds for the outer container's stop timeout.
 
+Docker daemon output is written to `/var/log/docker.log` by default so it does not mix with application logs. Set `DIND_DOCKER_LOG_PATH` to choose another file path; inspect the file with `docker exec` or mount a log directory if the daemon logs need to be collected.
+
 Docker listens only on `unix:///var/run/docker.sock`. The image sets `DOCKER_HOST` accordingly, and startup clears Docker context and TLS environment overrides so the application uses its own daemon. Do not mount the host Docker socket. The `py` user belongs to the Docker group and can control the nested daemon; this is a privileged container, not a sandbox for untrusted workloads.
 
 The image declares volumes for `/var/lib/docker` and `/var/lib/containerd`. Docker creates anonymous volumes automatically. Use dedicated named volumes when state should survive container replacement, and never share them between concurrently running daemons. For example, when launching the built image directly, replace `your-image:tag` with its tag.
