@@ -382,6 +382,41 @@ class TestResolveExtensionContent:
         assert content == "RUN echo hello\n"
 
 
+class TestResolveExtensionBuildContext:
+    """Tests for packaged extension asset build contexts."""
+
+    def test_bundle_assets_return_named_context(self):
+        from common_python_tasks.env import resolve_extension_build_context
+
+        descriptor = {
+            "id": "docker-in-docker",
+            "source": "bundle",
+            "path": None,
+            "bundle_name": "docker-in-docker",
+            "args": None,
+        }
+        name, path = resolve_extension_build_context(descriptor)
+        assert name == "cpt-extension-docker-in-docker"
+        assert (path / "install.sh").is_file()
+        assert (path / "supervisor.sh").is_file()
+
+    def test_project_extension_has_no_managed_context(self):
+        from common_python_tasks.env import resolve_extension_build_context
+
+        assert (
+            resolve_extension_build_context(
+                {
+                    "id": "custom",
+                    "source": "file",
+                    "path": "Dockerfile.custom",
+                    "bundle_name": None,
+                    "args": None,
+                }
+            )
+            is None
+        )
+
+
 class TestParseContainerDeps:
     """Tests for parse_container_deps env var handling."""
 

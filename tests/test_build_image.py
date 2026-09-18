@@ -131,6 +131,49 @@ def test_build_with_multiple_extensions(
     ].index("RUN echo ext2")
 
 
+def test_bundled_extension_assets_are_passed_as_named_context(
+    temp_project_dir,
+    docker_build_harness,
+    mock_load_data_file,
+    mock_get_image_tag,
+    mock_get_authors,
+    mock_get_package_name,
+    monkeypatch,
+):
+    """Bundled extension assets should be available to the application build."""
+    from common_python_tasks.tasks import build_image
+
+    bundle_directory = (
+        Path(__file__).parents[1]
+        / "src/common_python_tasks/data/dockerfile_extensions/docker-in-docker"
+    )
+    original_load_data_file = mock_load_data_file.side_effect
+
+    def load_data_file_with_dind(
+        filename, type_identifier="generic", fatal_on_missing=True
+    ):
+        if (
+            filename == "docker-in-docker/Dockerfile"
+            and type_identifier == "dockerfile_extensions"
+        ):
+            return (
+                bundle_directory / "Dockerfile",
+                (bundle_directory / "Dockerfile").read_text(encoding="utf-8"),
+            )
+        return original_load_data_file(filename, type_identifier, fatal_on_missing)
+
+    mock_load_data_file.side_effect = load_data_file_with_dind
+    monkeypatch.setenv("CONTAINER_EXTENSIONS", "docker-in-docker")
+
+    build_image()
+
+    assert "--build-context" in docker_build_harness.commands[-1]
+    assert (
+        f"cpt-extension-docker-in-docker={bundle_directory}"
+        in docker_build_harness.commands[-1]
+    )
+
+
 def test_prune_removes_base_images_when_enabled(
     temp_project_dir,
     mock_run_command,

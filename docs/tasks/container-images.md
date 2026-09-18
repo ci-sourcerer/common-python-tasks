@@ -77,7 +77,7 @@ COPY . /tmp/build/
 # Export debug requirements when the project defines a debug dependency group
 RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache{{ CACHE_ID_SUFFIX }}{% for mount in UV_INDEX_SECRET_MOUNTS %} \
     --mount={{ mount }}{% endfor %} \
-    uv export --group debug --no-hashes --format requirements-txt --output-file requirements-debug.txt
+    uv export --frozen --only-group debug --no-hashes --format requirements-txt --output-file requirements-debug.txt
 {% endif %}
 
 # Build the wheel, caching the uv cache directory to speed up subsequent builds.
@@ -172,10 +172,11 @@ LABEL git.commit=${GIT_COMMIT}
 # current package does not provide a console script, the entrypoint will default to `python`
 RUN echo "#!/bin/sh
 
-{{ ENTRYPOINT_COMMAND|default('python') }} \"\$@\"" >/pkg/entrypoint.sh \
+exec {{ ENTRYPOINT_COMMAND|default('python') }} \"\$@\"" >/pkg/entrypoint.sh \
     && chmod +x /pkg/entrypoint.sh
 
-USER py
+ARG RUNTIME_USER=py
+USER ${RUNTIME_USER}
 
 {% if EXTENSION_CONTENT %}
 {{ EXTENSION_CONTENT }}
@@ -193,13 +194,13 @@ COPY --from=builder /tmp/build /tmp/build
 
 RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache{{ CACHE_ID_SUFFIX }} pip install --root-user-action=ignore -r /tmp/build/requirements-debug.txt
 
-USER py
+USER ${RUNTIME_USER}
 {% endif %}
 
 # Final (default) image: explicitly use runtime as the final target so debug is not used unless requested
 FROM runtime AS final
 
-USER py
+USER ${RUNTIME_USER}
 ```
 
 ### Dependency image template
@@ -310,11 +311,13 @@ RUN apt-get update \
 USER py
 ```
 
-Extension files are concatenated in their configured order and inserted near the end of `runtime`, after the entrypoint is created and after `USER py`. An extension that needs elevated permissions must switch to `USER root`; it should normally restore `USER py` for the instructions that follow. `COPY` paths remain relative to the project-root build context.
+Extension files are concatenated in their configured order and inserted near the end of `runtime`, after the entrypoint is created and after `USER ${RUNTIME_USER}` (which defaults to `py`). An extension that needs elevated permissions must switch to `USER root`; it should normally restore `USER ${RUNTIME_USER}` for the instructions that follow. Extensions that need to start as another user can redeclare `ARG RUNTIME_USER=root`; both the final and debug stages honor this argument. `COPY` paths remain relative to the project-root build context.
 
 Extension content is treated as raw Dockerfile syntax, not as a Jinja template. This keeps project extensions independent of private template variables used by `common-python-tasks`.
 
 `CONTAINER_EXTENSIONS` selects extension bundles shipped in the installed package's `data/dockerfile_extensions/` directory. Bundle names are colon-delimited and are applied after local extension files. A bundle may accept one value with `bundle=value`; that value is passed to the first `ARG` declared by the bundle that has not already been assigned to another extension. Arguments are ignored with a warning when the bundle declares no `ARG`.
+
+A bundled extension can keep scripts and other supporting files beside its `Dockerfile`. The image builder exposes that directory as a BuildKit named context called `cpt-extension-<bundle-name>`, with unsupported characters normalized to hyphens. The bundle can copy an asset with `COPY --from=cpt-extension-example script.sh /usr/local/bin/script` without embedding it in a heredoc. These managed contexts are added only to the application image build.
 
 Use an extension for additive runtime instructions. Use `CONTAINER_DOCKERFILE_HOOK_PATH` only when a change must rewrite another part of the selected Dockerfile. The hook must be an executable host-side script; it receives a temporary copy of the selected Dockerfile as its first argument and must edit that file in place. The hook also receives the following context variables.
 
@@ -326,6 +329,37 @@ Use an extension for additive runtime instructions. Use `CONTAINER_DOCKERFILE_HO
 | `COMMON_PYTHON_TASKS_DOCKER_NO_CACHE` | `1` when `--no-cache` is active, otherwise `0` |
 | `COMMON_PYTHON_TASKS_DOCKER_PLAIN` | `1` when plain progress output is active, otherwise `0` |
 | `COMMON_PYTHON_TASKS_DOCKER_SINGLE_ARCH` | `1` for a single-architecture build, otherwise `0` |
+
+### Docker-in-Docker
+
+The bundled `docker-in-docker` extension installs Docker CE, containerd, Buildx, and Compose from Docker's signed APT repository. Its installation and supervisor scripts are separate packaged files copied through the extension's named build context; image builds do not download scripts from the devcontainer feature repository.
+
+Initial support is limited to Debian Bookworm variants (`slim-bookworm` and `bookworm`) on `amd64` and `arm64`. The extension checks the actual distribution and architecture during the build and rejects everything else, including Alpine and Trixie. Select extensions independently for each image build; other images do not need to enable Docker-in-Docker.
+
+```sh
+CONTAINER_PYTHON_VARIANT=slim-bookworm \
+    CONTAINER_EXTENSIONS=docker-in-docker poe build-image
+poe run-container --privileged
+```
+
+The image starts as root through Tini and the DinD supervisor. The supervisor prepares nested cgroups, starts a dedicated Docker daemon, and waits for `docker info` to succeed before launching the existing `/pkg/entrypoint.sh` as `py`. Application arguments and exit status are preserved. Signals reach the application, and shutdown stops the application before stopping Docker. Startup failure or loss of the daemon terminates the container with a nonzero status. `DIND_STARTUP_TIMEOUT` controls the readiness deadline in seconds (default `60`, accepted range `1`–`9999`). Each process group gets up to five seconds to stop before being killed; allow more than ten seconds for the outer container's stop timeout.
+
+Docker listens only on `unix:///var/run/docker.sock`. The image sets `DOCKER_HOST` accordingly, and startup clears Docker context and TLS environment overrides so the application uses its own daemon. Do not mount the host Docker socket. The `py` user belongs to the Docker group and can control the nested daemon; this is a privileged container, not a sandbox for untrusted workloads.
+
+The image declares volumes for `/var/lib/docker` and `/var/lib/containerd`. Docker creates anonymous volumes automatically. Use dedicated named volumes when state should survive container replacement, and never share them between concurrently running daemons. For example, when launching the built image directly, replace `your-image:tag` with its tag.
+
+```sh
+docker run --rm --privileged --stop-timeout 20 \
+    --mount source=my-app-docker,target=/var/lib/docker \
+    --mount source=my-app-containerd,target=/var/lib/containerd \
+    your-image:tag
+```
+
+For Compose, set `privileged: true`, `stop_grace_period: 20s`, and the equivalent volume mounts on the application service. Keep the image's entrypoint and startup user. `container-shell` and an explicit `--entrypoint` override bypass DinD startup; to inspect a running DinD container, use `docker exec -it --user py <container> sh`.
+
+By default, the build installs the current stable packages available in Docker's repository. An optional bundle value pins the exact Docker Engine and CLI APT version. Include literal quotes around the version inside `CONTAINER_EXTENSIONS` so its epoch colon is not parsed as an extension separator. For example, `CONTAINER_EXTENSIONS='docker-in-docker="5:29.8.1-1~debian.12~bookworm"'` selects that version if available. This pins only Engine and CLI; containerd and CLI plugins still use the repository's current versions.
+
+Maintainers can run the opt-in integration tests with `CPT_DIND_INTEGRATION=1 poe test tests/test_docker_in_docker.py`. These tests require a running Docker daemon, privileged Linux containers, and network access for image and package downloads. They build the actual generated application Dockerfile and remove their test images, containers, and anonymous volumes afterward.
 
 ## Supplying external dependencies
 

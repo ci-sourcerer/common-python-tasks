@@ -227,6 +227,40 @@ def resolve_extension_content(descriptor: dict[str, str | None]) -> str:
     utils.fatal(f"Unknown extension descriptor source: {descriptor['source']}")
 
 
+def resolve_extension_build_context(
+    descriptor: dict[str, str | None],
+) -> tuple[str, Path] | None:
+    """Return the named build context for a bundled extension's asset directory.
+
+    Args:
+        descriptor: Extension descriptor dictionary containing `source` and
+            `bundle_name` values.
+
+    Returns:
+        A Docker build-context name and its directory, or `None` when the
+        extension has no packaged assets.
+    """
+    if descriptor["source"] != "bundle":
+        return None
+    bundle_name = descriptor["bundle_name"]
+    out = utils.load_data_file(
+        f"{bundle_name}/Dockerfile",
+        type_identifier="dockerfile_extensions",
+        fatal_on_missing=False,
+    )
+    if out is None:
+        utils.fatal(f"Extension bundle not found: {bundle_name}")
+    bundle_directory = out[0].parent
+    if not bundle_directory.is_dir() or not any(
+        path.name != "Dockerfile" for path in bundle_directory.iterdir()
+    ):
+        return None
+    return (
+        f"cpt-extension-{re.sub(r'[^a-z0-9]+', '-', bundle_name.lower()).strip('-')}",
+        bundle_directory,
+    )
+
+
 def get_cache_id_suffix(no_cache: bool) -> str:
     """Return a cache-break suffix for Docker cache mount IDs.
     Args:
