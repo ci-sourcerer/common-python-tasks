@@ -1,3 +1,14 @@
+## [0.12.1] - 2026-09-18
+
+### 🐛 Bug Fixes
+
+- *(containers)* Isolate DinD daemon logs
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove useless file
+- *(release)* Set README version 0.12.1
+
 ## [0.12.0] - 2026-09-18
 
 ### 🚀 Features
