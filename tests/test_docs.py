@@ -78,6 +78,10 @@ def test_repository_uses_reusable_docs_workflow():
         in cleanup_workflow
     )
     assert '"$project_url/deployments/$deployment_id?force=true"' in cleanup_workflow
+    assert '"$project_url/deployments?env=preview&page=$page&per_page=20"' in (
+        cleanup_workflow
+    )
+    assert "((page += 1))" in cleanup_workflow
     assert (
         "CLOUDFLARE_PREVIEW_DOMAIN: common-python-tasks.ci-sourcerer.com"
         in cleanup_workflow
