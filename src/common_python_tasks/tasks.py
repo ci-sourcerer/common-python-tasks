@@ -490,7 +490,7 @@ def docs_serve(
 
 @tasks.script(tags=["containers", "build"])
 def build_image(
-    *docker_build_args: str,
+    *docker_build_options: str,
     debug: bool = False,
     no_cache: bool = False,
     plain: bool = False,
@@ -503,9 +503,9 @@ def build_image(
     """Build the container image using a project-owned or bundled Dockerfile.
 
     Args:
-        *docker_build_args: Additional arguments passed directly to `docker build`.
+        *docker_build_options: Additional options passed directly to `docker build`.
             Provide them after the task's `--` separator. Overrides
-            `CONTAINER_DOCKER_BUILD_ARGS` when provided.
+            `CONTAINER_DOCKER_BUILD_OPTIONS` when provided.
         debug: Build the debug image.
         no_cache: Do not use cache when building the image.
         plain: Do not pretty-print output.
@@ -538,12 +538,12 @@ def build_image(
         parse_container_deps_source,
         parse_container_extensions,
         render_container_deps_move_script,
-        resolve_container_docker_build_args,
+        resolve_container_docker_build_options,
         resolve_container_dockerfile_hook_path,
         resolve_container_dockerfile_path,
         resolve_extension_build_context,
         resolve_extension_content,
-        uv_index_secret_build_args,
+        uv_index_secret_build_options,
         uv_index_secret_mounts,
     )
     from .project import (
@@ -578,9 +578,9 @@ def build_image(
         if (context := resolve_extension_build_context(desc)) is not None
     ]
 
-    resolved_docker_build_args = resolve_container_docker_build_args(
-        docker_build_args,
-        os.getenv("CONTAINER_DOCKER_BUILD_ARGS"),
+    resolved_docker_build_options = resolve_container_docker_build_options(
+        docker_build_options,
+        os.getenv("CONTAINER_DOCKER_BUILD_OPTIONS"),
     )
     uv_credentials = collect_uv_index_credentials()
     if uv_credentials:
@@ -588,9 +588,9 @@ def build_image(
             "Passing UV index credentials for: %s",
             ", ".join(c["index_name"] for c in uv_credentials),
         )
-        resolved_docker_build_args = uv_index_secret_build_args(uv_credentials) + list(
-            resolved_docker_build_args
-        )
+        resolved_docker_build_options = uv_index_secret_build_options(
+            uv_credentials
+        ) + list(resolved_docker_build_options)
     resolved_dockerfile_hook_path = resolve_container_dockerfile_hook_path(
         dockerfile_hook_path,
         os.getenv("CONTAINER_DOCKERFILE_HOOK_PATH"),
@@ -609,7 +609,7 @@ def build_image(
             single_arch=single_arch,
             omit_target=not debug,
             extra_build_args=top_level_build_args or None,
-            docker_build_args=resolved_docker_build_args,
+            docker_build_options=resolved_docker_build_options,
             dockerfile_hook_path=resolved_dockerfile_hook_path,
         )
         _prune_container_images(version_tag, commit_tag)
@@ -713,7 +713,7 @@ def build_image(
 
     if deps_content or deps_dockerfile_path:
         deps_image_tag = build_deps_image_task(
-            *resolved_docker_build_args,
+            *resolved_docker_build_options,
             no_cache=no_cache,
             plain=plain,
             single_arch=single_arch,
@@ -746,8 +746,8 @@ def build_image(
         plain=plain,
         single_arch=single_arch,
         extra_build_args=merged_build_args or None,
-        docker_build_args=[
-            *resolved_docker_build_args,
+        docker_build_options=[
+            *resolved_docker_build_options,
             *(
                 item
                 for name, path in extension_build_contexts
@@ -768,7 +768,7 @@ def build_image(
 
 @tasks.script(task_name="build-deps-image", tags=["containers", "build"])
 def build_deps_image_task(
-    *docker_build_args: str,
+    *docker_build_options: str,
     no_cache: bool = False,
     plain: bool = False,
     single_arch: bool = False,
@@ -776,9 +776,9 @@ def build_deps_image_task(
     """Build only the container dependency collector image for this project.
 
     Args:
-        *docker_build_args: Additional arguments passed directly to `docker build`.
+        *docker_build_options: Additional options passed directly to `docker build`.
             Provide them after the task's `--` separator. Overrides
-            `CONTAINER_DOCKER_BUILD_ARGS` when provided.
+            `CONTAINER_DOCKER_BUILD_OPTIONS` when provided.
         no_cache: Do not use cache when building the deps image.
         plain: Do not pretty-print output.
         single_arch: Build images for a single architecture.
@@ -791,7 +791,7 @@ def build_deps_image_task(
         get_cache_id_suffix,
         inject_auto_build_args_from_env,
         parse_container_deps_source,
-        resolve_container_docker_build_args,
+        resolve_container_docker_build_options,
     )
     from .utils import fatal
 
@@ -801,9 +801,9 @@ def build_deps_image_task(
             "No container dependency source found. Set CONTAINER_DEPS_CONTENT or CONTAINER_DEPS_FILE."
         )
 
-    resolved_docker_build_args = resolve_container_docker_build_args(
-        docker_build_args,
-        os.getenv("CONTAINER_DOCKER_BUILD_ARGS"),
+    resolved_docker_build_options = resolve_container_docker_build_options(
+        docker_build_options,
+        os.getenv("CONTAINER_DOCKER_BUILD_OPTIONS"),
     )
     extra_build_args = inject_auto_build_args_from_env({})
     cache_id_suffix = get_cache_id_suffix(no_cache)
@@ -817,7 +817,7 @@ def build_deps_image_task(
         plain=plain,
         single_arch=single_arch,
         extra_build_args=extra_build_args or None,
-        docker_build_args=resolved_docker_build_args,
+        docker_build_options=resolved_docker_build_options,
         cache_id_suffix=cache_id_suffix,
     )
 

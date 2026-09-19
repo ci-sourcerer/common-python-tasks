@@ -100,7 +100,7 @@ def _build_docker_build_command(
     plain: bool,
     target: BuildStage | None = None,
     tags: Sequence[str] | None = None,
-    docker_build_args: Sequence[str] | None = None,
+    docker_build_options: Sequence[str] | None = None,
 ) -> list[str]:
     build_cmd = [
         "docker",
@@ -123,8 +123,8 @@ def _build_docker_build_command(
             build_cmd += ["-t", tag]
     if plain:
         build_cmd += ["--progress", "plain"]
-    if docker_build_args:
-        build_cmd += [str(arg) for arg in docker_build_args]
+    if docker_build_options:
+        build_cmd += [str(option) for option in docker_build_options]
     build_cmd.append(str(context_path))
 
     return build_cmd
@@ -180,7 +180,7 @@ def render_build_image(
     omit_target: bool = False,
     image_name: str | None = None,
     extra_build_args: dict[str, str] | None = None,
-    docker_build_args: Sequence[str] | None = None,
+    docker_build_options: Sequence[str] | None = None,
     dockerfile_hook_path: Path | None = None,
     keep_generated_files: bool = True,
 ) -> RenderedBuildPlan:
@@ -197,7 +197,7 @@ def render_build_image(
         omit_target: Whether to omit the target stage from the command.
         image_name: Optional image name override.
         extra_build_args: Extra build-time arguments.
-        docker_build_args: Additional arguments passed directly to `docker build`.
+        docker_build_options: Additional options passed directly to `docker build`.
         dockerfile_hook_path: Optional executable script path that can mutate
             the generated Dockerfile in-place before build.
         keep_generated_files: Whether to leave the generated Dockerfile in place.
@@ -338,7 +338,7 @@ def render_build_image(
             plain,
             target=None if omit_target else target,
             tags=all_tags,
-            docker_build_args=docker_build_args,
+            docker_build_options=docker_build_options,
         )
         command_display = " ".join(quote(str(arg)) for arg in build_cmd)
         return RenderedBuildPlan(
@@ -473,7 +473,7 @@ def build_deps_image(
     plain: bool = False,
     single_arch: bool = False,
     extra_build_args: dict[str, str] | None = None,
-    docker_build_args: Sequence[str] | None = None,
+    docker_build_options: Sequence[str] | None = None,
     cache_id_suffix: str = "",
 ) -> str:
     """Build the dependency collector image and return its full tag.
@@ -486,7 +486,7 @@ def build_deps_image(
         plain: If `True`, use plain output mode for the Docker build.
         single_arch: If `True`, build the image for the current host architecture only.
         extra_build_args: Additional build arguments for the Docker build as a dictionary of `KEY: VALUE` pairs.
-        docker_build_args: Additional arguments passed directly to `docker build`.
+        docker_build_options: Additional options passed directly to `docker build`.
         cache_id_suffix: A suffix to append to the cache ID.
 
     Returns:
@@ -574,7 +574,7 @@ def build_deps_image(
         no_cache,
         plain,
         tags=[full_tag],
-        docker_build_args=docker_build_args,
+        docker_build_options=docker_build_options,
     )
 
     LOGGER.info("Building deps image: %s", full_tag)
@@ -597,7 +597,7 @@ def build_image(
     omit_target: bool = False,
     image_name: str | None = None,
     extra_build_args: dict[str, str] | None = None,
-    docker_build_args: Sequence[str] | None = None,
+    docker_build_options: Sequence[str] | None = None,
     dockerfile_hook_path: Path | None = None,
 ) -> tuple[str, str]:
     """Build the primary image and return its version and commit tags.
@@ -613,7 +613,7 @@ def build_image(
         omit_target: If `True`, omit the target stage.
         image_name: Name of the image to build.
         extra_build_args: Additional build arguments for the Docker build as a dictionary of `KEY: VALUE` pairs.
-        docker_build_args: Additional arguments passed directly to `docker build`.
+        docker_build_options: Additional options passed directly to `docker build`.
         dockerfile_hook_path: Optional executable script path that can mutate
             the generated Dockerfile in-place before build.
 
@@ -636,7 +636,7 @@ def build_image(
         omit_target=omit_target,
         image_name=image_name,
         extra_build_args=extra_build_args,
-        docker_build_args=docker_build_args,
+        docker_build_options=docker_build_options,
         dockerfile_hook_path=dockerfile_hook_path,
         keep_generated_files=True,
     )

@@ -1117,7 +1117,7 @@ def test_build_image_uses_build_deps_image_task(
     )
 
 
-def test_build_image_forwards_native_docker_build_args_and_hook(
+def test_build_image_forwards_native_docker_build_options_and_hook(
     monkeypatch,
     temp_project_dir,
     mock_run_command,
@@ -1136,7 +1136,7 @@ def test_build_image_forwards_native_docker_build_args_and_hook(
     env_hook_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     env_hook_path.chmod(0o755)
 
-    monkeypatch.setenv("CONTAINER_DOCKER_BUILD_ARGS", "--ssh env")
+    monkeypatch.setenv("CONTAINER_DOCKER_BUILD_OPTIONS", "--ssh env")
     monkeypatch.setenv("CONTAINER_DOCKERFILE_HOOK_PATH", str(env_hook_path))
 
     with patch(
@@ -1152,7 +1152,7 @@ def test_build_image_forwards_native_docker_build_args_and_hook(
 
     assert mock_low_level_build.call_count == 1
     kwargs = mock_low_level_build.call_args.kwargs
-    assert kwargs["docker_build_args"] == [
+    assert kwargs["docker_build_options"] == [
         "--secret",
         "id=pip_conf,env=PIP_CONF",
         "--add-host=example:127.0.0.1",
