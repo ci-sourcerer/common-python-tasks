@@ -237,7 +237,7 @@ class TestRenderBuildImage:
         assert str(plan.dockerfile_path) in plan.command_display
         assert plan.command[-1] == str(temp_project_dir)
 
-    def test_render_build_image_includes_native_docker_build_args(
+    def test_render_build_image_includes_native_docker_build_options(
         self,
         temp_project_dir: Path,
         mock_run_command: MagicMock,
@@ -251,7 +251,7 @@ class TestRenderBuildImage:
         plan = render_build_image(
             dockerfile_text="FROM python:3.11\n",
             context_path=temp_project_dir,
-            docker_build_args=[
+            docker_build_options=[
                 "--secret",
                 "id=pip_conf,env=PIP_CONF",
                 "--add-host",

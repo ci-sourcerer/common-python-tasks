@@ -9,14 +9,14 @@ Build the container image using a project-owned or bundled Dockerfile.
 ## Usage
 
 ```shell
-poe build-image [DOCKER_BUILD_ARGS...] [--debug] [--no-cache] [--plain] [--single-arch] [--dockerfile-path DOCKERFILE_PATH] [--dockerfile-hook-path DOCKERFILE_HOOK_PATH] [--container-env CONTAINER_ENV...] [--container-envfile CONTAINER_ENVFILE...]
+poe build-image [DOCKER_BUILD_OPTIONS...] [--debug] [--no-cache] [--plain] [--single-arch] [--dockerfile-path DOCKERFILE_PATH] [--dockerfile-hook-path DOCKERFILE_HOOK_PATH] [--container-env CONTAINER_ENV...] [--container-envfile CONTAINER_ENVFILE...]
 ```
 
 ## Arguments
 
 | Argument | Type | Description | Default |
 | - | - | - | - |
-| `docker_build_args...` | `string, repeatable` | Additional arguments passed directly to `docker build`. Provide them after the task's `--` separator. Overrides `CONTAINER_DOCKER_BUILD_ARGS` when provided. | — |
+| `docker_build_options...` | `string, repeatable` | Additional options passed directly to `docker build`. Provide them after the task's `--` separator. Overrides `CONTAINER_DOCKER_BUILD_OPTIONS` when provided. | — |
 | `--debug` | `boolean` | Build the debug image. | `false` |
 | `--no-cache` | `boolean` | Do not use cache when building the image. | `false` |
 | `--plain` | `boolean` | Do not pretty-print output. | `false` |

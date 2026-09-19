@@ -81,14 +81,16 @@ def uv_index_secret_mounts(credentials: list[dict[str, str | None]]) -> list[str
     ]
 
 
-def uv_index_secret_build_args(credentials: list[dict[str, str | None]]) -> list[str]:
-    """Return `docker build --secret` arg pairs for UV index credentials.
+def uv_index_secret_build_options(
+    credentials: list[dict[str, str | None]],
+) -> list[str]:
+    """Return `docker build --secret` option pairs for UV index credentials.
 
     Args:
         credentials: Output of `collect_uv_index_credentials`.
 
     Returns:
-        A flat list of `--secret` flag-value pairs for the docker build command.
+        A flat list of `--secret` option-value pairs for the Docker build command.
     """
     return [
         item
@@ -131,13 +133,13 @@ def get_python_variant() -> str:
 def inject_auto_build_args_from_env(
     build_args: dict[str, str] | None,
 ) -> dict[str, str]:
-    """Inject configured environment variables into managed Docker build args.
+    """Inject configured environment variables into managed Dockerfile build arguments.
 
     Environment-driven build args are only injected if they are set, and never
     override arguments already managed by the image builder.
 
     Args:
-        build_args: Existing managed Docker build arguments.
+        build_args: Existing managed Dockerfile build arguments.
 
     Returns:
         A build-arg dictionary with auto-injected env values merged in.
@@ -337,28 +339,29 @@ def split_colon_delimited_values(value: str) -> list[str]:
     return split_delimited_values(value, separators=":", allow_whitespace=True)
 
 
-def resolve_container_docker_build_args(
-    cli_docker_build_args: tuple[str, ...], env_docker_build_args: str | None
+def resolve_container_docker_build_options(
+    cli_docker_build_options: tuple[str, ...],
+    env_docker_build_options: str | None,
 ) -> list[str]:
-    """Resolve arguments passed directly to `docker build`.
+    """Resolve options passed directly to `docker build`.
 
     Args:
-        cli_docker_build_args: Free arguments provided after the task's `--`
+        cli_docker_build_options: Free options provided after the task's `--`
             separator.
-        env_docker_build_args: Shell-tokenized arguments from the environment.
+        env_docker_build_options: Shell-tokenized options from the environment.
 
     Returns:
-        The CLI arguments when provided, otherwise the environment arguments.
+        The CLI options when provided, otherwise the environment options.
     """
-    if cli_docker_build_args:
-        return list(cli_docker_build_args)
-    if not env_docker_build_args:
+    if cli_docker_build_options:
+        return list(cli_docker_build_options)
+    if not env_docker_build_options:
         return []
 
     try:
-        return shlex.split(env_docker_build_args)
+        return shlex.split(env_docker_build_options)
     except ValueError as error:
-        utils.fatal(f"Invalid CONTAINER_DOCKER_BUILD_ARGS: {error}")
+        utils.fatal(f"Invalid CONTAINER_DOCKER_BUILD_OPTIONS: {error}")
 
 
 def _resolve_optional_file_path(
