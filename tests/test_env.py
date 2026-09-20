@@ -6,7 +6,7 @@ from common_python_tasks.env import (
     inject_auto_build_args_from_env,
     load_container_env_tokens,
     parse_container_env_tokens,
-    resolve_container_docker_build_args,
+    resolve_container_docker_build_options,
     resolve_container_dockerfile_hook_path,
     resolve_container_dockerfile_path,
     split_colon_delimited_values,
@@ -56,8 +56,8 @@ def test_split_colon_delimited_values_preserves_escaped_colons():
     assert result == ["URL=https://example.com:8443/path", "MODE=prod"]
 
 
-def test_resolve_container_docker_build_args_prefers_cli_values():
-    result = resolve_container_docker_build_args(
+def test_resolve_container_docker_build_options_prefers_cli_values():
+    result = resolve_container_docker_build_options(
         ("--secret", "id=pip_conf,env=PIP_CONF"),
         "--ssh ignored",
     )
@@ -65,8 +65,8 @@ def test_resolve_container_docker_build_args_prefers_cli_values():
     assert result == ["--secret", "id=pip_conf,env=PIP_CONF"]
 
 
-def test_resolve_container_docker_build_args_uses_shell_tokenized_env_value():
-    result = resolve_container_docker_build_args(
+def test_resolve_container_docker_build_options_uses_shell_tokenized_env_value():
+    result = resolve_container_docker_build_options(
         (),
         '--secret "id=pip conf,src=/tmp/pip.conf" --add-host example:127.0.0.1',
     )
@@ -79,9 +79,9 @@ def test_resolve_container_docker_build_args_uses_shell_tokenized_env_value():
     ]
 
 
-def test_resolve_container_docker_build_args_rejects_invalid_shell_quoting():
+def test_resolve_container_docker_build_options_rejects_invalid_shell_quoting():
     with pytest.raises(SystemExit):
-        resolve_container_docker_build_args((), '--label "unterminated')
+        resolve_container_docker_build_options((), '--label "unterminated')
 
 
 def test_resolve_container_dockerfile_hook_path_validates_executable(tmp_path):
@@ -708,8 +708,8 @@ class TestUvIndexCredentials:
             "type=secret,id=uv_index_myindex_username,env=UV_INDEX_MYINDEX_USERNAME",
         ]
 
-    def test_secret_build_args_generates_flag_pairs(self):
-        from common_python_tasks.env import uv_index_secret_build_args
+    def test_secret_build_options_generates_option_pairs(self):
+        from common_python_tasks.env import uv_index_secret_build_options
 
         credentials = [
             {
@@ -719,7 +719,7 @@ class TestUvIndexCredentials:
             }
         ]
 
-        result = uv_index_secret_build_args(credentials)
+        result = uv_index_secret_build_options(credentials)
 
         assert result == [
             "--secret",
@@ -728,10 +728,10 @@ class TestUvIndexCredentials:
             "id=uv_index_myindex_password,env=UV_INDEX_MYINDEX_PASSWORD",
         ]
 
-    def test_secret_build_args_empty_when_no_credentials(self):
-        from common_python_tasks.env import uv_index_secret_build_args
+    def test_secret_build_options_empty_when_no_credentials(self):
+        from common_python_tasks.env import uv_index_secret_build_options
 
-        assert uv_index_secret_build_args([]) == []
+        assert uv_index_secret_build_options([]) == []
 
 
 class TestRenderDepsMoveScript:

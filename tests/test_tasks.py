@@ -259,20 +259,20 @@ def test_test_task_paths_arg_is_optional_in_poe_config():
 
 
 @pytest.mark.parametrize("task_name", ["build-image", "build-deps-image"])
-def test_docker_build_args_are_optional_free_task_arguments(task_name):
+def test_docker_build_options_are_optional_free_task_arguments(task_name):
     from common_python_tasks.tasks import tasks as task_collection
 
-    docker_build_args = next(
+    docker_build_options = next(
         arg
         for arg in task_collection(include_tags=["containers"])["tasks"][task_name][
             "args"
         ]
-        if arg["name"] == "docker_build_args"
+        if arg["name"] == "docker_build_options"
     )
 
-    assert docker_build_args["positional"] is True
-    assert docker_build_args["multiple"] is True
-    assert docker_build_args["required"] is False
+    assert docker_build_options["positional"] is True
+    assert docker_build_options["multiple"] is True
+    assert docker_build_options["required"] is False
 
 
 @pytest.mark.parametrize(
@@ -1808,7 +1808,7 @@ def test_build_deps_image_task_builds_dependency_image():
         plain=True,
         single_arch=True,
         extra_build_args=None,
-        docker_build_args=["--secret", "id=pip_conf,env=PIP_CONF"],
+        docker_build_options=["--secret", "id=pip_conf,env=PIP_CONF"],
         cache_id_suffix="",
     )
 

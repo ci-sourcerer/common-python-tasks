@@ -295,7 +295,7 @@ poe build --dockerfile-path docker/Dockerfile.ci
 poe release --dockerfile-path docker/Dockerfile.release
 ```
 
-The project root remains the Docker build context. Standard image naming, version and commit tags, metadata build arguments, `CONTAINER_DOCKER_BUILD_ARGS`, Dockerfile hooks, image pruning, and release-time image pushing continue to work. A normal custom build does not select a target stage, so the Dockerfile does not need the bundled `runtime` stage. A custom debug build selects a stage named `debug`.
+The project root remains the Docker build context. Standard image naming, version and commit tags, metadata build arguments, `CONTAINER_DOCKER_BUILD_OPTIONS`, Dockerfile hooks, image pruning, and release-time image pushing continue to work. A normal custom build does not select a target stage, so the Dockerfile does not need the bundled `runtime` stage. A custom debug build selects a stage named `debug`.
 
 Settings that render content into the bundled template do not alter a project-owned Dockerfile. This includes `CONTAINER_APT_PACKAGES`, `CONTAINER_CUSTOM_ENTRYPOINT`, `CONTAINER_ENV`, extensions, and dependency-image mappings. Declare equivalent instructions in the project-owned Dockerfile when they are needed. BuildKit secrets derived from `UV_INDEX_*` credentials remain available as Docker build secrets, but the custom Dockerfile must mount them explicitly.
 
@@ -393,7 +393,16 @@ Arguments following Poe's `--` separator are passed directly to `docker build` w
 poe build-image --single-arch -- --secret id=pip_conf,env=PIP_CONF
 ```
 
-Set `CONTAINER_DOCKER_BUILD_ARGS` to persist the same options using shell quoting rules. Arguments supplied after `--` replace this setting for that invocation. Managed arguments are emitted before these native Docker arguments, so an explicit option such as `--build-arg WORKDIR_PATH=/app` can override its managed value.
+Set `CONTAINER_DOCKER_BUILD_OPTIONS` to persist the same options using shell quoting rules. Options supplied after `--` replace this setting for that invocation. Managed build arguments are emitted before these native Docker options, so an explicit option such as `--build-arg WORKDIR_PATH=/app` can override its managed value.
+
+For project-specific defaults, declare the options in Poe's environment. A name-only `--build-arg` reads its value from the current environment, while `env=` explicitly selects the host variable used for a BuildKit secret.
+
+```toml
+[tool.poe.env]
+CONTAINER_DOCKER_BUILD_OPTIONS = "--secret id=MY_TOKEN,env=MY_TOKEN --build-arg MY_SETTING"
+```
+
+The Dockerfile must consume `MY_TOKEN` with a secret mount. Do not pass sensitive values through `--build-arg`, because build arguments are not designed to protect secrets.
 
 See [Container settings](../configuration.md#container-settings) for the complete settings reference.
 
