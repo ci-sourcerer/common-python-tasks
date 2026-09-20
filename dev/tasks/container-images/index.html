@@ -1,0 +1,2121 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Opinionated Poe the Poet tasks for Python package development">
+      
+      
+      
+        <link rel="canonical" href="https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/container-images/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../daily-development/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="zensical-0.0.63">
+    
+    
+      
+        <title>Container images - Common Python Tasks</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.10763589.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#container-images" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Common Python Tasks" class="md-header__button md-logo" aria-label="Common Python Tasks" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 5v16M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Common Python Tasks
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Container images
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="cyan"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="blue-grey" data-md-color-accent="cyan"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/ci-sourcerer/common-python-tasks" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ci-sourcerer/common-python-tasks
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Common Python Tasks" class="md-nav__button md-logo" aria-label="Common Python Tasks" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 5v16M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"/></svg>
+
+    </a>
+    Common Python Tasks
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ci-sourcerer/common-python-tasks" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ci-sourcerer/common-python-tasks
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Common Python Tasks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../documentation-workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Documentation workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tasks
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Tasks
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Task reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Container images
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Container images
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-generated-dockerfile-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        How the generated Dockerfile works
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How the generated Dockerfile works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#generic-template-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Generic template reference
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-image-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Application image template
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-image-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Dependency image template
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#runtime-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Runtime defaults
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-environment-declarations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Container environment declarations
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-a-project-owned-dockerfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using a project-owned Dockerfile
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extending-the-generated-runtime-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Extending the generated runtime image
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extending the generated runtime image">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#docker-in-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Docker-in-Docker
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supplying-external-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supplying external dependencies
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#passing-docker-build-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Passing Docker build options
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../daily-development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Daily development
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development-stacks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Development stacks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../documentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Documentation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packaging-and-releases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Packaging and releases
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_7" id="__nav_5_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_7_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_7">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Reference
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/build-deps-image/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe build-deps-image
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/build-image/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe build-image
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/build-package/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe build-package
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe build
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/bump-version/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe bump-version
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe changelog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/clean/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe clean
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/container-shell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe container-shell
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/db-shell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe db-shell
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/docs-build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe docs-build
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/docs-serve/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe docs-serve
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe format
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe lint
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/publish-github-release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe publish-github-release
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/publish-package/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe publish-package
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/push-image/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe push-image
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe release
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/reset-db/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe reset-db
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/run-container/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe run-container
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/run-db-migrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe run-db-migrations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/stack-down/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe stack-down
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/stack-up/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe stack-up
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe test
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/update-dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  poe update-dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-generated-dockerfile-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        How the generated Dockerfile works
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How the generated Dockerfile works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#generic-template-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Generic template reference
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-image-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Application image template
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependency-image-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Dependency image template
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#runtime-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Runtime defaults
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-environment-declarations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Container environment declarations
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-a-project-owned-dockerfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using a project-owned Dockerfile
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extending-the-generated-runtime-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Extending the generated runtime image
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extending the generated runtime image">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#docker-in-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Docker-in-Docker
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supplying-external-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supplying external dependencies
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#passing-docker-build-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Passing Docker build options
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="container-images">Container images</h1>
+<p>Container tasks are selected with the optional <code>containers</code> tag. By default, they generate a multi-stage Dockerfile from the project metadata and container settings, build the application wheel, and install it in a non-root runtime image. A project can instead select a complete application Dockerfile that it owns.</p>
+<div class="highlight"><pre><span></span><code><span class="k">[tool.poe]</span>
+<span class="n">include_script</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"common_python_tasks:tasks(include_tags=['common', 'containers'])"</span>
+</code></pre></div>
+<h2 id="how-the-generated-dockerfile-works">How the generated Dockerfile works</h2>
+<p><code>build-image</code> renders a temporary Dockerfile and uses the project root as its build context. If the project does not provide <code>.dockerignore</code>, the task temporarily supplies a conservative default that includes <code>pyproject.toml</code>, <code>uv.lock</code>, <code>README.md</code>, <code>LICENSE</code>, and the <code>src/</code> tree.</p>
+<p>The generated Dockerfile contains the following stages.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>builder</code></td>
+<td>Uses the host Python version, installs the installed version of uv, exports the optional <code>debug</code> dependency group, and builds the project wheel.</td>
+</tr>
+<tr>
+<td><code>runtime</code></td>
+<td>Uses the configured Python image variant, installs optional APT packages and dependency-image artifacts, creates the non-root <code>py</code> user, installs the wheel, creates the <code>/pkg</code> package link and entrypoint, and applies container extensions.</td>
+</tr>
+<tr>
+<td><code>debug</code></td>
+<td>Extends <code>runtime</code> with the project source and the <code>debug</code> dependency group. This stage exists only when <code>[dependency-groups].debug</code> is non-empty.</td>
+</tr>
+<tr>
+<td><code>final</code></td>
+<td>Extends <code>runtime</code> so tools that build the rendered Dockerfile without selecting a target still produce the normal runtime image.</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>build-image</code> task explicitly builds <code>runtime</code>, or <code>debug</code> when <code>--debug</code> is used. A debug build fails early when the project has no non-empty <code>debug</code> dependency group.</p>
+<p>The task supplies build arguments derived from the current environment and project metadata, including <code>PYTHON_VERSION</code>, <code>UV_VERSION</code>, <code>PACKAGE_VERSION</code>, <code>PACKAGE_NAME</code>, <code>AUTHORS</code>, <code>GIT_COMMIT</code>, <code>PYTHON_VARIANT</code>, and <code>WORKDIR_PATH</code>. It also creates short and fully qualified image tags for the package version and Git commit. A dirty working tree adds <code>-dirty</code> to the commit tag.</p>
+<h3 id="generic-template-reference">Generic template reference</h3>
+<p>The complete templates below are copied from the package source during documentation generation. The preceding stage table explains how their major sections fit together. Run <code>poe update-docs-references</code> after changing either template, or <code>poe check-docs-references</code> to verify that the checked-in copies are current.</p>
+<!-- generated-dockerfile-reference -->
+
+<h3 id="application-image-template">Application image template</h3>
+<p>Source: <a href="https://github.com/ci-sourcerer/common-python-tasks/blob/main/src/common_python_tasks/data/generic/Dockerfile.j2"><code>Dockerfile.j2</code></a></p>
+<div class="highlight"><pre><span></span><code><span class="c"># syntax=docker/dockerfile:1</span>
+
+<span class="c"># It is wise to use the Python version you are developing with and not blindly choose</span>
+<span class="c"># the latest. The `build-image` task passes the version properly here</span>
+<span class="k">ARG</span><span class="w"> </span><span class="nv">PYTHON_VERSION</span><span class="o">=</span><span class="m">3</span>
+<span class="c"># Variant for the runtime image, e.g. slim, alpine, etc.</span>
+<span class="c"># See https://hub.docker.com/_/python for available variants. Leave empty for no variant.</span>
+<span class="k">ARG</span><span class="w"> </span><span class="nv">PYTHON_VARIANT</span><span class="o">=</span>slim
+
+<span class="k">FROM</span><span class="w"> </span><span class="s">python:${PYTHON_VERSION}</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">builder</span>
+
+<span class="k">ARG</span><span class="w"> </span>PACKAGE_VERSION
+<span class="k">ARG</span><span class="w"> </span>UV_VERSION
+
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>CONTAINER_ENV_VARS<span class="w"> </span>%<span class="o">}</span>
+<span class="c"># Make configured variables available to package build commands.</span>
+<span class="o">{</span>%<span class="w"> </span><span class="k">for</span><span class="w"> </span>env_var<span class="w"> </span><span class="k">in</span><span class="w"> </span>CONTAINER_ENV_VARS<span class="w"> </span>-%<span class="o">}</span>
+<span class="k">ENV</span><span class="w"> </span><span class="o">{{</span><span class="w"> </span>env_var<span class="w"> </span><span class="o">}}</span>
+<span class="o">{</span>%<span class="w"> </span>endfor<span class="w"> </span>%<span class="o">}</span>
+<span class="o">{</span>%-<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+
+<span class="c"># Bypass VCS-based version detection: use the host-computed version directly.</span>
+<span class="c"># This avoids requiring a .git directory in the build context and prevents</span>
+<span class="c"># false dirty-version detection from a partial working tree.</span>
+<span class="k">ENV</span><span class="w"> </span><span class="nv">UV_DYNAMIC_VERSIONING_BYPASS</span><span class="o">=</span><span class="si">${</span><span class="nv">PACKAGE_VERSION</span><span class="si">}</span>
+
+<span class="c"># Install uv for package build and dependency export steps</span>
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/root/.cache/pip,id<span class="o">=</span>pip-cache<span class="o">{{</span><span class="w"> </span>CACHE_ID_SUFFIX<span class="w"> </span><span class="o">}}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">'if [ -n "${UV_VERSION:-}" ]; then \</span>
+<span class="s1">        pip install --root-user-action=ignore "uv==$UV_VERSION"; \</span>
+<span class="s1">    else \</span>
+<span class="s1">        pip install --root-user-action=ignore uv; \</span>
+<span class="s1">    fi'</span>
+
+<span class="c"># Build package</span>
+<span class="k">WORKDIR</span><span class="w"> </span><span class="s">/tmp/build</span>
+<span class="k">COPY</span><span class="w"> </span>.<span class="w"> </span>/tmp/build/
+
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>HAS_DEBUG_DEPS<span class="w"> </span>%<span class="o">}</span>
+<span class="c"># Export debug requirements when the project defines a debug dependency group</span>
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/root/.cache/uv,id<span class="o">=</span>uv-cache<span class="o">{{</span><span class="w"> </span>CACHE_ID_SUFFIX<span class="w"> </span><span class="o">}}{</span>%<span class="w"> </span><span class="k">for</span><span class="w"> </span>mount<span class="w"> </span><span class="k">in</span><span class="w"> </span>UV_INDEX_SECRET_MOUNTS<span class="w"> </span>%<span class="o">}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--mount<span class="o">={{</span><span class="w"> </span>mount<span class="w"> </span><span class="o">}}{</span>%<span class="w"> </span>endfor<span class="w"> </span>%<span class="o">}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>uv<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--frozen<span class="w"> </span>--only-group<span class="w"> </span>debug<span class="w"> </span>--no-hashes<span class="w"> </span>--format<span class="w"> </span>requirements-txt<span class="w"> </span>--output-file<span class="w"> </span>requirements-debug.txt
+<span class="o">{</span>%<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+
+<span class="c"># Build the wheel, caching the uv cache directory to speed up subsequent builds.</span>
+<span class="c"># If running this in a CI system, you must be using a persistent builder to take</span>
+<span class="c"># advantage of the cache mount, and you should configure your CI to persist the</span>
+<span class="c"># cache directory between builds</span>
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/root/.cache/uv,id<span class="o">=</span>uv-cache<span class="o">{{</span><span class="w"> </span>CACHE_ID_SUFFIX<span class="w"> </span><span class="o">}}{</span>%<span class="w"> </span><span class="k">for</span><span class="w"> </span>mount<span class="w"> </span><span class="k">in</span><span class="w"> </span>UV_INDEX_SECRET_MOUNTS<span class="w"> </span>%<span class="o">}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--mount<span class="o">={{</span><span class="w"> </span>mount<span class="w"> </span><span class="o">}}{</span>%<span class="w"> </span>endfor<span class="w"> </span>%<span class="o">}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>uv<span class="w"> </span>build<span class="w"> </span>--wheel
+
+<span class="k">FROM</span><span class="w"> </span><span class="s">python:${PYTHON_VERSION}${PYTHON_VARIANT:+-${PYTHON_VARIANT}}</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">runtime</span>
+<span class="k">ARG</span><span class="w"> </span>PYTHON_VERSION
+<span class="k">ARG</span><span class="w"> </span>PYTHON_VARIANT
+<span class="k">ARG</span><span class="w"> </span><span class="nv">WORKDIR_PATH</span><span class="o">=</span>/workspace
+
+<span class="k">LABEL</span><span class="w"> </span>org.opencontainers.image.base.name<span class="o">=</span><span class="s2">"python:</span><span class="si">${</span><span class="nv">PYTHON_VERSION</span><span class="si">}${</span><span class="nv">PYTHON_VARIANT</span><span class="p">:+-</span><span class="si">${</span><span class="nv">PYTHON_VARIANT</span><span class="si">}}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>org.opencontainers.image.python.variant<span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">PYTHON_VARIANT</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="k">ENV</span><span class="w"> </span><span class="nv">PYTHONUNBUFFERED</span><span class="o">=</span><span class="m">1</span>
+<span class="k">ENV</span><span class="w"> </span><span class="nv">PYTHONDONTWRITEBYTECODE</span><span class="o">=</span><span class="m">1</span>
+
+<span class="k">ARG</span><span class="w"> </span><span class="nv">NONROOT_USERNAME</span><span class="o">=</span>py
+<span class="k">ARG</span><span class="w"> </span><span class="nv">NONROOT_UID</span><span class="o">=</span><span class="m">1000</span>
+<span class="k">ARG</span><span class="w"> </span><span class="nv">NONROOT_GID</span><span class="o">=</span><span class="m">1000</span>
+
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>CONTAINER_ENV_VARS<span class="w"> </span>%<span class="o">}</span>
+<span class="c"># Persist the same variables for runtime build commands and running containers.</span>
+<span class="o">{</span>%<span class="w"> </span><span class="k">for</span><span class="w"> </span>env_var<span class="w"> </span><span class="k">in</span><span class="w"> </span>CONTAINER_ENV_VARS<span class="w"> </span>-%<span class="o">}</span>
+<span class="k">ENV</span><span class="w"> </span><span class="o">{{</span><span class="w"> </span>env_var<span class="w"> </span><span class="o">}}</span>
+<span class="o">{</span>%<span class="w"> </span>endfor<span class="w"> </span>%<span class="o">}</span>
+<span class="o">{</span>%-<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+
+<span class="k">ENV</span><span class="w"> </span><span class="nv">DEBIAN_FRONTEND</span><span class="o">=</span>noninteractive
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>CONTAINER_APT_PACKAGES<span class="w"> </span>%<span class="o">}</span>
+<span class="c"># Install optional runtime apt packages selected by Python-side template rendering</span>
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/var/cache/apt,id<span class="o">=</span>apt-cache<span class="o">{{</span><span class="w"> </span>CACHE_ID_SUFFIX<span class="w"> </span><span class="o">}}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/var/lib/apt/lists,sharing<span class="o">=</span>locked,id<span class="o">=</span>apt-lists<span class="o">{{</span><span class="w"> </span>CACHE_ID_SUFFIX<span class="w"> </span><span class="o">}}</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>apt-get<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>--no-install-recommends<span class="w"> </span><span class="o">{{</span><span class="w"> </span>CONTAINER_APT_PACKAGES<span class="w"> </span><span class="o">}}</span>
+<span class="o">{</span>%<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>CONTAINER_DEPS_IMAGE<span class="w"> </span>%<span class="o">}</span>
+
+<span class="c"># Pull external dependencies from the pre-built deps image</span>
+<span class="k">ARG</span><span class="w"> </span>CONTAINER_DEPS_IMAGE
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">={{</span><span class="w"> </span>CONTAINER_DEPS_IMAGE<span class="w"> </span><span class="o">}}</span><span class="w"> </span>/tmp/deps<span class="w"> </span>/tmp/deps
+<span class="o">{</span>%<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>CONTAINER_DEPS_MOVE_SCRIPT<span class="w"> </span>%<span class="o">}</span>
+<span class="k">RUN</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span>-eux<span class="p">;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>cat<span class="w"> </span>&gt;/tmp/container-deps-move-script<span class="w"> </span>&lt;&lt;<span class="s1">'SCRIPT'</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>chmod<span class="w"> </span>+x<span class="w"> </span>/tmp/container-deps-move-script<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/tmp/container-deps-move-script
+<span class="o">{{</span><span class="w"> </span>CONTAINER_DEPS_MOVE_SCRIPT<span class="w"> </span><span class="o">}}</span>
+SCRIPT
+<span class="o">{</span>%<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+
+<span class="c"># Create a named non-root user with a writable home directory</span>
+<span class="c"># Written to cover all Python image variants</span>
+<span class="k">RUN</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span>-eux<span class="p">;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span>adduser<span class="w"> </span>--help<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-q<span class="w"> </span>--<span class="w"> </span><span class="s1">'--disabled-password'</span><span class="p">;</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>addgroup<span class="w"> </span>--gid<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_GID</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_USERNAME</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>adduser<span class="w"> </span>--uid<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_UID</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>--gid<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_GID</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>--home<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">WORKDIR_PATH</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>--shell<span class="w"> </span>/bin/sh<span class="w"> </span>--disabled-password<span class="w"> </span>--gecos<span class="w"> </span><span class="s1">''</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_USERNAME</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>addgroup<span class="w"> </span>-g<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_GID</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_USERNAME</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>adduser<span class="w"> </span>-D<span class="w"> </span>-u<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_UID</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-G<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_USERNAME</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-h<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">WORKDIR_PATH</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span>-s<span class="w"> </span>/bin/sh<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_USERNAME</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="k">fi</span><span class="p">;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">WORKDIR_PATH</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>chown<span class="w"> </span>-R<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_USERNAME</span><span class="si">}</span><span class="s2">"</span>:<span class="s2">"</span><span class="si">${</span><span class="nv">NONROOT_USERNAME</span><span class="si">}</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">WORKDIR_PATH</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="k">WORKDIR</span><span class="w"> </span><span class="s">${WORKDIR_PATH}</span>
+
+<span class="c"># Grab package from builder image</span>
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>builder<span class="w"> </span>/tmp/build/dist/*.whl<span class="w"> </span>/tmp/
+
+<span class="c"># Install package</span>
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/root/.cache/pip,id<span class="o">=</span>pip-cache<span class="o">{{</span><span class="w"> </span>CACHE_ID_SUFFIX<span class="w"> </span><span class="o">}}</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--root-user-action<span class="o">=</span>ignore<span class="w"> </span>/tmp/*.whl
+<span class="c"># Create symlinks for the package</span>
+<span class="k">ARG</span><span class="w"> </span>PACKAGE_NAME
+<span class="k">ENV</span><span class="w"> </span><span class="nv">PACKAGE_NAME</span><span class="o">=</span><span class="si">${</span><span class="nv">PACKAGE_NAME</span><span class="si">}</span>
+<span class="k">RUN</span><span class="w"> </span>ln<span class="w"> </span>-s<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import os; from importlib import resources; print(resources.files(os.environ['PACKAGE_NAME']))"</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="s2">"/_</span><span class="nv">$PACKAGE_NAME</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="o">&amp;&amp;</span><span class="w"> </span>ln<span class="w"> </span>-s<span class="w"> </span><span class="s2">"/_</span><span class="nv">$PACKAGE_NAME</span><span class="s2">"</span><span class="w"> </span><span class="s2">"/pkg"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span><span class="s2">"/_</span><span class="nv">$PACKAGE_NAME</span><span class="s2">/__pycache__"</span>
+
+<span class="k">ENTRYPOINT</span><span class="w"> </span><span class="p">[</span><span class="s2">"/pkg/entrypoint.sh"</span><span class="p">]</span>
+
+<span class="k">ARG</span><span class="w"> </span>AUTHORS
+<span class="k">ARG</span><span class="w"> </span>GIT_COMMIT
+<span class="k">LABEL</span><span class="w"> </span>org.opencontainers.image.authors<span class="o">=</span><span class="si">${</span><span class="nv">AUTHORS</span><span class="si">}</span>
+<span class="k">LABEL</span><span class="w"> </span>git.commit<span class="o">=</span><span class="si">${</span><span class="nv">GIT_COMMIT</span><span class="si">}</span>
+
+<span class="c"># Set custom entrypoint if provided</span>
+<span class="c"># This entrypoint is deliberately not configurable via environment variables in order to</span>
+<span class="c"># ensure that the container always uses the entrypoint selected at build time. If the</span>
+<span class="c"># current package does not provide a console script, the entrypoint will default to `python`</span>
+<span class="k">RUN</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"#!/bin/sh</span>
+
+<span class="nb">exec</span><span class="w"> </span><span class="o">{{</span><span class="w"> </span>ENTRYPOINT_COMMAND<span class="p">|</span>default<span class="o">(</span><span class="s1">'python'</span><span class="o">)</span><span class="w"> </span><span class="o">}}</span><span class="w"> </span><span class="se">\"\$</span>@<span class="se">\"</span><span class="s2">" &gt;/pkg/entrypoint.sh \</span>
+<span class="s2">    &amp;&amp; chmod +x /pkg/entrypoint.sh</span>
+
+<span class="k">ARG</span><span class="w"> </span><span class="nv">RUNTIME_USER</span><span class="o">=</span>py
+<span class="k">USER</span><span class="w"> </span><span class="s">${RUNTIME_USER}</span>
+
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>EXTENSION_CONTENT<span class="w"> </span>%<span class="o">}</span>
+<span class="o">{{</span><span class="w"> </span>EXTENSION_CONTENT<span class="w"> </span><span class="o">}}</span>
+<span class="o">{</span>%<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+
+<span class="o">{</span>%<span class="w"> </span><span class="k">if</span><span class="w"> </span>HAS_DEBUG_DEPS<span class="w"> </span>%<span class="o">}</span>
+<span class="c"># Optional debug stage: only installs debug deps if they were exported. This stage will not</span>
+<span class="c"># be built by default (the final stage below is the runtime image), and it will safely do</span>
+<span class="c"># nothing if there are no debug requirements</span>
+<span class="k">FROM</span><span class="w"> </span><span class="s">runtime</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">debug</span>
+
+<span class="k">USER</span><span class="w"> </span><span class="s">root</span>
+
+<span class="k">COPY</span><span class="w"> </span>--from<span class="o">=</span>builder<span class="w"> </span>/tmp/build<span class="w"> </span>/tmp/build
+
+<span class="k">RUN</span><span class="w"> </span>--mount<span class="o">=</span><span class="nv">type</span><span class="o">=</span>cache,target<span class="o">=</span>/root/.cache/pip,id<span class="o">=</span>pip-cache<span class="o">{{</span><span class="w"> </span>CACHE_ID_SUFFIX<span class="w"> </span><span class="o">}}</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--root-user-action<span class="o">=</span>ignore<span class="w"> </span>-r<span class="w"> </span>/tmp/build/requirements-debug.txt
+
+<span class="k">USER</span><span class="w"> </span><span class="s">${RUNTIME_USER}</span>
+<span class="o">{</span>%<span class="w"> </span>endif<span class="w"> </span>%<span class="o">}</span>
+
+<span class="c"># Final (default) image: explicitly use runtime as the final target so debug is not used unless requested</span>
+<span class="k">FROM</span><span class="w"> </span><span class="s">runtime</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">final</span>
+
+<span class="k">USER</span><span class="w"> </span><span class="s">${RUNTIME_USER}</span>
+</code></pre></div>
+<h3 id="dependency-image-template">Dependency image template</h3>
+<p>Source: <a href="https://github.com/ci-sourcerer/common-python-tasks/blob/main/src/common_python_tasks/data/generic/Dockerfile.deps.j2"><code>Dockerfile.deps.j2</code></a></p>
+<div class="highlight"><pre><span></span><code><span class="c"># syntax=docker/dockerfile:1</span>
+
+<span class="c"># Dependency collector image: installs external dependencies into /tmp/deps</span>
+<span class="c"># so the main application Dockerfile can COPY --from this image.</span>
+<span class="k">ARG</span><span class="w"> </span><span class="nv">PYTHON_VERSION</span><span class="o">=</span><span class="m">3</span>
+<span class="k">ARG</span><span class="w"> </span><span class="nv">PYTHON_VARIANT</span><span class="o">=</span>slim
+
+<span class="k">FROM</span><span class="w"> </span><span class="s">python:${PYTHON_VERSION}${PYTHON_VARIANT:+-${PYTHON_VARIANT}}</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="s">deps</span>
+<span class="k">ARG</span><span class="w"> </span>PYTHON_VERSION
+<span class="k">ARG</span><span class="w"> </span>PYTHON_VARIANT
+
+<span class="k">LABEL</span><span class="w"> </span>org.opencontainers.image.base.name<span class="o">=</span><span class="s2">"python:</span><span class="si">${</span><span class="nv">PYTHON_VERSION</span><span class="si">}${</span><span class="nv">PYTHON_VARIANT</span><span class="p">:+-</span><span class="si">${</span><span class="nv">PYTHON_VARIANT</span><span class="si">}}</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>org.opencontainers.image.python.variant<span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">PYTHON_VARIANT</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="k">ARG</span><span class="w"> </span>CACHE_ID_SUFFIX
+<span class="k">RUN</span><span class="w"> </span><span class="nb">printf</span><span class="w"> </span><span class="s1">'%s'</span><span class="w"> </span><span class="s2">"</span><span class="nv">$CACHE_ID_SUFFIX</span><span class="s2">"</span><span class="w"> </span>&gt;/tmp/.cache_id_suffix
+
+<span class="k">ENV</span><span class="w"> </span><span class="nv">DEBIAN_FRONTEND</span><span class="o">=</span>noninteractive
+
+<span class="k">RUN</span><span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/tmp/deps
+
+<span class="o">{{</span><span class="w"> </span>DEPS_CONTENT<span class="w"> </span><span class="o">}}</span>
+</code></pre></div>
+<!-- end-generated-dockerfile-reference -->
+
+<h3 id="runtime-defaults">Runtime defaults</h3>
+<p>The runtime image uses <code>python:&lt;host-version&gt;-slim</code> by default. Set <code>CONTAINER_PYTHON_VARIANT</code> to another official Python image variant, or to an empty string to use <code>python:&lt;host-version&gt;</code> without a suffix. <code>CONTAINER_APT_PACKAGES</code> is rendered as a space-delimited package list in an <code>apt-get install</code> command, so it should only be used with Debian-based variants.</p>
+<p>The image runs as the non-root <code>py</code> user with <code>/workspace</code> as both its home and working directory. <code>WORKDIR_PATH</code> changes that directory. The package is available through <code>/pkg</code>, regardless of the installed wheel layout.</p>
+<p>The generated entrypoint selects a console script in the following order.</p>
+<ol>
+<li>The <code>[project.scripts]</code> key named by <code>CONTAINER_CUSTOM_ENTRYPOINT</code></li>
+<li>A script matching the underscore-normalized package name</li>
+<li>A script matching the hyphenated package name</li>
+<li><code>python</code></li>
+</ol>
+<p>An explicit <code>CONTAINER_CUSTOM_ENTRYPOINT</code> must match a key in <code>[project.scripts]</code>. The selected command is fixed at build time and receives the container command as its arguments.</p>
+<h2 id="container-environment-declarations">Container environment declarations</h2>
+<p>Most <code>CONTAINER_*</code> variables are host-side task settings. They control Dockerfile rendering, naming, or build orchestration and are not automatically exposed inside the image.</p>
+<p><code>CONTAINER_ENV</code> is different. It accepts <code>KEY=VALUE</code> declarations that are rendered as <code>ENV</code> instructions in both <code>builder</code> and <code>runtime</code>. These values are therefore available while the package is built, during later runtime-stage build instructions, and whenever a container starts from the resulting image.</p>
+<p>Declarations are accumulated from lowest to highest precedence.</p>
+<ol>
+<li>The project-root <code>.containerenv</code> file</li>
+<li>Files passed through <code>--container-envfile</code></li>
+<li><code>CONTAINER_ENV</code></li>
+<li>Values passed through <code>--container-env</code></li>
+</ol>
+<p>Later declarations with the same key override earlier declarations. Files may use one declaration per line, and inline settings may be colon-delimited. Every declaration must contain <code>KEY=VALUE</code>. Quote a value or escape a literal colon as <code>\:</code> when it contains a colon.</p>
+<div class="highlight"><span class="filename">.containerenv</span><pre><span></span><code>APP_ENV=production
+LOG_LEVEL=info
+PUBLIC_API_URL="https://api.example.com"
+</code></pre></div>
+<div class="highlight"><pre><span></span><code>poe<span class="w"> </span>build-image<span class="w"> </span>--container-env<span class="w"> </span><span class="nv">LOG_LEVEL</span><span class="o">=</span>debug
+</code></pre></div>
+<p>Do not use these declarations for secrets because their values persist in the image configuration. Host variables matching <code>UV_INDEX_&lt;NAME&gt;_USERNAME</code> or <code>UV_INDEX_&lt;NAME&gt;_PASSWORD</code> are handled separately as BuildKit secrets for uv operations and are not rendered as image environment variables.</p>
+<p>The <code>--env</code> and <code>--envfile</code> options on <code>run-container</code> and <code>container-shell</code> have ordinary <code>docker run</code> semantics. They affect only that container invocation and can override environment values embedded during the build.</p>
+<h2 id="using-a-project-owned-dockerfile">Using a project-owned Dockerfile</h2>
+<p>Set <code>CONTAINER_DOCKERFILE_PATH</code> when a project owns its complete application Dockerfile. <code>build-image</code> and every aggregate task that invokes it, including <code>build</code> and <code>release</code>, use the same file instead of rendering the bundled template.</p>
+<div class="highlight"><pre><span></span><code><span class="k">[tool.poe.env]</span>
+<span class="n">CONTAINER_DOCKERFILE_PATH</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"docker/Dockerfile"</span>
+</code></pre></div>
+<p>The <code>--dockerfile-path</code> option overrides the environment setting for one invocation. The option is available on both the individual and aggregate tasks.</p>
+<div class="highlight"><pre><span></span><code>poe<span class="w"> </span>build-image<span class="w"> </span>--dockerfile-path<span class="w"> </span>docker/Dockerfile.ci
+poe<span class="w"> </span>build<span class="w"> </span>--dockerfile-path<span class="w"> </span>docker/Dockerfile.ci
+poe<span class="w"> </span>release<span class="w"> </span>--dockerfile-path<span class="w"> </span>docker/Dockerfile.release
+</code></pre></div>
+<p>The project root remains the Docker build context. Standard image naming, version and commit tags, metadata build arguments, <code>CONTAINER_DOCKER_BUILD_ARGS</code>, Dockerfile hooks, image pruning, and release-time image pushing continue to work. A normal custom build does not select a target stage, so the Dockerfile does not need the bundled <code>runtime</code> stage. A custom debug build selects a stage named <code>debug</code>.</p>
+<p>Settings that render content into the bundled template do not alter a project-owned Dockerfile. This includes <code>CONTAINER_APT_PACKAGES</code>, <code>CONTAINER_CUSTOM_ENTRYPOINT</code>, <code>CONTAINER_ENV</code>, extensions, and dependency-image mappings. Declare equivalent instructions in the project-owned Dockerfile when they are needed. BuildKit secrets derived from <code>UV_INDEX_*</code> credentials remain available as Docker build secrets, but the custom Dockerfile must mount them explicitly.</p>
+<h2 id="extending-the-generated-runtime-image">Extending the generated runtime image</h2>
+<p>Use <code>CONTAINER_EXTENSION_FILES</code> to append project-owned Dockerfile fragments without replacing the generic Dockerfile. Its value is a colon-delimited list of paths, such as <code>Dockerfile.system:docker/Dockerfile.browser</code>.</p>
+<div class="highlight"><span class="filename">Dockerfile.system</span><pre><span></span><code><span class="k">USER</span><span class="w"> </span><span class="s">root</span>
+<span class="k">RUN</span><span class="w"> </span>apt-get<span class="w"> </span>update<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="o">&amp;&amp;</span><span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>--no-install-recommends<span class="w"> </span>git<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span>/var/lib/apt/lists/*
+<span class="k">USER</span><span class="w"> </span><span class="s">py</span>
+</code></pre></div>
+<p>Extension files are concatenated in their configured order and inserted near the end of <code>runtime</code>, after the entrypoint is created and after <code>USER ${RUNTIME_USER}</code> (which defaults to <code>py</code>). An extension that needs elevated permissions must switch to <code>USER root</code>; it should normally restore <code>USER ${RUNTIME_USER}</code> for the instructions that follow. Extensions that need to start as another user can redeclare <code>ARG RUNTIME_USER=root</code>; both the final and debug stages honor this argument. <code>COPY</code> paths remain relative to the project-root build context.</p>
+<p>Extension content is treated as raw Dockerfile syntax, not as a Jinja template. This keeps project extensions independent of private template variables used by <code>common-python-tasks</code>.</p>
+<p><code>CONTAINER_EXTENSIONS</code> selects extension bundles shipped in the installed package's <code>data/dockerfile_extensions/</code> directory. Bundle names are colon-delimited and are applied after local extension files. A bundle may accept one value with <code>bundle=value</code>; that value is passed to the first <code>ARG</code> declared by the bundle that has not already been assigned to another extension. Arguments are ignored with a warning when the bundle declares no <code>ARG</code>.</p>
+<p>A bundled extension can keep scripts and other supporting files beside its <code>Dockerfile</code>. The image builder exposes that directory as a BuildKit named context called <code>cpt-extension-&lt;bundle-name&gt;</code>, with unsupported characters normalized to hyphens. The bundle can copy an asset with <code>COPY --from=cpt-extension-example script.sh /usr/local/bin/script</code> without embedding it in a heredoc. These managed contexts are added only to the application image build.</p>
+<p>Use an extension for additive runtime instructions. Use <code>CONTAINER_DOCKERFILE_HOOK_PATH</code> only when a change must rewrite another part of the selected Dockerfile. The hook must be an executable host-side script; it receives a temporary copy of the selected Dockerfile as its first argument and must edit that file in place. The hook also receives the following context variables.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>COMMON_PYTHON_TASKS_DOCKERFILE_PATH</code></td>
+<td>Temporary selected Dockerfile path, matching the first script argument</td>
+</tr>
+<tr>
+<td><code>COMMON_PYTHON_TASKS_DOCKER_CONTEXT</code></td>
+<td>Docker build context path</td>
+</tr>
+<tr>
+<td><code>COMMON_PYTHON_TASKS_DOCKER_DEBUG</code></td>
+<td><code>1</code> for a debug build, otherwise <code>0</code></td>
+</tr>
+<tr>
+<td><code>COMMON_PYTHON_TASKS_DOCKER_NO_CACHE</code></td>
+<td><code>1</code> when <code>--no-cache</code> is active, otherwise <code>0</code></td>
+</tr>
+<tr>
+<td><code>COMMON_PYTHON_TASKS_DOCKER_PLAIN</code></td>
+<td><code>1</code> when plain progress output is active, otherwise <code>0</code></td>
+</tr>
+<tr>
+<td><code>COMMON_PYTHON_TASKS_DOCKER_SINGLE_ARCH</code></td>
+<td><code>1</code> for a single-architecture build, otherwise <code>0</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="docker-in-docker">Docker-in-Docker</h3>
+<p>The bundled <code>docker-in-docker</code> extension installs Docker CE, containerd, Buildx, and Compose from Docker's signed APT repository. Its installation and supervisor scripts are separate packaged files copied through the extension's named build context; image builds do not download scripts from the devcontainer feature repository.</p>
+<p>Initial support is limited to Debian Bookworm variants (<code>slim-bookworm</code> and <code>bookworm</code>) on <code>amd64</code> and <code>arm64</code>. The extension checks the actual distribution and architecture during the build and rejects everything else, including Alpine and Trixie. Select extensions independently for each image build; other images do not need to enable Docker-in-Docker.</p>
+<div class="highlight"><pre><span></span><code><span class="nv">CONTAINER_PYTHON_VARIANT</span><span class="o">=</span>slim-bookworm<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="nv">CONTAINER_EXTENSIONS</span><span class="o">=</span>docker-in-docker<span class="w"> </span>poe<span class="w"> </span>build-image
+poe<span class="w"> </span>run-container<span class="w"> </span>--privileged
+</code></pre></div>
+<p>The image starts as root through Tini and the DinD supervisor. The supervisor prepares nested cgroups, starts a dedicated Docker daemon, and waits for <code>docker info</code> to succeed before launching the existing <code>/pkg/entrypoint.sh</code> as <code>py</code>. Application arguments and exit status are preserved. Signals reach the application, and shutdown stops the application before stopping Docker. Startup failure or loss of the daemon terminates the container with a nonzero status. <code>DIND_STARTUP_TIMEOUT</code> controls the readiness deadline in seconds (default <code>60</code>, accepted range <code>1</code>–<code>9999</code>). Each process group gets up to five seconds to stop before being killed; allow more than ten seconds for the outer container's stop timeout.</p>
+<p>Docker daemon output is written to <code>/var/log/docker.log</code> by default so it does not mix with application logs. Set <code>DIND_DOCKER_LOG_PATH</code> to choose another file path; inspect the file with <code>docker exec</code> or mount a log directory if the daemon logs need to be collected.</p>
+<p>Docker listens only on <code>unix:///var/run/docker.sock</code>. The image sets <code>DOCKER_HOST</code> accordingly, and startup clears Docker context and TLS environment overrides so the application uses its own daemon. Do not mount the host Docker socket. The <code>py</code> user belongs to the Docker group and can control the nested daemon; this is a privileged container, not a sandbox for untrusted workloads.</p>
+<p>The image declares volumes for <code>/var/lib/docker</code> and <code>/var/lib/containerd</code>. Docker creates anonymous volumes automatically. Use dedicated named volumes when state should survive container replacement, and never share them between concurrently running daemons. For example, when launching the built image directly, replace <code>your-image:tag</code> with its tag.</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>--privileged<span class="w"> </span>--stop-timeout<span class="w"> </span><span class="m">20</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--mount<span class="w"> </span><span class="nv">source</span><span class="o">=</span>my-app-docker,target<span class="o">=</span>/var/lib/docker<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--mount<span class="w"> </span><span class="nv">source</span><span class="o">=</span>my-app-containerd,target<span class="o">=</span>/var/lib/containerd<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>your-image:tag
+</code></pre></div>
+<p>For Compose, set <code>privileged: true</code>, <code>stop_grace_period: 20s</code>, and the equivalent volume mounts on the application service. Keep the image's entrypoint and startup user. <code>container-shell</code> and an explicit <code>--entrypoint</code> override bypass DinD startup; to inspect a running DinD container, use <code>docker exec -it --user py &lt;container&gt; sh</code>.</p>
+<p>By default, the build installs the current stable packages available in Docker's repository. An optional bundle value pins the exact Docker Engine and CLI APT version. Include literal quotes around the version inside <code>CONTAINER_EXTENSIONS</code> so its epoch colon is not parsed as an extension separator. For example, <code>CONTAINER_EXTENSIONS='docker-in-docker="5:29.8.1-1~debian.12~bookworm"'</code> selects that version if available. This pins only Engine and CLI; containerd and CLI plugins still use the repository's current versions.</p>
+<p>Maintainers can run the opt-in integration tests with <code>CPT_DIND_INTEGRATION=1 poe test tests/test_docker_in_docker.py</code>. These tests require a running Docker daemon, privileged Linux containers, and network access for image and package downloads. They build the actual generated application Dockerfile and remove their test images, containers, and anonymous volumes afterward.</p>
+<h2 id="supplying-external-dependencies">Supplying external dependencies</h2>
+<p>Dependency images support artifacts that should be built separately from the application wheel, such as compiled tools or browser binaries. The dependency image must place its exported content under <code>/tmp/deps</code>; the generated application Dockerfile copies that directory into its <code>runtime</code> stage.</p>
+<p>There are three ways to select the dependency image.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CONTAINER_DEPS_CONTENT</code></td>
+<td>Supplies inline instructions appended to the bundled dependency-image Dockerfile. The bundle already defines the base image and creates <code>/tmp/deps</code>.</td>
+</tr>
+<tr>
+<td><code>CONTAINER_DEPS_FILE</code></td>
+<td>Supplies one or more colon-delimited paths to complete dependency Dockerfiles. Multiple files are concatenated in order.</td>
+</tr>
+<tr>
+<td><code>CONTAINER_DEPS_IMAGE</code></td>
+<td>Reuses an existing image whose artifacts are already in <code>/tmp/deps</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Inline content takes precedence over dependency files. Either local source takes precedence over an existing <code>CONTAINER_DEPS_IMAGE</code> because <code>build-image</code> builds and tags a content-addressed dependency image first. <code>build-deps-image</code> can build that image independently.</p>
+<p>After copying <code>/tmp/deps</code>, the runtime build can distribute its contents in one of two ways. <code>CONTAINER_DEPS_MAPPINGS</code> accepts whitespace-delimited <code>name:/destination/path</code> pairs and moves <code>/tmp/deps/&lt;name&gt;</code> to each destination. For more control, use an inline <code>CONTAINER_DEPS_MOVE_SCRIPT</code> or a file named by <code>CONTAINER_DEPS_MOVE_SCRIPT_PATH</code>. A script path takes precedence over an inline script, and either script takes precedence over mappings.</p>
+<div class="highlight"><pre><span></span><code><span class="k">[tool.poe.env]</span>
+<span class="n">CONTAINER_DEPS_IMAGE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"example/toolchain:2026.09"</span>
+<span class="n">CONTAINER_DEPS_MAPPINGS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"bin/tool:/usr/local/bin/tool share/tool:/usr/local/share/tool"</span>
+</code></pre></div>
+<h2 id="passing-docker-build-options">Passing Docker build options</h2>
+<p>Arguments following Poe's <code>--</code> separator are passed directly to <code>docker build</code> when the task accepts positional Docker arguments.</p>
+<div class="highlight"><pre><span></span><code>poe<span class="w"> </span>build-image<span class="w"> </span>--single-arch<span class="w"> </span>--<span class="w"> </span>--secret<span class="w"> </span><span class="nv">id</span><span class="o">=</span>pip_conf,env<span class="o">=</span>PIP_CONF
+</code></pre></div>
+<p>Set <code>CONTAINER_DOCKER_BUILD_ARGS</code> to persist the same options using shell quoting rules. Arguments supplied after <code>--</code> replace this setting for that invocation. Managed arguments are emitted before these native Docker arguments, so an explicit option such as <code>--build-arg WORKDIR_PATH=/app</code> can override its managed value.</p>
+<p>See <a href="../../configuration/#container-settings">Container settings</a> for the complete settings reference.</p>
+<!-- generated-task-reference -->
+
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../reference/build-image/"><code>build-image</code></a></td>
+<td>Build the container image using a project-owned or bundled Dockerfile.</td>
+</tr>
+<tr>
+<td><a href="../reference/build-deps-image/"><code>build-deps-image</code></a></td>
+<td>Build only the container dependency collector image for this project.</td>
+</tr>
+<tr>
+<td><a href="../reference/run-container/"><code>run-container</code></a></td>
+<td>Run the Docker image as a container for this project.</td>
+</tr>
+<tr>
+<td><a href="../reference/push-image/"><code>push-image</code></a></td>
+<td>Push the Docker image for this project to the container registry.</td>
+</tr>
+<tr>
+<td><a href="../reference/build/"><code>build</code></a></td>
+<td>Build the project and its containers.</td>
+</tr>
+<tr>
+<td><a href="../reference/container-shell/"><code>container-shell</code></a></td>
+<td>Run the debug image with an interactive shell.</td>
+</tr>
+</tbody>
+</table>
+<!-- end-generated-task-reference -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.sections","navigation.expand","navigation.top","content.code.copy","toc.follow"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"default":["latest","dev"],"provider":"mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>
