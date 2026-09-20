@@ -29,6 +29,17 @@ def test_zensical_site_has_expected_pages():
     assert Path("docs/tasks/reference/build-image.md").is_file()
 
 
+def test_zensical_site_enables_mike_versioning():
+    with Path("zensical.toml").open("rb") as config_file:
+        project = tomllib.load(config_file)["project"]
+
+    assert project["extra"]["version"] == {
+        "provider": "mike",
+        "default": ["latest", "dev"],
+    }
+    assert project["plugins"]["mike"]["alias_type"] == "redirect"
+
+
 def test_reusable_docs_workflow_supports_artifacts_and_publishers():
     workflow = Path(".github/workflows/docs.yml").read_text(encoding="utf-8")
 
@@ -44,6 +55,11 @@ def test_reusable_docs_workflow_supports_artifacts_and_publishers():
     )
     assert "actions/upload-pages-artifact@v5" in workflow
     assert "actions/deploy-pages@v5" in workflow
+    assert "docs_version:" in workflow
+    assert "docs_aliases:" in workflow
+    assert "docs_default_version:" in workflow
+    assert "github.com/squidfunk/mike.git@2d4ad799" in workflow
+    assert "Upload versioned GitHub Pages artifact" in workflow
 
 
 def test_repository_uses_reusable_docs_workflow():
@@ -67,6 +83,8 @@ def test_repository_uses_reusable_docs_workflow():
     assert "generated_docs_check_task: check-docs-references" in preview_workflow
     assert "uses: ./.github/workflows/docs.yml" in deploy_workflow
     assert "deploy_github_pages: true" in deploy_workflow
+    assert "docs_version: ${{ needs.metadata.outputs.version }}" in deploy_workflow
+    assert "- 'v*'" in deploy_workflow
     assert "generated_docs_check_task: check-docs-references" in deploy_workflow
     cleanup_workflow = Path(".github/workflows/docs-preview-cleanup.yml").read_text(
         encoding="utf-8"
