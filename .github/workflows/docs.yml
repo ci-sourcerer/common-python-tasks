@@ -32,11 +32,41 @@ on:
         required: false
         default: docs-site
         type: string
+      checkout_ref:
+        description: Optional Git ref to check out when building documentation
+        required: false
+        default: ''
+        type: string
       deploy_github_pages:
         description: Deploy the rendered site to GitHub Pages
         required: false
         default: false
         type: boolean
+      docs_version:
+        description: Version identifier used for a GitHub Pages deployment
+        required: false
+        default: dev
+        type: string
+      docs_version_title:
+        description: Optional display title for the documentation version
+        required: false
+        default: ''
+        type: string
+      docs_aliases:
+        description: JSON array of aliases assigned to the documentation version
+        required: false
+        default: '[]'
+        type: string
+      docs_default_version:
+        description: Optional version or alias used as the documentation site root
+        required: false
+        default: ''
+        type: string
+      docs_versions_branch:
+        description: Git branch that stores assembled versioned documentation
+        required: false
+        default: gh-pages
+        type: string
       publish_cloudflare:
         description: Publish an internal pull request to Cloudflare Pages
         required: false
@@ -74,12 +104,19 @@ on:
         description: Stable Cloudflare Pages branch alias when a preview was published
         value: ${{ jobs.build.outputs.preview_url }}
 
+concurrency:
+  group: >-
+    ${{ inputs.deploy_github_pages &&
+        format('versioned-docs-{0}-{1}', github.repository, inputs.docs_versions_branch) ||
+        format('docs-build-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build documentation
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       deployments: write
       pages: write
     outputs:
@@ -87,6 +124,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.checkout_ref }}
 
       - name: Set up Python ${{ inputs.python_version }}
         uses: actions/setup-python@v7
@@ -130,6 +170,95 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: ${{ inputs.site_path }}/
           if-no-files-found: error
+
+      - name: Validate versioned documentation configuration
+        if: inputs.deploy_github_pages
+        env:
+          DOCS_ALIASES: ${{ inputs.docs_aliases }}
+          DOCS_DEFAULT_VERSION: ${{ inputs.docs_default_version }}
+          DOCS_VERSION: ${{ inputs.docs_version }}
+          DOCS_VERSION_TITLE: ${{ inputs.docs_version_title }}
+          DOCS_VERSIONS_BRANCH: ${{ inputs.docs_versions_branch }}
+        run: |
+          identifier_pattern='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+          if [[ ! "$DOCS_VERSION" =~ $identifier_pattern ]]; then
+            echo "Invalid documentation version: $DOCS_VERSION" >&2
+            exit 2
+          fi
+          if [[ "$DOCS_VERSION_TITLE" == *$'\n'* || "$DOCS_VERSION_TITLE" == *$'\r'* ]]; then
+            echo 'Documentation version titles cannot contain newlines.' >&2
+            exit 2
+          fi
+          if [[ -n "$DOCS_DEFAULT_VERSION" && ! "$DOCS_DEFAULT_VERSION" =~ $identifier_pattern ]]; then
+            echo "Invalid default documentation version: $DOCS_DEFAULT_VERSION" >&2
+            exit 2
+          fi
+          if ! git check-ref-format "refs/heads/$DOCS_VERSIONS_BRANCH"; then
+            echo "Invalid documentation versions branch: $DOCS_VERSIONS_BRANCH" >&2
+            exit 2
+          fi
+          if ! jq --exit-status \
+            --arg pattern "$identifier_pattern" \
+            'type == "array" and all(.[]; type == "string" and test($pattern))' \
+            <<< "$DOCS_ALIASES" > /dev/null; then
+            echo 'Documentation aliases must be a JSON array of valid identifiers.' >&2
+            exit 2
+          fi
+
+      - name: Install versioned documentation support
+        if: inputs.deploy_github_pages
+        env:
+          MIKE_PACKAGE: mike @ git+https://github.com/squidfunk/mike.git@2d4ad799442f4592db8ad53b179bfb33db8c69ac
+        run: uv pip install "$MIKE_PACKAGE"
+
+      - name: Assemble versioned documentation
+        if: inputs.deploy_github_pages
+        env:
+          DOCS_ALIASES: ${{ inputs.docs_aliases }}
+          DOCS_DEFAULT_VERSION: ${{ inputs.docs_default_version }}
+          DOCS_VERSION: ${{ inputs.docs_version }}
+          DOCS_VERSION_TITLE: ${{ inputs.docs_version_title }}
+          DOCS_VERSIONS_BRANCH: ${{ inputs.docs_versions_branch }}
+          SITE_PATH: ${{ inputs.site_path }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          args=(
+            deploy
+            --branch "$DOCS_VERSIONS_BRANCH"
+            --alias-type redirect
+            --update-aliases
+          )
+          if [[ -n "$DOCS_VERSION_TITLE" ]]; then
+            args+=(--title "$DOCS_VERSION_TITLE")
+          fi
+          args+=("$DOCS_VERSION")
+          mapfile -t aliases < <(jq --raw-output '.[]' <<< "$DOCS_ALIASES")
+          args+=("${aliases[@]}")
+          uv run --no-sync mike "${args[@]}"
+
+          if ! grep --recursive --include='*.html' --extended-regexp --quiet \
+            '"provider"[[:space:]]*:[[:space:]]*"mike"' \
+            "$SITE_PATH"; then
+            echo 'The versioned build does not enable the mike version selector.' >&2
+            exit 2
+          fi
+
+          if [[ -n "$DOCS_DEFAULT_VERSION" ]]; then
+            uv run --no-sync mike set-default \
+              --branch "$DOCS_VERSIONS_BRANCH" \
+              "$DOCS_DEFAULT_VERSION"
+          elif ! git cat-file --exit-code \
+            "$DOCS_VERSIONS_BRANCH:index.html" > /dev/null 2>&1; then
+            uv run --no-sync mike set-default \
+              --branch "$DOCS_VERSIONS_BRANCH" \
+              "$DOCS_VERSION"
+          fi
+          git push -- origin "$DOCS_VERSIONS_BRANCH"
+
+          mkdir versioned-site
+          git archive "$DOCS_VERSIONS_BRANCH" | tar --extract --directory versioned-site
 
       - name: Validate Cloudflare preview configuration
         if: inputs.publish_cloudflare
@@ -343,11 +472,11 @@ jobs:
         if: inputs.deploy_github_pages
         uses: actions/configure-pages@v6
 
-      - name: Upload GitHub Pages artifact
+      - name: Upload versioned GitHub Pages artifact
         if: inputs.deploy_github_pages
         uses: actions/upload-pages-artifact@v5
         with:
-          path: ${{ inputs.site_path }}/
+          path: versioned-site/
 
   deploy:
     name: Deploy documentation

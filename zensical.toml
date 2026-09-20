@@ -5,6 +5,13 @@ site_url = "https://ci-sourcerer.github.io/common-python-tasks/"
 repo_name = "ci-sourcerer/common-python-tasks"
 repo_url = "https://github.com/ci-sourcerer/common-python-tasks"
 
+[project.extra.version]
+provider = "mike"
+default = ["latest", "dev"]
+
+[project.plugins.mike]
+alias_type = "redirect"
+
 [project.theme]
 features = [
   "navigation.sections",
