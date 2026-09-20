@@ -43,9 +43,9 @@ on:
         default: false
         type: boolean
       docs_version:
-        description: Optional version identifier used for a versioned GitHub Pages deployment
+        description: Version identifier used for a GitHub Pages deployment
         required: false
-        default: ''
+        default: dev
         type: string
       docs_version_title:
         description: Optional display title for the documentation version
@@ -106,7 +106,7 @@ on:
 
 concurrency:
   group: >-
-    ${{ inputs.docs_version != '' &&
+    ${{ inputs.deploy_github_pages &&
         format('versioned-docs-{0}-{1}', github.repository, inputs.docs_versions_branch) ||
         format('docs-build-{0}', github.run_id) }}
   cancel-in-progress: false
@@ -172,9 +172,8 @@ jobs:
           if-no-files-found: error
 
       - name: Validate versioned documentation configuration
-        if: inputs.docs_version != ''
+        if: inputs.deploy_github_pages
         env:
-          DEPLOY_GITHUB_PAGES: ${{ inputs.deploy_github_pages }}
           DOCS_ALIASES: ${{ inputs.docs_aliases }}
           DOCS_DEFAULT_VERSION: ${{ inputs.docs_default_version }}
           DOCS_VERSION: ${{ inputs.docs_version }}
@@ -182,10 +181,6 @@ jobs:
           DOCS_VERSIONS_BRANCH: ${{ inputs.docs_versions_branch }}
         run: |
           identifier_pattern='^[A-Za-z0-9][A-Za-z0-9._-]*$'
-          if [[ "$DEPLOY_GITHUB_PAGES" != "true" ]]; then
-            echo 'A documentation version requires GitHub Pages deployment.' >&2
-            exit 2
-          fi
           if [[ ! "$DOCS_VERSION" =~ $identifier_pattern ]]; then
             echo "Invalid documentation version: $DOCS_VERSION" >&2
             exit 2
@@ -211,13 +206,13 @@ jobs:
           fi
 
       - name: Install versioned documentation support
-        if: inputs.docs_version != ''
+        if: inputs.deploy_github_pages
         env:
           MIKE_PACKAGE: mike @ git+https://github.com/squidfunk/mike.git@2d4ad799442f4592db8ad53b179bfb33db8c69ac
         run: uv pip install "$MIKE_PACKAGE"
 
       - name: Assemble versioned documentation
-        if: inputs.docs_version != ''
+        if: inputs.deploy_github_pages
         env:
           DOCS_ALIASES: ${{ inputs.docs_aliases }}
           DOCS_DEFAULT_VERSION: ${{ inputs.docs_default_version }}
@@ -477,14 +472,8 @@ jobs:
         if: inputs.deploy_github_pages
         uses: actions/configure-pages@v6
 
-      - name: Upload GitHub Pages artifact
-        if: inputs.deploy_github_pages && inputs.docs_version == ''
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: ${{ inputs.site_path }}/
-
       - name: Upload versioned GitHub Pages artifact
-        if: inputs.deploy_github_pages && inputs.docs_version != ''
+        if: inputs.deploy_github_pages
         uses: actions/upload-pages-artifact@v5
         with:
           path: versioned-site/

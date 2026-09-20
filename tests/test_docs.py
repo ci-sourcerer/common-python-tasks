@@ -60,6 +60,15 @@ def test_reusable_docs_workflow_supports_artifacts_and_publishers():
     assert "docs_default_version:" in workflow
     assert "github.com/squidfunk/mike.git@2d4ad799" in workflow
     assert "Upload versioned GitHub Pages artifact" in workflow
+    assert (
+        """docs_version:
+        description: Version identifier used for a GitHub Pages deployment
+        required: false
+        default: dev"""
+        in workflow
+    )
+    assert workflow.count("actions/upload-pages-artifact@v5") == 1
+    assert "if: inputs.deploy_github_pages && inputs.docs_version == ''" not in workflow
 
 
 def test_repository_uses_reusable_docs_workflow():

@@ -83,9 +83,9 @@ jobs:
 
 The project is created on the first trusted pull request, using `main` as its production branch by default. Set `cloudflare_production_branch` if the repository uses a different default branch. Set `cloudflare_preview_domain` to publish previews at `pr-42.preview.example.com`; leave it empty to use `pr-42.stacksmith-docs.pages.dev`. Set `cloudflare_preview_zone` when the preview domain is a subdomain of the DNS zone. The API token needs Pages Write, Zone Read, and Zone DNS Edit permissions when custom preview domains are enabled. Fork pull requests receive the build artifact but are not published because repository secrets are unavailable. A separate `pull_request`-closed workflow can remove the custom hostname, its matching DNS record, and older deployments for that preview branch while preserving the shared Pages project. Cloudflare retains the latest branch deployment.
 
-## Deploy a single documentation site to GitHub Pages
+## Deploy documentation to GitHub Pages
 
-Enable GitHub Actions as the repository's Pages source. A default-branch caller can then select production deployment. Existing callers continue to use this mode when `docs_version` is empty.
+Enable GitHub Actions as the repository's Pages source. GitHub Pages deployments are versioned by default and publish the current checkout as `dev` unless the caller selects another version. The caller must grant `contents: write` so the workflow can update the versions branch.
 
 ```yaml
 jobs:
@@ -96,14 +96,14 @@ jobs:
       dependency_group: dev
       deploy_github_pages: true
     permissions:
-      contents: read
+      contents: write
       pages: write
       id-token: write
 ```
 
-Pin the workflow to the release that matches the installed package. Pin an exact commit SHA when an immutable workflow reference is required.
+This initial deployment creates `dev` and uses it as the site root when the versions branch does not already contain a root redirect. Pin the workflow to the release that matches the installed package. Pin an exact commit SHA when an immutable workflow reference is required.
 
-## Deploy versioned documentation to GitHub Pages
+## Configure versioned documentation
 
 Versioned deployment uses the Zensical-compatible `mike` fork. The workflow keeps generated versions on a Git branch and publishes the assembled branch through GitHub Actions, so the repository's Pages source remains GitHub Actions. The fork is a transitional dependency until Zensical provides native versioning support.
 
@@ -118,7 +118,7 @@ default = ["latest", "dev"]
 alias_type = "redirect"
 ```
 
-Pass a version identifier when deploying. The caller must grant `contents: write` so the workflow can update the versions branch.
+Pass a version identifier, title, aliases, and default version when publishing a release.
 
 ```yaml
 jobs:
@@ -141,6 +141,22 @@ jobs:
 `docs_aliases` must be a JSON array. Versions and aliases accept letters, digits, periods, underscores, and hyphens. The default versions branch is `gh-pages`; set `docs_versions_branch` to use another valid Git branch. The reusable workflow serializes updates to each repository and versions branch. Alias redirects are updated atomically with the version metadata, and versions not named by the current deployment remain unchanged.
 
 The workflow still performs the strict `poe docs-build` check and uploads the current checkout as the normal Actions artifact. It then builds through `mike`, updates the versions branch, and gives the complete assembled site to GitHub Pages.
+
+## Preview multiple versions locally
+
+`poe docs-serve` builds and watches only the current checkout. It is the quickest way to review content, but its version selector has no assembled `versions.json` to load.
+
+Install the same pinned Zensical-compatible `mike` fork used by the workflow, assemble two versions on a disposable local Git branch, and serve that branch.
+
+```shell
+uv pip install 'mike @ git+https://github.com/squidfunk/mike.git@2d4ad799442f4592db8ad53b179bfb33db8c69ac'
+uv run --no-sync mike deploy --branch local-docs --alias-type redirect --update-aliases --title Development dev
+uv run --no-sync mike deploy --branch local-docs --alias-type redirect --update-aliases --title 0.12.1 0.12 latest
+uv run --no-sync mike set-default --branch local-docs latest
+uv run --no-sync mike serve --branch local-docs
+```
+
+Open `http://localhost:8000/`. The root redirects to `latest`, and the selector switches between `0.12` and `dev`. These commands create only local commits on `local-docs`; they do not push anything. Stop the server before removing the disposable branch with `git branch -D local-docs`.
 
 ## Publish development and release versions
 
