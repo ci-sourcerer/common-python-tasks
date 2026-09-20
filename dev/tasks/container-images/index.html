@@ -1908,7 +1908,7 @@ PUBLIC_API_URL="https://api.example.com"
 poe<span class="w"> </span>build<span class="w"> </span>--dockerfile-path<span class="w"> </span>docker/Dockerfile.ci
 poe<span class="w"> </span>release<span class="w"> </span>--dockerfile-path<span class="w"> </span>docker/Dockerfile.release
 </code></pre></div>
-<p>The project root remains the Docker build context. Standard image naming, version and commit tags, metadata build arguments, <code>CONTAINER_DOCKER_BUILD_ARGS</code>, Dockerfile hooks, image pruning, and release-time image pushing continue to work. A normal custom build does not select a target stage, so the Dockerfile does not need the bundled <code>runtime</code> stage. A custom debug build selects a stage named <code>debug</code>.</p>
+<p>The project root remains the Docker build context. Standard image naming, version and commit tags, metadata build arguments, <code>CONTAINER_DOCKER_BUILD_OPTIONS</code>, Dockerfile hooks, image pruning, and release-time image pushing continue to work. A normal custom build does not select a target stage, so the Dockerfile does not need the bundled <code>runtime</code> stage. A custom debug build selects a stage named <code>debug</code>.</p>
 <p>Settings that render content into the bundled template do not alter a project-owned Dockerfile. This includes <code>CONTAINER_APT_PACKAGES</code>, <code>CONTAINER_CUSTOM_ENTRYPOINT</code>, <code>CONTAINER_ENV</code>, extensions, and dependency-image mappings. Declare equivalent instructions in the project-owned Dockerfile when they are needed. BuildKit secrets derived from <code>UV_INDEX_*</code> credentials remain available as Docker build secrets, but the custom Dockerfile must mount them explicitly.</p>
 <h2 id="extending-the-generated-runtime-image">Extending the generated runtime image</h2>
 <p>Use <code>CONTAINER_EXTENSION_FILES</code> to append project-owned Dockerfile fragments without replacing the generic Dockerfile. Its value is a colon-delimited list of paths, such as <code>Dockerfile.system:docker/Dockerfile.browser</code>.</p>
@@ -2011,7 +2011,12 @@ poe<span class="w"> </span>run-container<span class="w"> </span>--privileged
 <p>Arguments following Poe's <code>--</code> separator are passed directly to <code>docker build</code> when the task accepts positional Docker arguments.</p>
 <div class="highlight"><pre><span></span><code>poe<span class="w"> </span>build-image<span class="w"> </span>--single-arch<span class="w"> </span>--<span class="w"> </span>--secret<span class="w"> </span><span class="nv">id</span><span class="o">=</span>pip_conf,env<span class="o">=</span>PIP_CONF
 </code></pre></div>
-<p>Set <code>CONTAINER_DOCKER_BUILD_ARGS</code> to persist the same options using shell quoting rules. Arguments supplied after <code>--</code> replace this setting for that invocation. Managed arguments are emitted before these native Docker arguments, so an explicit option such as <code>--build-arg WORKDIR_PATH=/app</code> can override its managed value.</p>
+<p>Set <code>CONTAINER_DOCKER_BUILD_OPTIONS</code> to persist the same options using shell quoting rules. Options supplied after <code>--</code> replace this setting for that invocation. Managed build arguments are emitted before these native Docker options, so an explicit option such as <code>--build-arg WORKDIR_PATH=/app</code> can override its managed value.</p>
+<p>For project-specific defaults, declare the options in Poe's environment. A name-only <code>--build-arg</code> reads its value from the current environment, while <code>env=</code> explicitly selects the host variable used for a BuildKit secret.</p>
+<div class="highlight"><pre><span></span><code><span class="k">[tool.poe.env]</span>
+<span class="n">CONTAINER_DOCKER_BUILD_OPTIONS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"--secret id=MY_TOKEN,env=MY_TOKEN --build-arg MY_SETTING"</span>
+</code></pre></div>
+<p>The Dockerfile must consume <code>MY_TOKEN</code> with a secret mount. Do not pass sensitive values through <code>--build-arg</code>, because build arguments are not designed to protect secrets.</p>
 <p>See <a href="../../configuration/#container-settings">Container settings</a> for the complete settings reference.</p>
 <!-- generated-task-reference -->
 

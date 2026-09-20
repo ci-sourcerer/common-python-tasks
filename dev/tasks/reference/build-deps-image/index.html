@@ -1415,7 +1415,7 @@
 <p><strong>Category:</strong> <a href="../../container-images/"><code>container-images</code></a></p>
 <p><strong>Tags:</strong> <code>build</code>, <code>containers</code></p>
 <h2 id="usage">Usage</h2>
-<div class="highlight"><pre><span></span><code>poe<span class="w"> </span>build-deps-image<span class="w"> </span><span class="o">[</span>DOCKER_BUILD_ARGS...<span class="o">]</span><span class="w"> </span><span class="o">[</span>--no-cache<span class="o">]</span><span class="w"> </span><span class="o">[</span>--plain<span class="o">]</span><span class="w"> </span><span class="o">[</span>--single-arch<span class="o">]</span>
+<div class="highlight"><pre><span></span><code>poe<span class="w"> </span>build-deps-image<span class="w"> </span><span class="o">[</span>DOCKER_BUILD_OPTIONS...<span class="o">]</span><span class="w"> </span><span class="o">[</span>--no-cache<span class="o">]</span><span class="w"> </span><span class="o">[</span>--plain<span class="o">]</span><span class="w"> </span><span class="o">[</span>--single-arch<span class="o">]</span>
 </code></pre></div>
 <h2 id="arguments">Arguments</h2>
 <table>
@@ -1429,9 +1429,9 @@
 </thead>
 <tbody>
 <tr>
-<td><code>docker_build_args...</code></td>
+<td><code>docker_build_options...</code></td>
 <td><code>string, repeatable</code></td>
-<td>Additional arguments passed directly to <code>docker build</code>. Provide them after the task's <code>--</code> separator. Overrides <code>CONTAINER_DOCKER_BUILD_ARGS</code> when provided.</td>
+<td>Additional options passed directly to <code>docker build</code>. Provide them after the task's <code>--</code> separator. Overrides <code>CONTAINER_DOCKER_BUILD_OPTIONS</code> when provided.</td>
 <td>—</td>
 </tr>
 <tr>
