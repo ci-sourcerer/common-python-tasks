@@ -1,105 +1,105 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/configuration/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/configuration/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/documentation-workflows/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/documentation-workflows/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/getting-started/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/getting-started/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/container-images/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/container-images/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/daily-development/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/daily-development/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/development-stacks/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/development-stacks/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/documentation/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/documentation/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/packaging-and-releases/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/packaging-and-releases/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/build-deps-image/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/build-deps-image/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/build-image/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/build-image/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/build-package/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/build-package/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/build/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/build/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/bump-version/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/bump-version/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/changelog/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/changelog/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/clean/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/clean/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/container-shell/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/container-shell/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/db-shell/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/db-shell/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/docs-build/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/docs-build/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/docs-serve/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/docs-serve/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/format/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/format/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/lint/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/lint/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/publish-github-release/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/publish-github-release/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/publish-package/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/publish-package/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/push-image/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/push-image/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/release/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/release/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/reset-db/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/reset-db/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/run-container/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/run-container/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/run-db-migrations/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/run-db-migrations/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/stack-down/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/stack-down/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/stack-up/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/stack-up/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/test/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/test/</loc>
       </url>
       <url>
-        <loc>https://ci-sourcerer.github.io/common-python-tasks/dev/tasks/reference/update-dependencies/</loc>
+        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/update-dependencies/</loc>
       </url>
 </urlset>
