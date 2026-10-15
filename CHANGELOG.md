@@ -1,3 +1,22 @@
+## [0.13.0] - 2026-10-15
+
+### 🚀 Features
+
+- *(docs)* Support versioned Zensical deployments
+
+### 📚 Documentation
+
+- *(readme)* Point to published documentation
+
+### 🚜 Refactor
+
+- *(docs)* Make versioning the default
+- [**breaking**] Rename docker build args to build options across documentation and code
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.13.0
+
 ## [0.12.1] - 2026-09-18
 
 ### 🐛 Bug Fixes
