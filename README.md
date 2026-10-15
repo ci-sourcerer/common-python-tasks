@@ -2,7 +2,7 @@
 
 `common-python-tasks` provides reusable, opinionated [Poe the Poet](https://poethepoet.natn.io/guides/packaged_tasks.html) tasks for Python development, packaging, releases, containers, and documentation.
 
-Read the [complete documentation](https://ci-sourcerer.github.io/common-python-tasks/) for the task reference, configuration options, and deployment guidance.
+Read the [complete documentation](https://common-python-tasks.ci-sourcerer.com/) for the task reference, configuration options, and deployment guidance.
 
 ## Quick start
 
@@ -50,12 +50,12 @@ poe docs-build
 poe docs-serve
 ```
 
-The [documentation workflow guide](https://ci-sourcerer.github.io/common-python-tasks/documentation-workflows/) covers GitHub Actions artifacts, optional Cloudflare Pages previews, and GitHub Pages deployment.
+The [documentation workflow guide](https://common-python-tasks.ci-sourcerer.com/documentation-workflows/) covers GitHub Actions artifacts, optional Cloudflare Pages previews, and GitHub Pages deployment.
 
 ## Learn more
 
-- [Getting started](https://ci-sourcerer.github.io/common-python-tasks/getting-started/)
-- [Task reference](https://ci-sourcerer.github.io/common-python-tasks/tasks/)
-- [Configuration reference](https://ci-sourcerer.github.io/common-python-tasks/configuration/)
+- [Getting started](https://common-python-tasks.ci-sourcerer.com/getting-started/)
+- [Task reference](https://common-python-tasks.ci-sourcerer.com/tasks/)
+- [Configuration reference](https://common-python-tasks.ci-sourcerer.com/configuration/)
 
 The project is in alpha, so minor releases may contain breaking changes. It is distributed under the [MIT license](LICENSE).

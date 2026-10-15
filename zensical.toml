@@ -1,7 +1,7 @@
 [project]
 site_name = "Common Python Tasks"
 site_description = "Opinionated Poe the Poet tasks for Python package development"
-site_url = "https://ci-sourcerer.github.io/common-python-tasks/"
+site_url = "https://common-python-tasks.ci-sourcerer.com/"
 repo_name = "ci-sourcerer/common-python-tasks"
 repo_url = "https://github.com/ci-sourcerer/common-python-tasks"
 
