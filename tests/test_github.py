@@ -231,3 +231,44 @@ def test_upload_github_release_asset_reports_missing_path(tmp_path, caplog):
         upload_github_release_asset(1, missing_asset)
 
     assert f"GitHub Release asset not found: {missing_asset}" in caplog.text
+
+
+def test_pull_request_requires_token_before_network_request(monkeypatch):
+    from common_python_tasks import github
+
+    monkeypatch.setattr(github, "get_github_repository", lambda: "owner/repo")
+    monkeypatch.setattr(github, "get_github_token", lambda: None)
+    request = Mock()
+    monkeypatch.setattr(github.requests, "request", request)
+    with pytest.raises(SystemExit):
+        github.create_pull_request("Update", "deps/update", "main")
+    request.assert_not_called()
+
+
+def test_upload_release_asset_replaces_only_matching_asset(tmp_path, monkeypatch):
+    from common_python_tasks import github
+
+    asset = tmp_path / "package + build.whl"
+    asset.write_bytes(b"wheel contents")
+    monkeypatch.setattr(
+        github,
+        "get_github_release_assets",
+        Mock(
+            return_value=[
+                {"id": 10, "name": asset.name},
+                {"id": 11, "name": "other.whl"},
+            ]
+        ),
+    )
+    delete = Mock()
+    upload = Mock(return_value={"id": 12})
+    monkeypatch.setattr(github, "delete_github_release_asset", delete)
+    monkeypatch.setattr(github, "github_upload_request", upload)
+    assert github.upload_github_release_asset(1, asset) == {"id": 12}
+    delete.assert_called_once_with(10)
+    upload.assert_called_once_with(
+        "POST",
+        "/releases/1/assets?name=package%20%2B%20build.whl",
+        payload=b"wheel contents",
+        content_type="application/octet-stream",
+    )

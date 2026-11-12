@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -267,16 +268,6 @@ class TestGetImageTag:
             assert get_image_tag() == "0.0.0"
 
 
-def test_get_default_branch_uses_origin_head():
-    from common_python_tasks.git import get_default_branch
-
-    with patch(
-        "common_python_tasks.utils.run_command",
-        return_value=MagicMock(stdout="refs/remotes/origin/trunk\n", returncode=0),
-    ):
-        assert get_default_branch() == "trunk"
-
-
 def test_get_current_branch_rejects_detached_head():
     from common_python_tasks.git import get_current_branch
 
@@ -290,11 +281,64 @@ def test_get_current_branch_rejects_detached_head():
         get_current_branch()
 
 
-def test_default_branch_preserves_slashes():
+@pytest.mark.parametrize("branch", ["trunk", "release/main"])
+def test_default_branch_preserves_full_name(branch):
     from common_python_tasks.git import get_default_branch
 
-    with patch("common_python_tasks.utils.run_command") as run:
-        run.return_value = MagicMock(
-            returncode=0, stdout="refs/remotes/origin/release/main\n"
-        )
-        assert get_default_branch() == "release/main"
+    with patch(
+        "common_python_tasks.utils.run_command",
+        return_value=MagicMock(returncode=0, stdout=f"refs/remotes/origin/{branch}\n"),
+    ):
+        assert get_default_branch() == branch
+
+
+@pytest.fixture
+def git_repository(tmp_path, monkeypatch):
+    import subprocess
+
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], shell=False, check=True)
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    "filename", ["with spaces.py", 'quoted"name.py', "café.py", "line\nbreak.py"]
+)
+def test_dirty_files_preserves_real_filenames(git_repository, filename):
+    from common_python_tasks.git import get_dirty_files
+
+    (git_repository / filename).write_text("content")
+    assert get_dirty_files() == [Path(filename)]
+    assert get_dirty_files(ignore=[Path(filename)]) == []
+
+
+def test_dirty_files_consumes_rename_source_without_skipping_next_record(
+    git_repository,
+):
+    import subprocess
+
+    from common_python_tasks.git import get_dirty_files
+
+    (git_repository / "old name.py").write_text("content")
+    subprocess.run(["git", "add", "."], shell=False, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--quiet",
+            "-m",
+            "initial",
+        ],
+        shell=False,
+        check=True,
+    )
+    subprocess.run(["git", "mv", "old name.py", "new name.py"], shell=False, check=True)
+    (git_repository / "untracked.py").write_text("content")
+    assert get_dirty_files() == [Path("new name.py"), Path("untracked.py")]
+    assert get_dirty_files(ignore=[Path("new name.py")]) == [Path("untracked.py")]

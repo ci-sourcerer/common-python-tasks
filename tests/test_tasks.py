@@ -515,10 +515,11 @@ def test_public_tasks_supports_docs_profile():
     }
 
 
-def test_task_decorator_does_not_log_top_level_task(caplog):
+def test_task_decorator_does_not_log_top_level_task(caplog, monkeypatch):
     import logging
 
     tasks_module = importlib.import_module("common_python_tasks.tasks")
+    monkeypatch.setattr(tasks_module.tasks, "_tasks", tasks_module.tasks._tasks.copy())
 
     caplog.set_level(logging.INFO, logger="common_python_tasks")
 
@@ -531,10 +532,11 @@ def test_task_decorator_does_not_log_top_level_task(caplog):
     assert "Running task top-level-task" not in caplog.text
 
 
-def test_task_decorator_logs_nested_task_only(caplog):
+def test_task_decorator_logs_nested_task_only(caplog, monkeypatch):
     import logging
 
     tasks_module = importlib.import_module("common_python_tasks.tasks")
+    monkeypatch.setattr(tasks_module.tasks, "_tasks", tasks_module.tasks._tasks.copy())
 
     caplog.set_level(logging.INFO, logger="common_python_tasks")
 
@@ -2249,13 +2251,48 @@ def test_run_container_falls_back_to_full_image_reference_when_short_missing(
     assert run_calls[0][-1] == "ghcr.io/acme/test-package:custom-tag"
 
 
-def test_clean_preserves_environment_bytecode(tmp_path, monkeypatch):
+@pytest.mark.parametrize("excluded", [".venv", "venv", "vendor", "node_modules"])
+def test_clean_preserves_environment_bytecode(tmp_path, monkeypatch, excluded):
     from common_python_tasks.tasks import clean
 
     monkeypatch.chdir(tmp_path)
-    for directory in (".venv/lib/__pycache__", "src/__pycache__"):
+    for directory in (f"{excluded}/lib/__pycache__", "src/__pycache__"):
         (tmp_path / directory).mkdir(parents=True)
         (tmp_path / directory / "module.pyc").write_bytes(b"bytecode")
     clean()
-    assert (tmp_path / ".venv/lib/__pycache__/module.pyc").is_file()
+    assert (tmp_path / excluded / "lib/__pycache__/module.pyc").is_file()
     assert not (tmp_path / "src/__pycache__").exists()
+
+
+def test_clean_dist_only_preserves_other_artifacts(tmp_path, monkeypatch):
+    from common_python_tasks.tasks import clean
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist/package.whl").write_bytes(b"wheel")
+    (tmp_path / ".coverage").write_bytes(b"coverage")
+    clean(dist_only=True)
+    assert not (tmp_path / "dist").exists()
+    assert (tmp_path / ".coverage").read_bytes() == b"coverage"
+
+
+def test_task_decorator_restores_call_depth_after_failure(caplog, monkeypatch):
+    import logging
+
+    from common_python_tasks.tasks import tasks
+
+    monkeypatch.setattr(tasks, "_tasks", tasks._tasks.copy())
+    caplog.set_level(logging.INFO, logger="common_python_tasks")
+
+    @tasks.script(task_name="failing-task", tags=())
+    def failing_task():
+        raise ValueError("expected failure")
+
+    @tasks.script(task_name="following-task", tags=())
+    def following_task():
+        return "ok"
+
+    with pytest.raises(ValueError, match="expected failure"):
+        failing_task()
+    assert following_task() == "ok"
+    assert "Running task following-task" not in caplog.text

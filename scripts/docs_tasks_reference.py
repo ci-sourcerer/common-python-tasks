@@ -35,8 +35,6 @@ def _get_task_category(task_name: str) -> str:
     tags = get_task_tags(task_name) or []
     if "docs" in tags:
         return "documentation"
-    if "web" in tags or "database" in tags:
-        return "development-stacks"
     if task_name == "release":
         return "packaging-and-releases"
     if "containers" in tags:
