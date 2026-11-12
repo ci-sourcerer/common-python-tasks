@@ -400,8 +400,16 @@ def clean(dist_only: bool = False) -> None:
                     ".ruff_cache",
                 ]
             ],
-            *Path(".").rglob("__pycache__"),
-            *Path(".").rglob("*.pyc"),
+            *[
+                p
+                for p in Path(".").rglob("__pycache__")
+                if not {".venv", "venv", "vendor", "node_modules"}.intersection(p.parts)
+            ],
+            *[
+                p
+                for p in Path(".").rglob("*.pyc")
+                if not {".venv", "venv", "vendor", "node_modules"}.intersection(p.parts)
+            ],
         ]
 
     for item in to_clean:

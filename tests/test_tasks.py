@@ -2211,3 +2211,15 @@ def test_run_container_falls_back_to_full_image_reference_when_short_missing(
     ]
     assert len(run_calls) == 1
     assert run_calls[0][-1] == "ghcr.io/acme/test-package:custom-tag"
+
+
+def test_clean_preserves_environment_bytecode(tmp_path, monkeypatch):
+    from common_python_tasks.tasks import clean
+
+    monkeypatch.chdir(tmp_path)
+    for directory in (".venv/lib/__pycache__", "src/__pycache__"):
+        (tmp_path / directory).mkdir(parents=True)
+        (tmp_path / directory / "module.pyc").write_bytes(b"bytecode")
+    clean()
+    assert (tmp_path / ".venv/lib/__pycache__/module.pyc").is_file()
+    assert not (tmp_path / "src/__pycache__").exists()
