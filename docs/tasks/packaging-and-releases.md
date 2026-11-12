@@ -19,3 +19,5 @@ Publish targets and release hooks are described in [Configuration](../configurat
 | [`release`](reference/release.md) | Run a full release flow for package and containers. |
 
 <!-- end-generated-task-reference -->
+
+Automatic releases default to a patch bump when no version bump is inferred, including when there are no new commits. Empty generated release notes use “No conventional commit messages found.” No synthetic commits are created for version inference.

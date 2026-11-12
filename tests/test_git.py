@@ -342,3 +342,21 @@ def test_dirty_files_consumes_rename_source_without_skipping_next_record(
     (git_repository / "untracked.py").write_text("content")
     assert get_dirty_files() == [Path("new name.py"), Path("untracked.py")]
     assert get_dirty_files(ignore=[Path("new name.py")]) == [Path("untracked.py")]
+
+
+@pytest.mark.parametrize("output", ["", "v1.2.3"])
+def test_inference_defaults_to_patch(output):
+    from common_python_tasks.git import (
+        ReleaseComponent,
+        infer_bump_component_from_git_cliff,
+    )
+
+    with (
+        patch("shutil.which", return_value="git-cliff"),
+        patch(
+            "common_python_tasks.utils.run_git_cliff",
+            return_value=MagicMock(stdout=output),
+        ),
+        patch("common_python_tasks.project.get_project_version", return_value="1.2.3"),
+    ):
+        assert infer_bump_component_from_git_cliff() == ReleaseComponent.PATCH

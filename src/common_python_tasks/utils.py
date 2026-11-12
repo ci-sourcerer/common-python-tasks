@@ -563,6 +563,19 @@ def run_git_cliff(
     )
 
 
+NO_CONVENTIONAL_COMMITS = "No conventional commit messages found."
+
+
+def _normalize_release_notes(notes: str | None) -> str:
+    if not notes or not notes.strip():
+        return NO_CONVENTIONAL_COMMITS
+    if all(
+        line.strip().startswith("#") or not line.strip() for line in notes.splitlines()
+    ):
+        return f"{notes.rstrip()}\n\n{NO_CONVENTIONAL_COMMITS}"
+    return notes.strip()
+
+
 def get_prepended_changelog_contents(
     tag_name: str,
     changelog_path: Path = Path("CHANGELOG.md"),
@@ -582,7 +595,9 @@ def get_prepended_changelog_contents(
         else "# Changelog\n\n## [Unreleased]\n"
     )
     res = run_git_cliff(["--unreleased", "--tag", tag_name], capture_output=True)
-    release_notes = res.stdout if (res and res.stdout) else ""
+    release_notes = _normalize_release_notes(res.stdout if res else None)
+    if release_notes == NO_CONVENTIONAL_COMMITS:
+        release_notes = f"## [{tag_name}]\n\n{release_notes}"
     if release_notes.strip():
         # Ensure the prepended section is separated from existing content.
         release_notes = release_notes.rstrip("\n") + "\n\n"
@@ -611,24 +626,21 @@ def prepend_changelog(
     )
 
 
-def changelog() -> str | None:
-    """Generate release notes from git-cliff for unreleased commits.
+def changelog() -> str:
+    """Generate release notes for unreleased commits.
 
     Returns:
-        Generated release notes, or `None` when git-cliff produces no content.
+        Generated notes, or a placeholder when no notes were generated.
     """
     res = run_git_cliff(["--unreleased"], capture_output=True)
-    if not res or not res.stdout:
-        LOGGER.warning("git-cliff produced no release notes for unreleased commits")
-        return None
-
-    result = res.stdout
-    return re.sub(
-        r"(?im)\A##\s*\[?unreleased\]?\s*\n?",
-        "",
-        result,
-        count=1,
-    ).strip()
+    return _normalize_release_notes(
+        re.sub(
+            r"(?im)\A##\s*\[?unreleased\]?\s*\n?",
+            "",
+            res.stdout if res else "",
+            count=1,
+        ).strip()
+    )
 
 
 def confirm(message: str) -> bool:

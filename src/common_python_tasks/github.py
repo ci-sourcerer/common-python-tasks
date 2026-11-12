@@ -460,13 +460,15 @@ def publish_github_release(
 
     release_name = release_name or tag_name
     release_body = body if body is not None else _changelog()
+    if body is None and release_body == utils.NO_CONVENTIONAL_COMMITS:
+        release_body = _latest_tagged_changelog()
     if release_body is not None and _is_unreleased_placeholder(release_body):
         LOGGER.debug(
             "git-cliff returned an unreleased placeholder; using latest tagged release notes instead"
         )
         release_body = _latest_tagged_changelog()
-    if release_body is None:
-        release_body = f"Release {tag_name}"
+    if body is None:
+        release_body = utils._normalize_release_notes(release_body)
 
     payload = {
         "tag_name": tag_name,

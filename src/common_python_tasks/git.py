@@ -186,10 +186,8 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     )
     version_text = result.stdout.strip()
     if not version_text:
-        utils.fatal(
-            "git-cliff did not return a bumped version. "
-            "Ensure there are unreleased commits and git-cliff is configured correctly."
-        )
+        LOGGER.info("No version bump inferred; using a patch release")
+        return ReleaseComponent.PATCH
 
     normalized_version = version_text.lstrip("v")
     try:
@@ -205,6 +203,20 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
 
     bumped_major, bumped_minor, bumped_patch = _parse_semver(bumped.base)
     current_major, current_minor, current_patch = _parse_semver(current.base)
+
+    if (bumped_major, bumped_minor, bumped_patch) < (
+        current_major,
+        current_minor,
+        current_patch,
+    ):
+        utils.fatal("git-cliff inferred a version below the current version")
+    if (bumped_major, bumped_minor, bumped_patch) == (
+        current_major,
+        current_minor,
+        current_patch,
+    ):
+        LOGGER.info("No version bump inferred; using a patch release")
+        return ReleaseComponent.PATCH
 
     if bumped_major != current_major:
         return ReleaseComponent.MAJOR
