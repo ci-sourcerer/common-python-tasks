@@ -340,8 +340,6 @@ def has_debug_dependency_group() -> bool:
         `True` when `[dependency-groups].debug` exists and has entries.
     """
     debug_group = read_pyproject_toml().get("dependency-groups", {}).get("debug")
-    if isinstance(debug_group, (list, tuple, set)):
-        return bool(debug_group)
     return bool(debug_group)
 
 

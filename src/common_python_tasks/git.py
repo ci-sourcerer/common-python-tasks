@@ -152,6 +152,22 @@ def build_release_hook_environment(
     }
 
 
+def _parse_semver(version_value: str | Any) -> tuple[int, int, int]:
+    if not isinstance(version_value, str):
+        version_value = str(version_value)
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version_value)
+    if match is None:
+        utils.fatal(
+            f"Unable to parse semantic version from: {version_value!r}. "
+            "Expected a version like X.Y.Z."
+        )
+    return tuple(int(part) for part in match.groups())
+
+
+def _serialize_base(value: Any) -> str:
+    return getattr(value, "serialize", lambda: str(value))()
+
+
 def infer_bump_component_from_git_cliff() -> ReleaseComponent:
     """Infer the next semantic version bump type using git-cliff.
 
@@ -186,20 +202,6 @@ def infer_bump_component_from_git_cliff() -> ReleaseComponent:
         current = Version.parse(current_version)
     except ValueError:
         utils.fatal(f"Unable to parse current project version: {current_version!r}")
-
-    def _parse_semver(version_value: str | Any) -> tuple[int, int, int]:
-        if not isinstance(version_value, str):
-            version_value = str(version_value)
-        match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version_value)
-        if match is None:
-            utils.fatal(
-                f"Unable to parse semantic version from: {version_value!r}. "
-                "Expected a version like X.Y.Z."
-            )
-        return tuple(int(part) for part in match.groups())
-
-    def _serialize_base(value: Any) -> str:
-        return getattr(value, "serialize", lambda: str(value))()
 
     bumped_major, bumped_minor, bumped_patch = _parse_semver(bumped.base)
     current_major, current_minor, current_patch = _parse_semver(current.base)
