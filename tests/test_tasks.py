@@ -276,7 +276,7 @@ def test_docker_build_options_are_optional_free_task_arguments(task_name):
 
 
 @pytest.mark.parametrize(
-    "task_name", ["build-image", "build-deps-image", "build", "release", "stack-up"]
+    "task_name", ["build-image", "build-deps-image", "build", "release"]
 )
 def test_container_tasks_do_not_expose_deprecated_build_args(task_name):
     from common_python_tasks.tasks import tasks as task_collection
@@ -496,7 +496,7 @@ def test_public_tasks_supports_explicit_empty_include_for_all_tasks():
     task_map = common_python_tasks.tasks(include_tags=())["tasks"]
 
     assert "build-image" in task_map
-    assert "stack-up" in task_map
+    assert "stack-up" not in task_map
     assert "docs-build" in task_map
 
 
@@ -1942,158 +1942,6 @@ def test_publish_github_release_uses_project_release_tag_when_not_provided():
         assets=[],
     )
     mock_get_assets.assert_called_once_with(None)
-
-
-def test_fastapi_stack_up_passes_container_build_options(
-    temp_project_dir,
-    mock_load_data_file,
-    mock_run_command,
-):
-    from common_python_tasks.tasks import fastapi_stack_up
-
-    build_image_calls = []
-
-    def fake_build_image(*args, **kwargs):
-        build_image_calls.append((args, kwargs))
-        return MagicMock(commit_tag="commit", dockerfile_text="FROM python")
-
-    with (
-        patch("common_python_tasks.docker.build_image") as mock_low_level_build_image,
-        patch("common_python_tasks.tasks.build_image", new=fake_build_image),
-        patch(
-            "common_python_tasks.env.load_container_env_tokens", return_value=["X=1"]
-        ),
-        patch(
-            "common_python_tasks.docker_compose.ensure_secrets_generated"
-        ) as mock_secrets,  # noqa: F841
-        patch(
-            "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([], [], [], {"API_PORT": "8080"}),
-        ),
-        patch("common_python_tasks.docker_compose.run_docker_compose_command"),
-    ):
-        fastapi_stack_up(
-            detach=True,
-            container_env=["X=1"],
-            container_envfile=["env1.env"],
-        )
-
-    assert len(build_image_calls) == 1
-    args, kwargs = build_image_calls[0]
-    assert args == ()
-    assert kwargs["container_env"] == ["X=1"]
-    assert kwargs["container_envfile"] == ["env1.env"]
-    assert mock_low_level_build_image.call_count == 0
-
-
-def test_fastapi_stack_up_detach_passes_tasks_to_compose_command(
-    temp_project_dir,
-    mock_load_data_file,
-    mock_run_command,
-):
-    from common_python_tasks.tasks import fastapi_stack_up
-
-    with (
-        patch(
-            "common_python_tasks.tasks.build_image",
-            return_value=MagicMock(commit_tag="commit", dockerfile_text="FROM python"),
-        ),
-        patch(
-            "common_python_tasks.env.load_container_env_tokens", return_value=["X=1"]
-        ),
-        patch("common_python_tasks.docker_compose.ensure_secrets_generated"),
-        patch(
-            "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([], [], [], {"API_PORT": "8080"}),
-        ),
-        patch(
-            "common_python_tasks.docker_compose.run_docker_compose_command"
-        ) as mock_run,
-    ):
-        fastapi_stack_up(detach=True)
-
-    assert mock_run.call_count == 1
-    assert "tasks" in mock_run.call_args.kwargs
-
-
-@pytest.mark.parametrize("migration_exit", [0, 23])
-def test_fastapi_run_db_migrations_waits_and_cleans_up(tmp_path, migration_exit):
-    from common_python_tasks.tasks import fastapi_run_db_migrations
-
-    compose_file = tmp_path / "compose.yml"
-    config_file = tmp_path / "alembic.ini"
-    compose_file.touch()
-    config_file.touch()
-    with (
-        patch(
-            "common_python_tasks.tasks.build_image",
-            return_value=MagicMock(commit_tag="abc123"),
-        ),
-        patch("common_python_tasks.docker_compose.ensure_secrets_generated"),
-        patch(
-            "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([compose_file], [compose_file], [config_file], {}),
-        ) as prepare,
-        patch(
-            "common_python_tasks.docker_compose.run_docker_compose_command",
-            side_effect=[
-                None,
-                SystemExit(migration_exit) if migration_exit else None,
-                None,
-            ],
-        ) as run,
-    ):
-        if migration_exit:
-            with pytest.raises(SystemExit) as error:
-                fastapi_run_db_migrations()
-            assert error.value.code == migration_exit
-        else:
-            fastapi_run_db_migrations()
-
-    prepare.assert_called_once_with(image_tag="abc123")
-    assert [invocation.args for invocation in run.call_args_list] == [
-        ("up", "-d", "--no-build", "db"),
-        ("run", "--rm", "migrator"),
-        ("rm", "-f", "-s", "-v", "db", "migrator"),
-    ]
-    assert not compose_file.exists()
-    assert not config_file.exists()
-
-
-def test_fastapi_stack_down_passes_tasks_to_compose_command():
-    from common_python_tasks.tasks import fastapi_stack_down
-
-    with (
-        patch(
-            "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([], [], [], {"API_PORT": "8080"}),
-        ),
-        patch(
-            "common_python_tasks.docker_compose.run_docker_compose_command"
-        ) as mock_run,
-    ):
-        fastapi_stack_down()
-
-    assert mock_run.call_count == 1
-    assert "tasks" in mock_run.call_args.kwargs
-
-
-def test_fastapi_stack_down_removes_generated_config(tmp_path):
-    from common_python_tasks.tasks import fastapi_stack_down
-
-    generated_config = tmp_path / ".fastapi.alembic.ini.common-python-tasks"
-    generated_config.write_text("generated", encoding="utf-8")
-
-    with (
-        patch(
-            "common_python_tasks.docker_compose.load_and_prepare_compose",
-            return_value=([], [], [generated_config], {"API_PORT": "8080"}),
-        ),
-        patch("common_python_tasks.docker_compose.run_docker_compose_command"),
-    ):
-        fastapi_stack_down()
-
-    assert not generated_config.exists()
 
 
 def test_container_shell_selects_most_recent_tag(

@@ -238,14 +238,6 @@ def test_bundled_ruff_config_is_available():
     assert contents
 
 
-def test_alembic_template_uses_ruff_post_write_hooks():
-    _, contents = load_data_file("alembic.ini.j2", type_identifier="fastapi")
-
-    assert "hooks = ruff_check,ruff_format" in contents
-    assert "ruff_check.options = check --fix-only --select F401,I" in contents
-    assert "ruff_format.options = format REVISION_SCRIPT_FILENAME" in contents
-
-
 @pytest.mark.parametrize(
     ("filename", "stage"),
     [("Dockerfile.j2", "runtime"), ("Dockerfile.deps.j2", "deps")],

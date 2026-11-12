@@ -36,7 +36,7 @@ Use `exclude_tags` when a project wants nearly every group.
 
 ```toml
 [tool.poe]
-include_script = "common_python_tasks:tasks(exclude_tags=['fastapi'])"
+include_script = "common_python_tasks:tasks(exclude_tags=['containers'])"
 ```
 
 Calling `tasks()` with no arguments selects only `common`. Passing an explicit empty `include_tags` sequence selects every task unless an exclusion removes it.

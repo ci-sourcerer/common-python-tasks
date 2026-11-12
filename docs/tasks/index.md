@@ -10,7 +10,6 @@ The task reference is divided by workflow. Each category page includes a table l
 | [Documentation](documentation.md) | Build and locally serve a Zensical site |
 | [Packaging and releases](packaging-and-releases.md) | Build, version, publish, and release packages |
 | [Container images](container-images.md) | Build, run, inspect, and publish images |
-| [Development stacks](development-stacks.md) | Operate the FastAPI and PostgreSQL Compose stack |
 
 Individual task reference pages are also available in the sidebar under the "reference" section.
 

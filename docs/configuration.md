@@ -70,19 +70,6 @@ Container variables are read by the host-side tasks unless their description exp
 | `CONTAINER_DEPS_MOVE_SCRIPT` | Inline script that distributes copied dependency artifacts and takes precedence over mappings |
 | `CONTAINER_DEPS_MOVE_SCRIPT_PATH` | Host path to a dependency move script; takes precedence over the inline script and mappings |
 
-## Development-stack settings
-
-Set `COMPOSE_TYPE=fastapi` to use the bundled FastAPI stack. Add PostgreSQL with `COMPOSE_ADDONS=db`.
-
-```toml
-[tool.poe.env]
-COMPOSE_TYPE = "fastapi"
-COMPOSE_ADDONS = "db"
-API_PORT = "8080"
-DB_PORT = "5432"
-```
-
-`COMPOSE_FILE` replaces automatic compose-file selection. `COMPOSE_OVERLAY_FILES` appends project-specific overlays to the automatically selected files.
 
 ## Diagnostics
 

@@ -41,7 +41,6 @@ include_script = "common_python_tasks:tasks(include_tags=['common', 'docs', 'con
 | `common` | Formatting, linting, testing, packaging, and releases |
 | `docs` | Build and serve Zensical documentation |
 | `containers` | Build, run, inspect, and publish container images |
-| `fastapi` | Run the FastAPI and PostgreSQL development stack |
 
 Documentation projects can build locally or start a development server.
 

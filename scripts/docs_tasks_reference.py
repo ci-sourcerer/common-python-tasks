@@ -17,7 +17,6 @@ TASK_CATEGORY_FILES = {
     "documentation": Path("docs/tasks/documentation.md"),
     "packaging-and-releases": Path("docs/tasks/packaging-and-releases.md"),
     "container-images": Path("docs/tasks/container-images.md"),
-    "development-stacks": Path("docs/tasks/development-stacks.md"),
 }
 DOCKERFILE_REFERENCE_FILE = Path("docs/tasks/container-images.md")
 DOCKERFILE_TEMPLATE_FILES = (

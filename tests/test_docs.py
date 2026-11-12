@@ -18,7 +18,6 @@ def test_zensical_site_has_expected_pages():
             "tasks/documentation.md",
             "tasks/packaging-and-releases.md",
             "tasks/container-images.md",
-            "tasks/development-stacks.md",
             "configuration.md",
             "documentation-workflows.md",
         ]

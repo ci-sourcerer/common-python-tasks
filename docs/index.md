@@ -18,7 +18,6 @@ Tasks are organized by tags, so each project can select only the workflows it ne
 | `common` | Formatting, linting, testing, packaging, and releases |
 | `docs` | Build and locally serve Zensical documentation |
 | `containers` | Build, run, inspect, and publish container images |
-| `fastapi` | Run a local FastAPI and PostgreSQL development stack |
 
 The default task collection exposes the `common` group. Optional groups are enabled through the package's `include_script` expression.
 
