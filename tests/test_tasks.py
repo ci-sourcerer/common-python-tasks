@@ -421,7 +421,7 @@ def test_update_dependencies_creates_branch_commit_push_and_pr(tmp_path, monkeyp
             "common_python_tasks.project.get_dependency_update_command",
             return_value=["uv", "sync", "--upgrade-package", "pytest"],
         ),
-        patch("common_python_tasks.tasks.test") as mock_test,
+        patch("common_python_tasks.development_tasks.test") as mock_test,
         patch(
             "common_python_tasks.github.create_pull_request"
         ) as mock_create_pull_request,
@@ -456,10 +456,14 @@ def test_build_and_publish_release_package_deletes_tag_on_failure(failing_task):
     from common_python_tasks.tasks import _build_and_publish_release_package
 
     with (
-        patch("common_python_tasks.tasks.build_package") as mock_build_package,
-        patch("common_python_tasks.tasks.publish_package") as mock_publish_package,
+        patch(
+            "common_python_tasks.packaging_tasks.build_package"
+        ) as mock_build_package,
+        patch(
+            "common_python_tasks.packaging_tasks.publish_package"
+        ) as mock_publish_package,
         patch("common_python_tasks.utils.run_command") as mock_run_command,
-        patch("common_python_tasks.tasks.LOGGER"),
+        patch("common_python_tasks.release_tasks.LOGGER"),
     ):
         {
             "build_package": mock_build_package,
@@ -818,14 +822,18 @@ class TestBumpVersion:
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean") as mock_clean,
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.development_tasks.clean") as mock_clean,
+            patch("common_python_tasks.packaging_tasks.bump_version") as mock_bump,
             patch(
                 "common_python_tasks.utils.prepend_changelog"
             ) as mock_prepend_changelog,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
-            patch("common_python_tasks.tasks.build_package") as mock_build_package,
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch(
+                "common_python_tasks.packaging_tasks.build_package"
+            ) as mock_build_package,
+            patch(
+                "common_python_tasks.packaging_tasks.publish_package"
+            ) as mock_publish,
             patch(
                 "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
@@ -833,8 +841,10 @@ class TestBumpVersion:
             patch(
                 "common_python_tasks.docker.build_image"
             ) as mock_low_level_build_image,
-            patch("common_python_tasks.tasks.build_image") as mock_task_build_image,
-            patch("common_python_tasks.tasks.push_image") as mock_push_image,
+            patch(
+                "common_python_tasks.container_tasks.build_image"
+            ) as mock_task_build_image,
+            patch("common_python_tasks.container_tasks.push_image") as mock_push_image,
             patch(
                 "common_python_tasks.github.get_github_release_asset_paths",
                 return_value=[],
@@ -913,10 +923,10 @@ class TestBumpVersion:
         with (
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean") as mock_clean,
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
-            patch("common_python_tasks.tasks.build_package"),
-            patch("common_python_tasks.tasks.publish_package"),
+            patch("common_python_tasks.development_tasks.clean") as mock_clean,
+            patch("common_python_tasks.packaging_tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.packaging_tasks.build_package"),
+            patch("common_python_tasks.packaging_tasks.publish_package"),
             patch("common_python_tasks.utils.prepend_changelog"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch(
@@ -975,10 +985,10 @@ class TestBumpVersion:
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean"),
-            patch("common_python_tasks.tasks.bump_version"),
-            patch("common_python_tasks.tasks.build_package"),
-            patch("common_python_tasks.tasks.publish_package"),
+            patch("common_python_tasks.development_tasks.clean"),
+            patch("common_python_tasks.packaging_tasks.bump_version"),
+            patch("common_python_tasks.packaging_tasks.build_package"),
+            patch("common_python_tasks.packaging_tasks.publish_package"),
             patch("common_python_tasks.utils.prepend_changelog"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch(
@@ -1020,10 +1030,10 @@ class TestBumpVersion:
         with (
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean"),
-            patch("common_python_tasks.tasks.bump_version"),
-            patch("common_python_tasks.tasks.build_package"),
-            patch("common_python_tasks.tasks.publish_package"),
+            patch("common_python_tasks.development_tasks.clean"),
+            patch("common_python_tasks.packaging_tasks.bump_version"),
+            patch("common_python_tasks.packaging_tasks.build_package"),
+            patch("common_python_tasks.packaging_tasks.publish_package"),
             patch("common_python_tasks.utils.run_command") as mock_run_command,
             patch("common_python_tasks.utils.LOGGER"),
             patch(
@@ -1066,10 +1076,14 @@ class TestBumpVersion:
         with (
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean") as mock_clean,
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
-            patch("common_python_tasks.tasks.build_package") as mock_build_package,
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch("common_python_tasks.development_tasks.clean") as mock_clean,
+            patch("common_python_tasks.packaging_tasks.bump_version") as mock_bump,
+            patch(
+                "common_python_tasks.packaging_tasks.build_package"
+            ) as mock_build_package,
+            patch(
+                "common_python_tasks.packaging_tasks.publish_package"
+            ) as mock_publish,
             patch(
                 "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
@@ -1083,9 +1097,9 @@ class TestBumpVersion:
                 return_value="## [1.2.3] - 2026-05-22\n\n# Changelog\n",
             ),
             patch("common_python_tasks.docker.build_image") as mock_build_image,
-            patch("common_python_tasks.tasks.push_image") as mock_push_image,
+            patch("common_python_tasks.container_tasks.push_image") as mock_push_image,
             patch("common_python_tasks.utils.LOGGER") as mock_logger,
-            patch("common_python_tasks.tasks.LOGGER") as mock_tasks_logger,
+            patch("common_python_tasks.release_tasks.LOGGER") as mock_tasks_logger,
             patch(
                 "common_python_tasks.github.publish_github_release"
             ) as mock_publish_github_release,
@@ -1162,14 +1176,18 @@ class TestBumpVersion:
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean") as mock_clean,
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.development_tasks.clean") as mock_clean,
+            patch("common_python_tasks.packaging_tasks.bump_version") as mock_bump,
             patch(
                 "common_python_tasks.utils.prepend_changelog"
             ) as mock_prepend_changelog,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
-            patch("common_python_tasks.tasks.build_package") as mock_build_package,
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch(
+                "common_python_tasks.packaging_tasks.build_package"
+            ) as mock_build_package,
+            patch(
+                "common_python_tasks.packaging_tasks.publish_package"
+            ) as mock_publish,
             patch(
                 "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
@@ -1238,12 +1256,14 @@ class TestBumpVersion:
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean"),
-            patch("common_python_tasks.tasks.bump_version"),
+            patch("common_python_tasks.development_tasks.clean"),
+            patch("common_python_tasks.packaging_tasks.bump_version"),
             patch("common_python_tasks.utils.prepend_changelog"),
             patch("common_python_tasks.utils.run_command"),
-            patch("common_python_tasks.tasks.build_package"),
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch("common_python_tasks.packaging_tasks.build_package"),
+            patch(
+                "common_python_tasks.packaging_tasks.publish_package"
+            ) as mock_publish,
             patch(
                 "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
@@ -1280,11 +1300,15 @@ class TestBumpVersion:
             ),
             patch("common_python_tasks.git.ensure_on_default_branch"),
             patch("common_python_tasks.git.get_dirty_files", return_value=[]),
-            patch("common_python_tasks.tasks.clean") as mock_clean,
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.development_tasks.clean") as mock_clean,
+            patch("common_python_tasks.packaging_tasks.bump_version") as mock_bump,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
-            patch("common_python_tasks.tasks.build_package") as mock_build_package,
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch(
+                "common_python_tasks.packaging_tasks.build_package"
+            ) as mock_build_package,
+            patch(
+                "common_python_tasks.packaging_tasks.publish_package"
+            ) as mock_publish,
             patch(
                 "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
@@ -1332,11 +1356,15 @@ class TestBumpVersion:
                 return_value=[Path("README.md")],
             ),
             patch("builtins.input", return_value="y") as mock_input,
-            patch("common_python_tasks.tasks.clean") as mock_clean,
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.development_tasks.clean") as mock_clean,
+            patch("common_python_tasks.packaging_tasks.bump_version") as mock_bump,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
-            patch("common_python_tasks.tasks.build_package") as mock_build_package,
-            patch("common_python_tasks.tasks.publish_package") as mock_publish,
+            patch(
+                "common_python_tasks.packaging_tasks.build_package"
+            ) as mock_build_package,
+            patch(
+                "common_python_tasks.packaging_tasks.publish_package"
+            ) as mock_publish,
             patch(
                 "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
@@ -1386,11 +1414,11 @@ class TestBumpVersion:
                 return_value=[Path("README.md")],
             ),
             patch("builtins.input") as mock_input,
-            patch("common_python_tasks.tasks.clean"),
-            patch("common_python_tasks.tasks.bump_version") as mock_bump,
+            patch("common_python_tasks.development_tasks.clean"),
+            patch("common_python_tasks.packaging_tasks.bump_version") as mock_bump,
             patch("common_python_tasks.utils.run_command") as mock_run_command,
-            patch("common_python_tasks.tasks.build_package"),
-            patch("common_python_tasks.tasks.publish_package"),
+            patch("common_python_tasks.packaging_tasks.build_package"),
+            patch("common_python_tasks.packaging_tasks.publish_package"),
             patch(
                 "common_python_tasks.project.get_project_version",
                 return_value="1.2.2",
@@ -1754,8 +1782,10 @@ def test_build_with_containers_calls_task_build_image():
     from common_python_tasks.tasks import build
 
     with (
-        patch("common_python_tasks.tasks.build_package") as mock_build_package,
-        patch("common_python_tasks.tasks.build_image") as mock_build_image,
+        patch(
+            "common_python_tasks.packaging_tasks.build_package"
+        ) as mock_build_package,
+        patch("common_python_tasks.container_tasks.build_image") as mock_build_image,
     ):
         build(
             has_containers=True,
@@ -1817,8 +1847,10 @@ def test_build_forwards_container_build_options():
     from common_python_tasks.tasks import build
 
     with (
-        patch("common_python_tasks.tasks.build_package") as mock_build_package,
-        patch("common_python_tasks.tasks.build_image") as mock_build_image,
+        patch(
+            "common_python_tasks.packaging_tasks.build_package"
+        ) as mock_build_package,
+        patch("common_python_tasks.container_tasks.build_image") as mock_build_image,
     ):
         build(
             has_containers=True,
@@ -1846,8 +1878,10 @@ def test_build_without_containers_skips_task_build_image():
     from common_python_tasks.tasks import build
 
     with (
-        patch("common_python_tasks.tasks.build_package") as mock_build_package,
-        patch("common_python_tasks.tasks.build_image") as mock_build_image,
+        patch(
+            "common_python_tasks.packaging_tasks.build_package"
+        ) as mock_build_package,
+        patch("common_python_tasks.container_tasks.build_image") as mock_build_image,
     ):
         build(has_containers=False)
 
@@ -1875,7 +1909,9 @@ def test_publish_package_uses_uv_publish_command():
     from common_python_tasks.tasks import publish_package
 
     with (
-        patch("common_python_tasks.tasks.build_package") as mock_build_package,
+        patch(
+            "common_python_tasks.packaging_tasks.build_package"
+        ) as mock_build_package,
         patch(
             "common_python_tasks.project.get_publish_command",
             return_value=["uv", "publish"],
@@ -1896,7 +1932,7 @@ def test_publish_package_forwards_repository_options():
     from common_python_tasks.tasks import publish_package
 
     with (
-        patch("common_python_tasks.tasks.build_package"),
+        patch("common_python_tasks.packaging_tasks.build_package"),
         patch(
             "common_python_tasks.project.get_publish_command",
             return_value=["uv", "publish", "--index", "internal"],

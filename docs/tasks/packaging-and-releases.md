@@ -10,9 +10,9 @@ Publish targets and release hooks are described in [Configuration](../configurat
 
 | Task | Description |
 | - | - |
+| [`update-dependencies`](reference/update-dependencies.md) | Update project dependencies with uv. |
 | [`publish-package`](reference/publish-package.md) | Publish the package to the PyPI server. |
 | [`publish-github-release`](reference/publish-github-release.md) | Publish or update a GitHub Release for the current repository. |
-| [`update-dependencies`](reference/update-dependencies.md) | Update project dependencies with uv. |
 | [`build-package`](reference/build-package.md) | Build the package (wheel and sdist). |
 | [`bump-version`](reference/bump-version.md) | Bump the project version. |
 | [`changelog`](reference/changelog.md) | Print the changelog for the current version based on git history and git-cliff. |

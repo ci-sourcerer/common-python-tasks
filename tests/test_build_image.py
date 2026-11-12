@@ -36,7 +36,7 @@ def test_build_image_uses_project_owned_dockerfile_from_environment(
             "common_python_tasks.docker.build_image",
             return_value=("1.2.3", "abc123"),
         ) as mock_build,
-        patch("common_python_tasks.tasks._prune_container_images"),
+        patch("common_python_tasks.container_tasks._prune_container_images"),
         patch("common_python_tasks.utils.render_template_text") as mock_render,
     ):
         result = build_image(single_arch=True)
@@ -65,7 +65,7 @@ def test_build_image_cli_dockerfile_overrides_environment(
             "common_python_tasks.docker.build_image",
             return_value=("1.2.3", "abc123"),
         ) as mock_build,
-        patch("common_python_tasks.tasks._prune_container_images"),
+        patch("common_python_tasks.container_tasks._prune_container_images"),
     ):
         build_image(dockerfile_path=str(cli_path))
 
@@ -1104,7 +1104,8 @@ def test_build_image_uses_build_deps_image_task(
     mock_load_data_file.side_effect = load_data_file_side_effect
 
     with patch(
-        "common_python_tasks.tasks.build_deps_image_task", return_value="deps-image"
+        "common_python_tasks.container_tasks.build_deps_image_task",
+        return_value="deps-image",
     ) as mock_task:
         build_image("--build-arg", "FOO=bar", single_arch=True)
 

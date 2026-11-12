@@ -414,7 +414,7 @@ See [Container settings](../configuration.md#container-settings) for the complet
 | [`build-deps-image`](reference/build-deps-image.md) | Build only the container dependency collector image for this project. |
 | [`run-container`](reference/run-container.md) | Run the Docker image as a container for this project. |
 | [`push-image`](reference/push-image.md) | Push the Docker image for this project to the container registry. |
-| [`build`](reference/build.md) | Build the project and its containers. |
 | [`container-shell`](reference/container-shell.md) | Run the debug image with an interactive shell. |
+| [`build`](reference/build.md) | Build the project and its containers. |
 
 <!-- end-generated-task-reference -->
