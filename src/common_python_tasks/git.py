@@ -253,17 +253,20 @@ def get_dirty_files(ignore: list[Path] | None = None) -> list[Path]:
 
     ignore_set = {Path(p) for p in ignore}
 
-    return [
-        file_path
-        for file_path in [
-            Path(line[3:])
-            for line in utils.run_command(
-                ["git", "status", "--porcelain"], capture_output=True
-            ).stdout.splitlines()
-            if line
-        ]
-        if file_path not in ignore_set
-    ]
+    records = iter(
+        utils.run_command(
+            ["git", "status", "--porcelain", "-z"], capture_output=True
+        ).stdout.split("\0")
+    )
+    dirty_files = []
+    for record in records:
+        if not record:
+            continue
+        if "R" in record[:2] or "C" in record[:2]:
+            next(records)
+        if Path(record[3:]) not in ignore_set:
+            dirty_files.append(Path(record[3:]))
+    return dirty_files
 
 
 def get_version(ignore: list[Path] | None = None) -> str:
@@ -360,7 +363,7 @@ def get_default_branch() -> str:
         acceptable_returncodes={0, 1},
     )
     if result.returncode == 0 and result.stdout.strip():
-        return result.stdout.strip().rsplit("/", 1)[-1]
+        return result.stdout.strip().removeprefix("refs/remotes/origin/")
     return "main"
 
 

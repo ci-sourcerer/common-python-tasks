@@ -200,7 +200,7 @@ class TestGetDirtyFiles:
 
         from common_python_tasks.git import get_dirty_files
 
-        porcelain_output = " M src/file.py\n?? new_file.txt\nA  added.py\n"
+        porcelain_output = " M src/file.py\0?? new_file.txt\0A  added.py\0"
         with patch("common_python_tasks.utils.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout=porcelain_output, returncode=0)
             result = get_dirty_files()
@@ -215,7 +215,7 @@ class TestGetDirtyFiles:
 
         from common_python_tasks.git import get_dirty_files
 
-        porcelain_output = " M src/file.py\n?? new_file.txt\n"
+        porcelain_output = " M src/file.py\0?? new_file.txt\0"
         with patch("common_python_tasks.utils.run_command") as mock_run:
             mock_run.return_value = MagicMock(stdout=porcelain_output, returncode=0)
             result = get_dirty_files(ignore=[Path("new_file.txt")])
@@ -288,3 +288,13 @@ def test_get_current_branch_rejects_detached_head():
         pytest.raises(SystemExit),
     ):
         get_current_branch()
+
+
+def test_default_branch_preserves_slashes():
+    from common_python_tasks.git import get_default_branch
+
+    with patch("common_python_tasks.utils.run_command") as run:
+        run.return_value = MagicMock(
+            returncode=0, stdout="refs/remotes/origin/release/main\n"
+        )
+        assert get_default_branch() == "release/main"
