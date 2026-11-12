@@ -9,7 +9,7 @@ Read the [complete documentation](https://common-python-tasks.ci-sourcerer.com/)
 Add the package as a development dependency.
 
 ```shell
-uv add --dev common-python-tasks==0.13.0
+uv add --dev common-python-tasks==0.13.1
 ```
 
 Expose the default task set in `pyproject.toml`.
