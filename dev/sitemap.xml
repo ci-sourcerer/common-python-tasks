@@ -22,9 +22,6 @@
         <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/daily-development/</loc>
       </url>
       <url>
-        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/development-stacks/</loc>
-      </url>
-      <url>
         <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/documentation/</loc>
       </url>
       <url>
@@ -55,9 +52,6 @@
         <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/container-shell/</loc>
       </url>
       <url>
-        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/db-shell/</loc>
-      </url>
-      <url>
         <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/docs-build/</loc>
       </url>
       <url>
@@ -82,19 +76,7 @@
         <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/release/</loc>
       </url>
       <url>
-        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/reset-db/</loc>
-      </url>
-      <url>
         <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/run-container/</loc>
-      </url>
-      <url>
-        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/run-db-migrations/</loc>
-      </url>
-      <url>
-        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/stack-down/</loc>
-      </url>
-      <url>
-        <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/stack-up/</loc>
       </url>
       <url>
         <loc>https://common-python-tasks.ci-sourcerer.com/dev/tasks/reference/test/</loc>
