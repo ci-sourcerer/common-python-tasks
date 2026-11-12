@@ -1,3 +1,25 @@
+## [0.13.1] - 2026-11-12
+
+### 🐛 Bug Fixes
+
+- *(git)* Preserve branch names and parse status records safely
+- *(clean)* Preserve virtual environment and vendor bytecode
+- *(release)* Support releases without conventional commits
+
+### 🚜 Refactor
+
+- *(tasks)* Remove FastAPI development stack scaffolding
+- *(project)* Simplify dependency checks and release helpers
+- *(tasks)* Split implementations by workflow responsibility
+
+### 🧪 Testing
+
+- *(workflows)* Cover Git edge cases and isolate task registration
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Set README version 0.13.1
+
 ## [0.13.0] - 2026-10-15
 
 ### 🚀 Features
